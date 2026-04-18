@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+sesiones.jsonl
+*.mp3
+*.wav
+*.flac
+*.aiff
+*.ogg
+.DS_Store
