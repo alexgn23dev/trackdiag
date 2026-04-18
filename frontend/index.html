@@ -84,7 +84,120 @@
     // Pantallas
     // =========================================================================
 
-    function LandingScreen({ onStart }) {
+    // =========================================================================
+    // Historial (localStorage)
+    // =========================================================================
+
+    const HISTORIAL_KEY = 'trackdiag_historial';
+
+    function guardarEnHistorial(filename, contexto, resultado) {
+        const historial = JSON.parse(localStorage.getItem(HISTORIAL_KEY) || '[]');
+        historial.unshift({
+            id: Date.now(),
+            fecha: new Date().toISOString(),
+            archivo: filename,
+            genero: contexto.genero,
+            objetivo: contexto.objetivo,
+            diagnostico: resultado.diagnostico_principal?.titulo || 'Sin diagnóstico',
+            diagnostico_id: resultado.diagnostico_principal?.id || '',
+            estado: resultado.estado_track,
+            estado_texto: resultado.estado_texto,
+            score: resultado.diagnostico_principal?.score || 0,
+        });
+        // Máximo 50 entradas
+        if (historial.length > 50) historial.length = 50;
+        localStorage.setItem(HISTORIAL_KEY, JSON.stringify(historial));
+    }
+
+    function obtenerHistorial() {
+        return JSON.parse(localStorage.getItem(HISTORIAL_KEY) || '[]');
+    }
+
+    function borrarEntradaHistorial(id) {
+        const historial = obtenerHistorial().filter(e => e.id !== id);
+        localStorage.setItem(HISTORIAL_KEY, JSON.stringify(historial));
+        return historial;
+    }
+
+    function HistorialScreen({ onBack, onAnalizar }) {
+        const [entradas, setEntradas] = useState(obtenerHistorial());
+
+        const handleBorrar = (id) => {
+            setEntradas(borrarEntradaHistorial(id));
+        };
+
+        const formatFecha = (iso) => {
+            const d = new Date(iso);
+            return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        };
+
+        const estadoColor = (estado) => {
+            if (estado === 'verde') return 'bg-green-900/30 text-green-400';
+            if (estado === 'avanzado') return 'bg-blue-900/30 text-blue-400';
+            return 'bg-yellow-900/30 text-yellow-400';
+        };
+
+        return (
+            <div className="min-h-screen px-4 py-8 fade-in">
+                <div className="max-w-2xl mx-auto">
+                    <div className="flex items-center justify-between mb-6">
+                        <h2 className="text-xl font-bold text-white">Historial de análisis</h2>
+                        <button onClick={onBack} className="text-gray-500 hover:text-gray-300 text-sm transition-colors">
+                            ← Volver
+                        </button>
+                    </div>
+
+                    {entradas.length === 0 ? (
+                        <div className="text-center py-16">
+                            <div className="text-3xl mb-3">📭</div>
+                            <p className="text-gray-500 mb-4">Aún no has analizado ningún track.</p>
+                            <button
+                                onClick={onAnalizar}
+                                className="px-6 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-xl transition-colors"
+                            >
+                                Analizar mi primer track
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            {entradas.map(e => (
+                                <div key={e.id} className="card p-4 flex items-center justify-between gap-4">
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-gray-200 text-sm font-medium truncate">{e.archivo}</p>
+                                        <p className="text-gray-500 text-xs mt-1">{formatFecha(e.fecha)}</p>
+                                    </div>
+                                    <div className="flex items-center gap-3 flex-shrink-0">
+                                        <span className={`text-xs px-2 py-1 rounded-full ${estadoColor(e.estado)}`}>
+                                            {e.estado_texto || e.estado}
+                                        </span>
+                                        <span className="text-gray-400 text-xs max-w-[140px] truncate hidden sm:block" title={e.diagnostico}>
+                                            {e.diagnostico}
+                                        </span>
+                                        <button
+                                            onClick={() => handleBorrar(e.id)}
+                                            className="text-gray-600 hover:text-red-400 text-xs transition-colors"
+                                            title="Eliminar"
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                            <p className="text-gray-600 text-xs text-center pt-2">
+                                {entradas.length} análisis guardados en este navegador
+                            </p>
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    }
+
+    // =========================================================================
+    // Pantallas
+    // =========================================================================
+
+    function LandingScreen({ onStart, onHistorial, historialCount }) {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center px-4 fade-in">
                 <div className="max-w-lg text-center">
@@ -103,6 +216,14 @@
                     >
                         Analizar mi track
                     </button>
+                    {historialCount > 0 && (
+                        <button
+                            onClick={onHistorial}
+                            className="block mx-auto mt-4 text-gray-500 hover:text-gray-300 text-sm transition-colors"
+                        >
+                            Ver historial ({historialCount})
+                        </button>
+                    )}
                 </div>
             </div>
         );
@@ -537,7 +658,7 @@
     // =========================================================================
 
     function App() {
-        const [screen, setScreen] = useState('landing'); // landing | upload | questionnaire | processing | diagnostico
+        const [screen, setScreen] = useState('landing'); // landing | upload | questionnaire | processing | diagnostico | historial
         const [file, setFile] = useState(null);
         const [opciones, setOpciones] = useState(null);
         const [contexto, setContexto] = useState({
@@ -547,6 +668,7 @@
         });
         const [resultado, setResultado] = useState(null);
         const [error, setError] = useState(null);
+        const [historialCount, setHistorialCount] = useState(obtenerHistorial().length);
 
         // Cargar opciones al inicio
         useEffect(() => {
@@ -629,6 +751,9 @@
                 // Pequeña pausa para que la pantalla de procesamiento se vea
                 await new Promise(resolve => setTimeout(resolve, 2000));
                 setResultado(data);
+                // Guardar en historial
+                guardarEnHistorial(file.name, contexto, data);
+                setHistorialCount(obtenerHistorial().length);
                 setScreen('diagnostico');
             } catch (err) {
                 setError(err.message);
@@ -665,7 +790,19 @@
                     </div>
                 )}
 
-                {screen === 'landing' && <LandingScreen onStart={() => setScreen('upload')} />}
+                {screen === 'landing' && (
+                    <LandingScreen
+                        onStart={() => setScreen('upload')}
+                        onHistorial={() => setScreen('historial')}
+                        historialCount={historialCount}
+                    />
+                )}
+                {screen === 'historial' && (
+                    <HistorialScreen
+                        onBack={() => setScreen('landing')}
+                        onAnalizar={() => setScreen('upload')}
+                    />
+                )}
                 {screen === 'upload' && <UploadScreen onFileSelected={handleFileSelected} file={file} />}
                 {screen === 'questionnaire' && (
                     <QuestionnaireScreen
