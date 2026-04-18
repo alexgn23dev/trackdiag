@@ -525,6 +525,45 @@
                         </summary>
                         <div className="mt-4 space-y-4 text-sm">
 
+                            {/* Espectro frecuencial */}
+                            {d.espectro_bandas_norm && (
+                                <div>
+                                    <span className="text-gray-400 text-xs font-medium uppercase tracking-wider">Balance frecuencial</span>
+                                    <div className="mt-3 space-y-2">
+                                        {[
+                                            { key: 'sub', label: 'Sub', range: '<60 Hz' },
+                                            { key: 'graves', label: 'Graves', range: '60–200 Hz' },
+                                            { key: 'low_mid', label: 'Low-Mid', range: '200–800 Hz' },
+                                            { key: 'mid', label: 'Mid', range: '0.8–4 kHz' },
+                                            { key: 'presencia', label: 'Presencia', range: '4–8 kHz' },
+                                            { key: 'air', label: 'Air', range: '8 kHz+' },
+                                        ].map(banda => {
+                                            const val = d.espectro_bandas_norm[banda.key] || 0;
+                                            const db = d.espectro_bandas?.[banda.key] ?? '?';
+                                            const barColor = val > 80 ? 'bg-purple-500' :
+                                                             val > 50 ? 'bg-blue-500' :
+                                                             val > 25 ? 'bg-blue-700' :
+                                                             'bg-gray-600';
+                                            return (
+                                                <div key={banda.key} className="flex items-center gap-2">
+                                                    <span className="text-gray-500 text-xs w-16 text-right flex-shrink-0">{banda.label}</span>
+                                                    <div className="flex-1 h-4 bg-gray-800 rounded-full overflow-hidden">
+                                                        <div
+                                                            className={`h-full rounded-full ${barColor} transition-all`}
+                                                            style={{ width: `${Math.max(val, 2)}%` }}
+                                                        ></div>
+                                                    </div>
+                                                    <span className="text-gray-600 text-xs w-16 flex-shrink-0">{banda.range}</span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    <p className="text-gray-600 text-xs mt-2">Distribución de energía por banda frecuencial. Barras más largas = más energía en esa zona.</p>
+                                </div>
+                            )}
+
+                            <div className="border-t border-gray-800 pt-4 mt-4"></div>
+
                             {/* Balance grave */}
                             <div>
                                 <div className="flex justify-between items-baseline">

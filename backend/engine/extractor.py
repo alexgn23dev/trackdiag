@@ -65,6 +65,33 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None) -> dict:
     db_shifted = db_vals - np.min(db_vals)
     ratios = db_shifted / np.sum(db_shifted) if np.sum(db_shifted) > 0 else np.array([.33, .33, .33])
 
+    # Balance espectral detallado — 6 bandas
+    bandas_freq = {
+        "sub":       (0, 60),
+        "graves":    (60, 200),
+        "low_mid":   (200, 800),
+        "mid":       (800, 4000),
+        "presencia": (4000, 8000),
+        "air":       (8000, sr / 2),
+    }
+    espectro_bandas = {}
+    for nombre_banda, (f_min, f_max) in bandas_freq.items():
+        mask = (mel_freqs >= f_min) & (mel_freqs < f_max)
+        if mask.any():
+            db_val = float(np.mean(mel_db[mask, :]))
+        else:
+            db_val = -80.0
+        espectro_bandas[nombre_banda] = round(db_val, 1)
+
+    # Normalizar bandas a escala 0-100 para visualización
+    bandas_db_list = list(espectro_bandas.values())
+    db_min = min(bandas_db_list)
+    db_max = max(bandas_db_list)
+    db_rango = db_max - db_min if db_max != db_min else 1.0
+    espectro_bandas_norm = {}
+    for nombre_banda, db_val in espectro_bandas.items():
+        espectro_bandas_norm[nombre_banda] = round(((db_val - db_min) / db_rango) * 100, 1)
+
     # Densidad espectral
     flatness = librosa.feature.spectral_flatness(y=y, hop_length=hop_length)[0]
     densidad_espectral = float(np.mean(flatness))
@@ -174,6 +201,8 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None) -> dict:
         "distribucion": distribucion,
         "armonia": armonia,
         "mono_compat": mono_compat,
+        "espectro_bandas": espectro_bandas,
+        "espectro_bandas_norm": espectro_bandas_norm,
     }
 
 
