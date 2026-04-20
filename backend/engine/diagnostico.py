@@ -86,6 +86,13 @@ def generar_diagnostico(senales: dict, contexto: dict) -> dict:
                 "complejidad_armonica": senales["armonia"]["complejidad_armonica"],
                 "ratio_tonal_percusivo": senales["armonia"]["ratio_tonal_percusivo"],
             },
+            "loudness": {
+                "lufs_integrado": senales["loudness"]["lufs_integrado"],
+                "lufs_short_term_max": senales["loudness"]["lufs_short_term_max"],
+                "rango_loudness": senales["loudness"]["rango_loudness"],
+                "nivel": senales["loudness"]["nivel"],
+                "referencia": senales["loudness"]["referencia"],
+            },
             "mono_compat": {
                 "es_stereo": senales["mono_compat"]["es_stereo"],
                 "correlacion_lr": senales["mono_compat"]["correlacion_lr"],

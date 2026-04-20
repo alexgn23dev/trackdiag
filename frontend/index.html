@@ -551,6 +551,38 @@
                                 <p className="text-gray-600 text-xs mt-1">Cuánto del espectro frecuencial está ocupado a la vez. Baja = hay espacio. Alta/saturada = muchos elementos compitiendo.</p>
                             </div>
 
+                            {/* Loudness (LUFS) */}
+                            {d.loudness && d.loudness.lufs_integrado > -99 && (
+                                <div>
+                                    <div className="border-t border-gray-800 pt-4 mt-4">
+                                        <div className="flex justify-between items-baseline">
+                                            <span className="text-gray-400">Loudness</span>
+                                            <span className={
+                                                d.loudness.nivel === 'moderado' ? 'text-green-400' :
+                                                d.loudness.nivel === 'bajo' ? 'text-blue-400' :
+                                                d.loudness.nivel === 'alto' ? 'text-yellow-400' :
+                                                d.loudness.nivel === 'muy_alto' ? 'text-red-400' :
+                                                'text-gray-400'
+                                            }>{d.loudness.lufs_integrado} LUFS</span>
+                                        </div>
+                                        <p className="text-gray-600 text-xs mt-1">{d.loudness.referencia}</p>
+                                    </div>
+
+                                    <div className="mt-3 grid grid-cols-2 gap-3">
+                                        <div>
+                                            <span className="text-gray-500 text-xs">Pico short-term</span>
+                                            <p className="text-gray-300 text-sm">{d.loudness.lufs_short_term_max} LUFS</p>
+                                            <p className="text-gray-600 text-xs">El momento más fuerte del track.</p>
+                                        </div>
+                                        <div>
+                                            <span className="text-gray-500 text-xs">Rango</span>
+                                            <p className="text-gray-300 text-sm">{d.loudness.rango_loudness} LU</p>
+                                            <p className="text-gray-600 text-xs">Diferencia entre lo más fuerte y lo más suave. Más rango = más dinámica.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Mono compatibility */}
                             {d.mono_compat && d.mono_compat.es_stereo && (
                                 <div>

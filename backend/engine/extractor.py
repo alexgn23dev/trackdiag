@@ -5,6 +5,8 @@ Recibe un path de audio y retorna un diccionario con señales crudas y derivadas
 
 import librosa
 import numpy as np
+import pyloudnorm as pyln
+import soundfile as sf
 
 
 def extraer_senales(audio_path: str, bpm_manual: int | None = None) -> dict:
@@ -165,6 +167,9 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None) -> dict:
     carencia_medios = db_media < -46
     carencia_agudos = db_aguda < -56
 
+    # === Loudness (LUFS) ===
+    loudness = _analizar_loudness(audio_path)
+
     # Madurez estimada
     if duracion_seg < 120 or (not tiene_desarrollo and contraste_energetico == "bajo"):
         madurez_estimada = "verde"
@@ -203,7 +208,94 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None) -> dict:
         "mono_compat": mono_compat,
         "espectro_bandas": espectro_bandas,
         "espectro_bandas_norm": espectro_bandas_norm,
+        "loudness": loudness,
     }
+
+
+def _analizar_loudness(audio_path: str) -> dict:
+    """
+    Mide loudness según ITU-R BS.1770 (LUFS).
+    Carga a sample rate original para máxima precisión.
+    Retorna: LUFS integrado, short-term max, rango, y nivel relativo.
+    """
+    resultado = {
+        "lufs_integrado": -99.0,
+        "lufs_short_term_max": -99.0,
+        "rango_loudness": 0.0,
+        "nivel": "",        # "bajo", "moderado", "alto", "muy_alto"
+        "referencia": "",   # texto con contexto
+    }
+
+    try:
+        # Cargar a sample rate original para precisión LUFS
+        data, rate = sf.read(audio_path)
+
+        # Si es mono, duplicar a estéreo (pyloudnorm espera al menos 1D)
+        if data.ndim == 1:
+            data = np.column_stack([data, data])
+
+        meter = pyln.Meter(rate)
+
+        # LUFS integrado (todo el track)
+        lufs_i = meter.integrated_loudness(data)
+        resultado["lufs_integrado"] = round(float(lufs_i), 1)
+
+        # Short-term loudness (ventanas de 3 segundos) para encontrar el pico
+        block_size = int(rate * 3)  # 3 segundos
+        hop = int(rate * 1)         # salto de 1 segundo
+        lufs_blocks = []
+        for i in range(0, len(data) - block_size, hop):
+            block = data[i:i + block_size]
+            try:
+                l = meter.integrated_loudness(block)
+                if l > -70:  # ignorar silencio
+                    lufs_blocks.append(l)
+            except Exception:
+                continue
+
+        if lufs_blocks:
+            resultado["lufs_short_term_max"] = round(float(max(lufs_blocks)), 1)
+            resultado["rango_loudness"] = round(
+                float(max(lufs_blocks) - min(lufs_blocks)), 1
+            )
+
+        # Clasificación de nivel
+        lufs = resultado["lufs_integrado"]
+        if lufs > -6:
+            resultado["nivel"] = "muy_alto"
+            resultado["referencia"] = (
+                "Nivel muy alto. El track probablemente está sobre-comprimido o clippeando. "
+                "Las plataformas de streaming lo van a bajar de volumen igualmente."
+            )
+        elif lufs > -9:
+            resultado["nivel"] = "alto"
+            resultado["referencia"] = (
+                "Nivel alto, típico de masters agresivos. "
+                "Spotify normaliza a -14 LUFS, así que parte de este volumen se perderá en streaming."
+            )
+        elif lufs > -14:
+            resultado["nivel"] = "moderado"
+            resultado["referencia"] = (
+                "Buen nivel para un pre-master o master. "
+                "Cerca del estándar de streaming (-14 LUFS en Spotify, -16 en Apple Music)."
+            )
+        elif lufs > -20:
+            resultado["nivel"] = "bajo"
+            resultado["referencia"] = (
+                "Nivel bajo — normal si el track no está masterizado. "
+                "Un mastering profesional subirá esto a -8 a -14 LUFS según el género."
+            )
+        else:
+            resultado["nivel"] = "muy_bajo"
+            resultado["referencia"] = (
+                "Nivel muy bajo. Puede ser que el track esté en fase muy temprana "
+                "o que los niveles de mezcla estén demasiado bajos."
+            )
+
+    except Exception:
+        resultado["referencia"] = "No se pudo medir el loudness de este archivo."
+
+    return resultado
 
 
 def _analizar_distribucion(bloques_rms: list) -> dict:
