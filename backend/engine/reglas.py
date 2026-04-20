@@ -60,6 +60,13 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
         score += 2; razones.append("Hay un break tan largo que el track pierde narrativa")
     if senales["duracion_seg"] < 120:
         score -= 2; razones.append("(−) Track muy corto — contraste bajo es esperado en ideas")
+    # Cruce: contraste bajo + densidad alta = muro de sonido constante (refuerza poco_contraste)
+    if senales["contraste_energetico"] == "bajo" and senales["densidad_global"] in ["alta", "saturada"]:
+        score += 1; razones.append("Contraste bajo combinado con densidad alta — el track suena lleno todo el rato sin respiro")
+    # Cruce: contraste bajo + loudness rango bajo = todo aplastado al mismo nivel
+    loudness = senales.get("loudness", {})
+    if senales["contraste_energetico"] == "bajo" and loudness.get("rango_loudness", 99) < 4:
+        score += 1; razones.append("Contraste bajo y rango de loudness muy estrecho — todo suena al mismo volumen sin dinámica")
     scores["poco_contraste"] = score
     detalles["poco_contraste"] = razones
 
@@ -83,6 +90,10 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
         score += 1; razones.append("Foco en mezcla cuando hay señales de problema estructural")
     if senales["madurez_estimada"] == "avanzado" and senales["tiene_desarrollo"]:
         score -= 4; razones.append("(−) El track parece avanzado — la mezcla sí es relevante ahora")
+    # Cruce: loudness alto + estructura inmadura = el usuario ha masterizado antes de arreglar
+    loudness = senales.get("loudness", {})
+    if loudness.get("nivel") in ["alto", "muy_alto"] and track_no_maduro:
+        score += 2; razones.append("Loudness alto en un track inmaduro — parece que se ha masterizado antes de cerrar el arreglo")
     scores["mezcla_prematura"] = score
     detalles["mezcla_prematura"] = razones
 
@@ -114,6 +125,17 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
         score -= 1; razones.append("(−) Hay problemas estructurales más prioritarios")
     if dist["estructura_problematica"]:
         score -= 1; razones.append("(−) La estructura del track tiene problemas más prioritarios")
+    # Cruce: graves excesivos + mono compat problemática en graves = problema real de fase/acumulación
+    mono = senales.get("mono_compat", {})
+    if senales["balance_grave"] in ["elevado", "excesivo"] and mono.get("bandas", {}).get("graves", {}).get("estado") in ["revisar", "problema"]:
+        score += 2; razones.append("Los graves están altos Y tienen problemas de compatibilidad mono — posible acumulación de fase entre kick y bajo")
+    # Cruce: graves excesivos + densidad alta = todo se pelea en la zona baja
+    if senales["balance_grave"] in ["elevado", "excesivo"] and senales["densidad_global"] in ["alta", "saturada"]:
+        score += 1; razones.append("Graves altos combinado con densidad alta — demasiados elementos compitiendo en la zona baja")
+    # Cruce: graves excesivos + loudness muy alto = el limiter está inflando los graves
+    loudness = senales.get("loudness", {})
+    if senales["balance_grave"] == "excesivo" and loudness.get("nivel") in ["alto", "muy_alto"]:
+        score += 1; razones.append("Graves excesivos con loudness alto — el mastering puede estar inflando artificialmente la zona baja")
     scores["exceso_lowend"] = score
     detalles["exceso_lowend"] = razones
 
@@ -129,6 +151,16 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
         score += 1; razones.append(f"Rango dinámico reducido ({senales['rango_dinamico']})")
     if any(p in bloqueo for p in ["lleno", "denso", "saturado", "confuso", "empastad", "cargado", "capas"]):
         score += 2; razones.append("El usuario percibe exceso de densidad")
+    # Cruce: densidad alta + contraste bajo = muro de sonido (problema real)
+    if senales["densidad_global"] in ["alta", "saturada"] and senales["contraste_energetico"] == "bajo":
+        score += 2; razones.append("Densidad alta sin variación — suena como un muro de sonido constante")
+    # Cruce: densidad alta + contraste alto = solo son los drops, probablemente ok
+    if senales["densidad_global"] in ["alta", "saturada"] and senales["contraste_energetico"] == "alto":
+        score -= 1; razones.append("(−) Hay contraste — la densidad puede ser solo de las secciones de alta energía")
+    # Cruce: densidad + loudness alto = posible over-compression aplastando la mezcla
+    loudness = senales.get("loudness", {})
+    if senales["densidad_global"] in ["alta", "saturada"] and loudness.get("nivel") in ["alto", "muy_alto"]:
+        score += 1; razones.append("Densidad alta combinada con loudness alto — posible over-compression aplastando la mezcla")
     scores["exceso_densidad"] = score
     detalles["exceso_densidad"] = razones
 
@@ -171,6 +203,13 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     # Géneros brillantes: la carencia pesa más
     if genero in generos_brillantes and senales["carencia_agudos"]:
         score += 1; razones.append(f"En {genero}, la falta de brillo es especialmente notable")
+    # Cruce: carencia espectral + densidad baja = track vacío, falta añadir elementos
+    if (senales["carencia_medios"] or senales["carencia_agudos"]) and senales["densidad_global"] == "baja":
+        score += 1; razones.append("Carencia espectral combinada con densidad baja — el track necesita más elementos que llenen el espectro")
+    # Cruce: carencia espectral + loudness bajo = ni volumen ni contenido, fase muy temprana
+    loudness = senales.get("loudness", {})
+    if (senales["carencia_medios"] or senales["carencia_agudos"]) and loudness.get("nivel") in ["bajo", "muy_bajo"]:
+        score -= 1; razones.append("(−) Loudness muy bajo — la carencia puede ser simplemente que el track está sin mezclar/masterizar")
     scores["carencia_espectral"] = score
     detalles["carencia_espectral"] = razones
 
@@ -208,6 +247,12 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
         # Si hay problemas estructurales graves, la armonía es secundaria
         if not senales["tiene_desarrollo"] and senales["contraste_energetico"] == "bajo":
             score -= 1; razones.append("(−) Hay problemas estructurales más prioritarios")
+        # Cruce: conflicto armónico + densidad alta = los choques se amplifican
+        if armonia.get("posible_conflicto_tonal") and senales["densidad_global"] in ["alta", "saturada"]:
+            score += 1; razones.append("Posible conflicto armónico agravado por la densidad alta — muchos elementos compitiendo enturbian más la armonía")
+        # Cruce: conflicto armónico + graves excesivos = el low-end enmascara y confunde el análisis tonal
+        if armonia.get("consistencia_armonica", 1) < 0.5 and senales["balance_grave"] == "excesivo":
+            score -= 1; razones.append("(−) El exceso de graves puede estar enmascarando la información tonal — resolver graves primero")
     scores["conflicto_armonico"] = score
     detalles["conflicto_armonico"] = razones
 
