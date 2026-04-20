@@ -130,9 +130,10 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None) -> dict:
     else:
         balance_grave = "normal"
 
+    # Umbrales recalibrados con 21 sesiones reales (media=0.032)
     densidad_global = (
-        "saturada" if densidad_espectral > 0.15
-        else "alta" if densidad_espectral > 0.08
+        "saturada" if densidad_espectral > 0.12
+        else "alta" if densidad_espectral > 0.06
         else "media" if densidad_espectral > 0.03
         else "baja"
     )
