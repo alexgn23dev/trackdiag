@@ -642,6 +642,40 @@
                                     <p className="text-gray-600 text-xs mt-1">El archivo es mono — no aplica análisis estéreo.</p>
                                 </div>
                             )}
+
+                            {/* Harshness — medios-altos chirriantes */}
+                            {d.harshness && (
+                                <div className="border-t border-gray-800 pt-4 mt-4">
+                                    <div className="flex justify-between items-baseline">
+                                        <span className="text-gray-400">Medios-altos (harshness)</span>
+                                        <span className={
+                                            d.harshness.tiene_harshness && d.harshness.nivel === 'severo' ? 'text-red-400' :
+                                            d.harshness.tiene_harshness && d.harshness.nivel === 'notable' ? 'text-yellow-400' :
+                                            d.harshness.tiene_harshness && d.harshness.nivel === 'leve' ? 'text-yellow-300' :
+                                            'text-green-400'
+                                        }>
+                                            {d.harshness.tiene_harshness
+                                                ? d.harshness.nivel === 'severo' ? 'Chirriante'
+                                                : d.harshness.nivel === 'notable' ? 'Algo duro'
+                                                : 'Ligeramente alto'
+                                                : 'Correcto'}
+                                        </span>
+                                    </div>
+                                    {d.harshness.tiene_harshness && (
+                                        <div className="mt-2">
+                                            <p className="text-gray-500 text-xs">
+                                                La zona de medios-altos (2-8kHz) está {d.harshness.pico_sobre_media.toFixed(1)}dB por encima de la media.
+                                                {d.harshness.zona_problema === 'presencia' && ' Zona afectada: presencia (2-6kHz) — sintes, voces o percusiones.'}
+                                                {d.harshness.zona_problema === 'brillos' && ' Zona afectada: brillos (6-10kHz) — hi-hats, crashes o efectos.'}
+                                                {d.harshness.zona_problema === 'ambas' && ' Todo el rango de medios-altos está elevado.'}
+                                            </p>
+                                        </div>
+                                    )}
+                                    {!d.harshness.tiene_harshness && (
+                                        <p className="text-gray-600 text-xs mt-1">No se detectan picos molestos en medios-altos.</p>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </details>
 
