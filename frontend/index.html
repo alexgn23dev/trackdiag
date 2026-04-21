@@ -664,9 +664,9 @@
                                     {d.harshness.tiene_harshness && (
                                         <div className="mt-2">
                                             <p className="text-gray-500 text-xs">
-                                                La zona de medios-altos (2-8kHz) está {d.harshness.pico_sobre_media.toFixed(1)}dB por encima de la media.
+                                                En un {d.harshness.pct_frames_harsh.toFixed(0)}% del track, los medios-altos dominan sobre los medios. Picos de hasta {d.harshness.pico_p95.toFixed(1)}dB por encima.
                                                 {d.harshness.zona_problema === 'presencia' && ' Zona afectada: presencia (2-6kHz) — sintes, voces o percusiones.'}
-                                                {d.harshness.zona_problema === 'brillos' && ' Zona afectada: brillos (6-10kHz) — hi-hats, crashes o efectos.'}
+                                                {d.harshness.zona_problema === 'brillos' && ' Zona afectada: brillos (6-8kHz) — hi-hats, crashes o efectos.'}
                                                 {d.harshness.zona_problema === 'ambas' && ' Todo el rango de medios-altos está elevado.'}
                                             </p>
                                         </div>

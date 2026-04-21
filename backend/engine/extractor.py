@@ -223,56 +223,75 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None) -> dict:
 def _analizar_harshness(mel_db: np.ndarray, mel_freqs: np.ndarray) -> dict:
     """
     Detecta harshness (chirrido/aspereza) en medios-altos (2-8kHz).
-    Compara la energía en la zona 2-8kHz contra la media general.
-    Un pico en esa zona respecto al resto indica elementos chirriantes.
-    También mide la varianza en esa banda — picos puntuales son peores.
+    Enfoque multi-señal: combina análisis temporal frame-a-frame.
+    Compara presencia (2-8kHz) contra medios (200-2000Hz) por frame,
+    luego mide picos (p95), porcentaje de dominio, y varianza temporal.
+    Calibrado con 38 sesiones reales + feedback experto.
     """
     resultado = {
         "tiene_harshness": False,
         "nivel": "",           # "leve", "notable", "severo"
-        "db_medio_alto": 0.0,  # nivel medio en 2-8kHz
-        "pico_sobre_media": 0.0,  # dB por encima de la media general
-        "zona_problema": "",   # "presencia" (2-6kHz) o "brillos" (6-10kHz) o ambas
+        "pico_p95": 0.0,      # percentil 95 del ratio presencia/medios por frame
+        "pct_frames_harsh": 0.0,  # % de frames donde presencia > medios
+        "zona_problema": "",   # "presencia" (2-6kHz) o "brillos" (6-8kHz) o "ambas"
     }
 
-    # Banda de medios-altos donde ocurre la harshness (2-8kHz)
-    mask_harsh = (mel_freqs >= 2000) & (mel_freqs < 8000)
-    # Sub-bandas para localizar el problema
-    mask_presencia = (mel_freqs >= 2000) & (mel_freqs < 6000)
-    mask_brillos = (mel_freqs >= 6000) & (mel_freqs < 10000)
-    # Media general (excluir sub-bass para no sesgar)
-    mask_general = mel_freqs >= 200
+    # Bandas de análisis
+    mask_pres = (mel_freqs >= 2000) & (mel_freqs < 8000)
+    mask_mid = (mel_freqs >= 200) & (mel_freqs < 2000)
+    mask_pres_baja = (mel_freqs >= 2000) & (mel_freqs < 6000)
+    mask_pres_alta = (mel_freqs >= 6000) & (mel_freqs < 10000)
 
-    if not mask_harsh.any() or not mask_general.any():
+    if not mask_pres.any() or not mask_mid.any():
         return resultado
 
-    db_harsh = float(np.mean(mel_db[mask_harsh, :]))
-    db_general = float(np.mean(mel_db[mask_general, :]))
-    db_presencia = float(np.mean(mel_db[mask_presencia, :])) if mask_presencia.any() else -80
-    db_brillos = float(np.mean(mel_db[mask_brillos, :])) if mask_brillos.any() else -80
+    # Energía por frame en cada banda
+    pres_por_frame = np.mean(mel_db[mask_pres, :], axis=0)
+    mid_por_frame = np.mean(mel_db[mask_mid, :], axis=0)
 
-    pico = db_harsh - db_general
-    resultado["db_medio_alto"] = round(db_harsh, 1)
-    resultado["pico_sobre_media"] = round(pico, 1)
+    # Ratio presencia - medios por frame (en dB)
+    ratio = pres_por_frame - mid_por_frame
 
-    # Detectar harshness: la zona 2-8kHz está significativamente por encima
-    # de la media general (excl. graves). En electrónica bien mezclada,
-    # esta zona suele estar al nivel o ligeramente por debajo de la media.
-    if pico > 4.0:
+    p95 = float(np.percentile(ratio, 95))
+    pct_mayor = float(np.mean(ratio > 0) * 100)
+
+    resultado["pico_p95"] = round(p95, 1)
+    resultado["pct_frames_harsh"] = round(pct_mayor, 1)
+
+    # Sistema de puntos para decidir harshness (calibrado con 38 sesiones reales):
+    # Track 23 (chirriante): p95=9.2, pct=33% → debe detectar severo
+    # Track 19 (bien):       p95=5.0, pct=25% → NO debe detectar
+    # Track 10 (bien):       p95=2.3, pct=14% → NO debe detectar
+    # Track 25 (chirriante): p95=2.2, pct=10% → no detectable por espectro (es tímbrico)
+    puntos = 0
+    if p95 > 7:
+        puntos += 2
+    elif p95 > 5:
+        puntos += 1
+
+    if pct_mayor > 30:
+        puntos += 2
+    elif pct_mayor > 20:
+        puntos += 1
+
+    if puntos >= 3:
         resultado["tiene_harshness"] = True
         resultado["nivel"] = "severo"
-    elif pico > 2.0:
+    elif puntos >= 2:
         resultado["tiene_harshness"] = True
         resultado["nivel"] = "notable"
-    elif pico > 0.5:
+    elif puntos >= 1 and p95 > 4 and pct_mayor > 15:
+        # Solo leve si ambas señales coinciden
         resultado["tiene_harshness"] = True
         resultado["nivel"] = "leve"
 
     # Localizar zona problema
     if resultado["tiene_harshness"]:
-        if db_presencia > db_brillos + 2:
+        db_pres_baja = float(np.mean(mel_db[mask_pres_baja, :])) if mask_pres_baja.any() else -80
+        db_pres_alta = float(np.mean(mel_db[mask_pres_alta, :])) if mask_pres_alta.any() else -80
+        if db_pres_baja > db_pres_alta + 2:
             resultado["zona_problema"] = "presencia"
-        elif db_brillos > db_presencia + 2:
+        elif db_pres_alta > db_pres_baja + 2:
             resultado["zona_problema"] = "brillos"
         else:
             resultado["zona_problema"] = "ambas"

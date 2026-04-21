@@ -105,7 +105,8 @@ def generar_diagnostico(senales: dict, contexto: dict) -> dict:
             "harshness": {
                 "tiene_harshness": senales["harshness"]["tiene_harshness"],
                 "nivel": senales["harshness"]["nivel"],
-                "pico_sobre_media": senales["harshness"]["pico_sobre_media"],
+                "pico_p95": senales["harshness"]["pico_p95"],
+                "pct_frames_harsh": senales["harshness"]["pct_frames_harsh"],
                 "zona_problema": senales["harshness"]["zona_problema"],
             },
         },

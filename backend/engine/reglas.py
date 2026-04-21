@@ -303,17 +303,17 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     if harshness:
         if harshness.get("nivel") == "severo":
             score += 4; razones.append(
-                f"Pico fuerte en medios-altos ({harshness['pico_sobre_media']:.1f}dB sobre la media) — "
-                f"suena chirriante y agresivo"
+                f"Medios-altos dominan en {harshness.get('pct_frames_harsh', 0):.0f}% del track con picos de "
+                f"{harshness.get('pico_p95', 0):.1f}dB — suena chirriante y agresivo"
             )
         elif harshness.get("nivel") == "notable":
             score += 3; razones.append(
-                f"Medios-altos por encima de la media ({harshness['pico_sobre_media']:.1f}dB) — "
+                f"Medios-altos dominan en {harshness.get('pct_frames_harsh', 0):.0f}% del track — "
                 f"puede sonar duro o fatigante"
             )
         elif harshness.get("nivel") == "leve":
             score += 1; razones.append(
-                f"Ligero exceso en medios-altos ({harshness['pico_sobre_media']:.1f}dB)"
+                f"Ligero exceso puntual en medios-altos (picos de {harshness.get('pico_p95', 0):.1f}dB)"
             )
         # Localización
         zona = harshness.get("zona_problema", "")
