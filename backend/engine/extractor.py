@@ -164,9 +164,15 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None) -> dict:
     # === Distribución de secciones ===
     distribucion = _analizar_distribucion(bloques_rms)
 
-    # Carencia espectral
-    carencia_medios = db_media < -46
-    carencia_agudos = db_aguda < -56
+    # Carencia espectral — umbrales recalibrados con 38 sesiones reales
+    # En electrónica el kick domina graves, así que medios y agudos siempre están
+    # por debajo en promedio. Umbrales anteriores (-46/-56) eran demasiado agresivos,
+    # pero -50/-60 perdía tracks con carencia real (16, 23). Punto medio:
+    carencia_medios = db_media < -48
+    carencia_agudos = db_aguda < -58
+
+    # === Harshness (picos molestos en medios-altos) ===
+    harshness = _analizar_harshness(mel_db, mel_freqs)
 
     # === Loudness (LUFS) ===
     loudness = _analizar_loudness(audio_path)
@@ -210,7 +216,68 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None) -> dict:
         "espectro_bandas": espectro_bandas,
         "espectro_bandas_norm": espectro_bandas_norm,
         "loudness": loudness,
+        "harshness": harshness,
     }
+
+
+def _analizar_harshness(mel_db: np.ndarray, mel_freqs: np.ndarray) -> dict:
+    """
+    Detecta harshness (chirrido/aspereza) en medios-altos (2-8kHz).
+    Compara la energía en la zona 2-8kHz contra la media general.
+    Un pico en esa zona respecto al resto indica elementos chirriantes.
+    También mide la varianza en esa banda — picos puntuales son peores.
+    """
+    resultado = {
+        "tiene_harshness": False,
+        "nivel": "",           # "leve", "notable", "severo"
+        "db_medio_alto": 0.0,  # nivel medio en 2-8kHz
+        "pico_sobre_media": 0.0,  # dB por encima de la media general
+        "zona_problema": "",   # "presencia" (2-6kHz) o "brillos" (6-10kHz) o ambas
+    }
+
+    # Banda de medios-altos donde ocurre la harshness (2-8kHz)
+    mask_harsh = (mel_freqs >= 2000) & (mel_freqs < 8000)
+    # Sub-bandas para localizar el problema
+    mask_presencia = (mel_freqs >= 2000) & (mel_freqs < 6000)
+    mask_brillos = (mel_freqs >= 6000) & (mel_freqs < 10000)
+    # Media general (excluir sub-bass para no sesgar)
+    mask_general = mel_freqs >= 200
+
+    if not mask_harsh.any() or not mask_general.any():
+        return resultado
+
+    db_harsh = float(np.mean(mel_db[mask_harsh, :]))
+    db_general = float(np.mean(mel_db[mask_general, :]))
+    db_presencia = float(np.mean(mel_db[mask_presencia, :])) if mask_presencia.any() else -80
+    db_brillos = float(np.mean(mel_db[mask_brillos, :])) if mask_brillos.any() else -80
+
+    pico = db_harsh - db_general
+    resultado["db_medio_alto"] = round(db_harsh, 1)
+    resultado["pico_sobre_media"] = round(pico, 1)
+
+    # Detectar harshness: la zona 2-8kHz está significativamente por encima
+    # de la media general (excl. graves). En electrónica bien mezclada,
+    # esta zona suele estar al nivel o ligeramente por debajo de la media.
+    if pico > 4.0:
+        resultado["tiene_harshness"] = True
+        resultado["nivel"] = "severo"
+    elif pico > 2.0:
+        resultado["tiene_harshness"] = True
+        resultado["nivel"] = "notable"
+    elif pico > 0.5:
+        resultado["tiene_harshness"] = True
+        resultado["nivel"] = "leve"
+
+    # Localizar zona problema
+    if resultado["tiene_harshness"]:
+        if db_presencia > db_brillos + 2:
+            resultado["zona_problema"] = "presencia"
+        elif db_brillos > db_presencia + 2:
+            resultado["zona_problema"] = "brillos"
+        else:
+            resultado["zona_problema"] = "ambas"
+
+    return resultado
 
 
 def _analizar_loudness(audio_path: str) -> dict:

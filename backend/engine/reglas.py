@@ -3,7 +3,8 @@ Motor de reglas diagnósticas.
 Evalúa hipótesis, aplica jerarquía pedagógica y genera el diagnóstico final.
 """
 
-UMBRAL_MINIMO_CONFIANZA = 3
+# Recalibrado con 38 sesiones: 3 era demasiado alto, muchos falsos "sin_diagnostico"
+UMBRAL_MINIMO_CONFIANZA = 2
 
 
 def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
@@ -210,6 +211,10 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     loudness = senales.get("loudness", {})
     if (senales["carencia_medios"] or senales["carencia_agudos"]) and loudness.get("nivel") in ["bajo", "muy_bajo"]:
         score -= 1; razones.append("(−) Loudness muy bajo — la carencia puede ser simplemente que el track está sin mezclar/masterizar")
+    # Cruce: si hay harshness en medios-altos, la "carencia de agudos" es falsa — hay contenido pero mal balanceado
+    harshness = senales.get("harshness", {})
+    if harshness.get("tiene_harshness") and senales["carencia_agudos"]:
+        score -= 2; razones.append("(−) Hay harshness en medios-altos — no es carencia sino exceso mal distribuido")
     scores["carencia_espectral"] = score
     detalles["carencia_espectral"] = razones
 
@@ -292,22 +297,69 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     scores["pobreza_armonica"] = score
     detalles["pobreza_armonica"] = razones
 
+    # --- 10: Harshness / mezcla agresiva en medios-altos ---
+    score, razones = 0, []
+    harshness = senales.get("harshness", {})
+    if harshness:
+        if harshness.get("nivel") == "severo":
+            score += 4; razones.append(
+                f"Pico fuerte en medios-altos ({harshness['pico_sobre_media']:.1f}dB sobre la media) — "
+                f"suena chirriante y agresivo"
+            )
+        elif harshness.get("nivel") == "notable":
+            score += 3; razones.append(
+                f"Medios-altos por encima de la media ({harshness['pico_sobre_media']:.1f}dB) — "
+                f"puede sonar duro o fatigante"
+            )
+        elif harshness.get("nivel") == "leve":
+            score += 1; razones.append(
+                f"Ligero exceso en medios-altos ({harshness['pico_sobre_media']:.1f}dB)"
+            )
+        # Localización
+        zona = harshness.get("zona_problema", "")
+        if zona == "presencia":
+            razones.append("El problema está en la zona de presencia (2-6kHz) — sintes, voces o percusiones pueden estar demasiado adelante")
+        elif zona == "brillos":
+            razones.append("El problema está en la zona de brillos (6-10kHz) — hi-hats, crashes o efectos pueden estar demasiado altos")
+        elif zona == "ambas":
+            razones.append("Todo el rango de medios-altos está elevado — posible falta de EQ correctivo en la mezcla")
+        # Cruce: harshness + densidad alta = todo compite y se amplifica
+        if harshness.get("tiene_harshness") and senales["densidad_global"] in ["alta", "saturada"]:
+            score += 1; razones.append("Harshness agravada por la densidad alta — demasiados elementos compitiendo en la misma zona")
+        # Cruce: harshness + loudness alto = el limiter acentúa los picos
+        loudness = senales.get("loudness", {})
+        if harshness.get("tiene_harshness") and loudness.get("nivel") in ["alto", "muy_alto"]:
+            score += 1; razones.append("El loudness alto puede estar acentuando la dureza — el limiter empuja los picos de medios-altos")
+        # Contexto usuario
+        if any(p in bloqueo for p in ["chirri", "duro", "agresivo", "harsh", "brillante", "molest", "agudo"]):
+            score += 2; razones.append("El usuario percibe dureza o exceso en agudos/medios-altos")
+    scores["harshness_mezcla"] = score
+    detalles["harshness_mezcla"] = razones
+
     return scores, detalles
 
 
 def aplicar_jerarquia(scores: dict, senales: dict, contexto: dict) -> tuple:
-    ranking = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-    ranking = [(k, v) for k, v in ranking if v > 0]
+    # Umbrales por diagnóstico: los armónicos/tonales necesitan más evidencia
+    # porque el análisis tonal es más incierto que el espectral/estructural
+    UMBRALES_POR_DX = {
+        "conflicto_armonico": 3,
+        "pobreza_armonica": 3,
+    }
 
-    if not ranking or ranking[0][1] < UMBRAL_MINIMO_CONFIANZA:
+    ranking = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    ranking = [(k, v) for k, v in ranking
+               if v > 0 and v >= UMBRALES_POR_DX.get(k, UMBRAL_MINIMO_CONFIANZA)]
+
+    if not ranking:
         return "sin_diagnostico", None, False, ""
 
     principal_id = ranking[0][0]
-    secundario_id = ranking[1][0] if len(ranking) > 1 and ranking[1][1] >= UMBRAL_MINIMO_CONFIANZA else None
+    secundario_id = ranking[1][0] if len(ranking) > 1 else None
 
     # Regla 1: estructura antes que mezcla/espectro/armonía
     problemas_estructura = scores.get("problema_arreglo", 0) > 3 or scores.get("poco_contraste", 0) > 3
-    if principal_id in ["exceso_lowend", "exceso_densidad", "conflicto_armonico", "pobreza_armonica"] and problemas_estructura:
+    if principal_id in ["exceso_lowend", "exceso_densidad", "conflicto_armonico", "pobreza_armonica", "harshness_mezcla"] and problemas_estructura:
         if scores.get("problema_arreglo", 0) >= scores.get("poco_contraste", 0):
             principal_id = "problema_arreglo"
         else:

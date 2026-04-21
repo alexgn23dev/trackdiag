@@ -102,6 +102,12 @@ def generar_diagnostico(senales: dict, contexto: dict) -> dict:
                 "bandas": senales["mono_compat"]["bandas"],
                 "resumen": senales["mono_compat"]["resumen"],
             },
+            "harshness": {
+                "tiene_harshness": senales["harshness"]["tiene_harshness"],
+                "nivel": senales["harshness"]["nivel"],
+                "pico_sobre_media": senales["harshness"]["pico_sobre_media"],
+                "zona_problema": senales["harshness"]["zona_problema"],
+            },
         },
         "error_de_foco": error_foco,
         "error_de_foco_mensaje": error_foco_msg if error_foco else "",

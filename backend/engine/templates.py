@@ -154,6 +154,23 @@ TEMPLATES = {
             "te hace sentir algo, desarróllala. No busques complejidad — busca emoción."
         ),
     },
+    "harshness_mezcla": {
+        "titulo": "La mezcla tiene zonas duras o chirriantes en medios-altos.",
+        "prioridades": [
+            "Identifica qué elementos suenan más agresivos o chirriantes: hi-hats, leads, voces procesadas o percusiones metálicas.",
+            "Aplica un EQ sustractivo en la zona de 2-6kHz a los elementos que más molestan — cortes de 2-4dB pueden hacer mucho.",
+            "Revisa si hay saturación o distorsión no intencionada en algún canal — a veces un plugin está empujando demasiado.",
+        ],
+        "no_tocar": [
+            "No bajes todos los agudos del master — el problema suele estar en 1-2 elementos concretos, no en todo el track.",
+            "No compenses subiendo los graves — primero doma lo que chirría.",
+        ],
+        "siguiente_sesion": (
+            "En tu próxima sesión, escucha el track a volumen moderado-bajo. Los elementos que más te molestan o "
+            "se escuchan por encima de todo son los que necesitan un EQ sustractivo. Prueba con un corte estrecho "
+            "(Q alto) entre 2-6kHz y barre hasta encontrar la zona que molesta, luego recorta 2-4dB."
+        ),
+    },
     "sin_diagnostico": {
         "titulo": "No se detectan bloqueos evidentes en este track.",
         "prioridades": [
