@@ -715,14 +715,14 @@
                                         const tips = {
                                             graves: 'Los graves (kick, bass, sub) deberían estar siempre en mono o casi mono. Revisa si tienes un stereo widener afectando al bajo o al kick — desactívalo en esa zona.',
                                             medios: 'Los medios llevan la información principal del track (voces, leads, plucks). Si se pierden en mono, tu track sonará vacío en sistemas mono. Reduce el widening en esos elementos.',
-                                            agudos: 'Los agudos toleran mejor la expansión estéreo, pero conviene asegurarse de que no se pierda información importante (hi-hats principales, efectos clave).',
+                                            agudos: 'Los agudos toleran mejor la expansión estéreo, pero conviene asegurarse de que no se pierda información importante (voces o leads principales, efectos importantes…).',
                                         };
                                         return (
                                             <div className="mt-3 space-y-1">
                                                 {bandasRevisar.map(b => (
                                                     <p key={b} className="text-yellow-400/70 text-xs">{tips[b]}</p>
                                                 ))}
-                                                <p className="text-yellow-400/70 text-xs mt-2">Haz un test mono en tu DAW (botón mono en el master o un plugin utility) y escucha si notas que se pierde algo importante. Si al poner mono suena igual o casi igual, no hay problema real.</p>
+                                                <p className="text-yellow-400/70 text-xs mt-2">Haz un test mono en tu DAW (switch mono en master o plugin tipo Utility) y fíjate si algún elemento importante pierde mucho volumen o se degrada en exceso. Es normal que al pasar tu track a mono se pierda parte de la experiencia, eso no es malo, pero debes ser crítico y encontrar un buen balance — eso es lo que llamamos "compatibilidad estéreo".</p>
                                             </div>
                                         );
                                     })()}
