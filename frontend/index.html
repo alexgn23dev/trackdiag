@@ -427,7 +427,7 @@
 
                     {/* ===== RESUMEN VISUAL ===== */}
                     <div className="card p-8 mb-6 text-center" style={{borderTop: `3px solid ${semaforoConfig.color}`}}>
-                        <div className="text-5xl mb-3">{semaforoConfig.icon}</div>
+                        <div className="text-2xl mb-2">{semaforoConfig.icon}</div>
                         <p className="text-sm font-medium uppercase tracking-wider mb-2" style={{color: semaforoConfig.color}}>
                             {semaforoConfig.label}
                         </p>
@@ -707,7 +707,29 @@
                                             </div>
                                         ))}
                                     </div>
-                                    <p className="text-gray-600 text-xs mt-2">Los graves deben ser siempre mono-compatibles. Los agudos toleran más expansión estéreo.</p>
+
+                                    {/* Recomendaciones por banda */}
+                                    {(() => {
+                                        const bandasRevisar = ['graves', 'medios', 'agudos'].filter(b => d.mono_compat.bandas[b].estado === 'revisar' || d.mono_compat.bandas[b].estado === 'problema');
+                                        if (bandasRevisar.length === 0) return null;
+                                        const tips = {
+                                            graves: 'Los graves (kick, bass, sub) deberían estar siempre en mono o casi mono. Revisa si tienes un stereo widener afectando al bajo o al kick — desactívalo en esa zona.',
+                                            medios: 'Los medios llevan la información principal del track (voces, leads, plucks). Si se pierden en mono, tu track sonará vacío en sistemas mono. Reduce el widening en esos elementos.',
+                                            agudos: 'Los agudos toleran mejor la expansión estéreo, pero conviene asegurarse de que no se pierda información importante (hi-hats principales, efectos clave).',
+                                        };
+                                        return (
+                                            <div className="mt-3 space-y-1">
+                                                {bandasRevisar.map(b => (
+                                                    <p key={b} className="text-yellow-400/70 text-xs">{tips[b]}</p>
+                                                ))}
+                                                <p className="text-yellow-400/70 text-xs mt-2">Haz un test mono en tu DAW (botón mono en el master o un plugin utility) y escucha si notas que se pierde algo importante. Si al poner mono suena igual o casi igual, no hay problema real.</p>
+                                            </div>
+                                        );
+                                    })()}
+
+                                    {!['graves', 'medios', 'agudos'].some(b => d.mono_compat.bandas[b].estado === 'revisar' || d.mono_compat.bandas[b].estado === 'problema') && (
+                                        <p className="text-gray-600 text-xs mt-2">Los graves deben ser siempre mono-compatibles. Los agudos toleran más expansión estéreo, pero conviene asegurarse de que no se pierde información importante.</p>
+                                    )}
                                 </div>
                             )}
 
@@ -781,20 +803,6 @@
                             </div>
                             <p className="text-gray-600 text-xs">Duración total del audio analizado.</p>
 
-                            {d.armonia && d.armonia.key && (
-                                <div>
-                                    <div className="flex justify-between items-baseline">
-                                        <span className="text-gray-500">Tonalidad</span>
-                                        <span className={d.armonia.key_confidence > 0.5 ? 'text-gray-300' : 'text-gray-500'}>
-                                            {d.armonia.key} {d.armonia.modo === 'major' ? 'Mayor' : d.armonia.modo === 'minor' ? 'Menor' : d.armonia.modo}
-                                        </span>
-                                    </div>
-                                    <p className="text-gray-600 text-xs">
-                                        Tonalidad estimada{d.armonia.key_confidence <= 0.5 ? ' (confianza baja — el track puede ser muy percusivo o atonal)' : ''}.
-                                        {d.armonia.contenido_tonal === 'percusivo' ? ' Track predominantemente percusivo.' : ''}
-                                    </p>
-                                </div>
-                            )}
                         </div>
                     </details>
 
@@ -878,12 +886,15 @@
 
                     {feedbackStep === 2 && (
                         <div className="card p-6 mb-6 fade-in" style={{borderLeft: '3px solid #8b5cf6'}}>
-                            <p className="text-purple-400 text-sm font-medium mb-2">¿Quieres feedback real gratis?</p>
-                            <p className="text-gray-300 text-sm leading-relaxed mb-1">
-                                Alex, de Producción Online, puede darte feedback personalizado sobre tu track en menos de 48 horas. Gratis, sin compromiso.
+                            <p className="text-purple-400 text-sm font-medium mb-3">¿Quieres feedback real gratis?</p>
+                            <p className="text-gray-300 text-sm leading-relaxed mb-3">
+                                Sube tu canción aquí y yo mismo (Alex) escucharé y te mandaré un feedback personalizado para ti (limitado a 100).
+                            </p>
+                            <p className="text-gray-400 text-sm leading-relaxed mb-1">
+                                ¿Por qué hago esto?
                             </p>
                             <p className="text-gray-500 text-xs leading-relaxed mb-4">
-                                El trato: tú subes tu canción a Drive o Dropbox, Alex te da feedback detallado de productor a productor, y tu track + su feedback se usan para mejorar este algoritmo. Todos ganamos.
+                                TrackDiag no almacena tu música por defecto, pero la mejor manera de entrenar el motor de análisis es con música real + feedback real. Así que, si quieres formar parte de la mejora de este proyecto y además llevarte feedback sin coste para ti, este es un momento único. Solo lo haré con las 100 primeras personas que apliquen.
                             </p>
 
                             {!feedbackRealEnviado ? (
@@ -945,13 +956,18 @@
                     )}
 
                     {/* Acciones */}
-                    <div className="text-center mt-4 mb-8">
+                    <div className="text-center mt-4 mb-4">
                         <button
                             onClick={onReset}
                             className="px-6 py-3 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl transition-colors"
                         >
                             Analizar otro track
                         </button>
+                    </div>
+
+                    {/* Footer privacidad */}
+                    <div className="text-center mb-8">
+                        <p className="text-gray-600 text-xs">TrackDiag no almacena el archivo de tu canción, solo los datos extraídos tras el análisis.</p>
                     </div>
                 </div>
             </div>
