@@ -150,10 +150,10 @@ def opciones():
             {"value": "casi_listo", "label": "Creo que está casi listo"},
         ],
         "objetivos": [
-            {"value": "terminar", "label": "Terminar y publicar"},
+            {"value": "pinchar", "label": "Publicar y tocar en sesión"},
             {"value": "aprender", "label": "Practicar y aprender"},
-            {"value": "sellos", "label": "Enviar a sellos / playlists"},
-            {"value": "pinchar", "label": "Pincharlo en sesión"},
+            {"value": "sellos", "label": "Enviar demo a sellos"},
+            {"value": "todo", "label": "Todo lo anterior"},
         ],
         "experiencia": [
             {"value": "menos_6m", "label": "Menos de 6 meses"},
