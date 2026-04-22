@@ -178,6 +178,45 @@ def opciones():
 
 
 # =========================================================================
+# Feedback endpoints
+# =========================================================================
+
+FEEDBACK_FILE = Path(__file__).resolve().parent / "data" / "feedbacks.jsonl"
+FEEDBACK_REQUESTS_FILE = Path(__file__).resolve().parent / "data" / "feedback_requests.jsonl"
+
+
+@app.post("/api/feedback")
+async def guardar_feedback(data: dict):
+    """Guarda feedback de utilidad del usuario."""
+    FEEDBACK_FILE.parent.mkdir(parents=True, exist_ok=True)
+    entry = {
+        "timestamp": data.get("timestamp", datetime.utcnow().isoformat()),
+        "util": data.get("util"),
+        "comentario": data.get("comentario", ""),
+        "diagnostico": data.get("diagnostico", ""),
+    }
+    with open(FEEDBACK_FILE, "a") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    return {"ok": True}
+
+
+@app.post("/api/feedback-request")
+async def guardar_feedback_request(data: dict):
+    """Guarda solicitud de feedback real por Alex."""
+    FEEDBACK_REQUESTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    entry = {
+        "timestamp": data.get("timestamp", datetime.utcnow().isoformat()),
+        "enlace": data.get("enlace", ""),
+        "diagnostico_id": data.get("diagnostico_id", ""),
+        "genero": data.get("genero", ""),
+        "objetivo": data.get("objetivo", ""),
+    }
+    with open(FEEDBACK_REQUESTS_FILE, "a") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    return {"ok": True}
+
+
+# =========================================================================
 # Frontend — servir el SPA
 # =========================================================================
 

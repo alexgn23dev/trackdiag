@@ -95,10 +95,14 @@ ESTRUCTURA_GENERO = {
 # =============================================================================
 
 TIPS_OBJETIVO = {
-    "terminar": {
-        "mantra": "Menos decisiones, más ejecución.",
-        "enfoque": "Tu objetivo es cerrar este track, no perfeccionarlo. Cada decisión que tomes ahora debería acercarte al bounce final, no abrir nuevas ramas creativas.",
-        "prioridad_extra": "Pon una fecha límite realista y comprométete a hacer el bounce final ese día, aunque no sea perfecto.",
+    "pinchar": {
+        "mantra": "Si no se puede mezclar, no se puede pinchar.",
+        "enfoque_ok": "Tu track tiene intro y outro adecuadas para mezclar. Ahora asegúrate de que la energía sea predecible para el DJ y que no haya sorpresas raras en los primeros/últimos 30 segundos.",
+        "enfoque_falta_intro": "Para que funcione en sesión necesitas una intro limpia de al menos 32 compases para que el DJ pueda mezclar la entrada. Ahora mismo tu track arranca demasiado rápido.",
+        "enfoque_falta_outro": "Tu track necesita un outro limpio de al menos 32 compases para que el DJ pueda salir con una transición suave. Ahora mismo el final es demasiado abrupto.",
+        "enfoque_falta_ambos": "Para que funcione en sesión necesitas: intro y outro limpias de al menos 32 compases. Ahora mismo el track no tiene la estructura necesaria para que un DJ pueda mezclarlo cómodamente.",
+        "prioridad_extra_ok": "Prueba a mezclar tu track con otro del mismo género para confirmar que las transiciones funcionan.",
+        "prioridad_extra_fix": "Prueba a mezclar tu track con otro del mismo género. ¿La intro permite una transición limpia? ¿El outro da tiempo suficiente para salir?",
     },
     "aprender": {
         "mantra": "Cada problema es una clase práctica.",
@@ -110,14 +114,10 @@ TIPS_OBJETIVO = {
         "enfoque": "Si tu objetivo es enviar a sellos, el track necesita estar a nivel profesional en estructura, mezcla y energía. Los A&R escuchan los primeros 30 segundos — si no engancha ahí, no llegan al drop.",
         "prioridad_extra": "Compara tu intro con la de 3 tracks de referencia del sello al que quieres enviar. ¿Engancha igual de rápido?",
     },
-    "pinchar": {
-        "mantra": "Si no se puede mezclar, no se puede pinchar.",
-        "enfoque_ok": "Tu track tiene intro y outro adecuadas para mezclar. Ahora asegúrate de que la energía sea predecible para el DJ y que no haya sorpresas raras en los primeros/últimos 30 segundos.",
-        "enfoque_falta_intro": "Para que funcione en sesión necesitas una intro limpia de al menos 32 compases para que el DJ pueda mezclar la entrada. Ahora mismo tu track arranca demasiado rápido.",
-        "enfoque_falta_outro": "Tu track necesita un outro limpio de al menos 32 compases para que el DJ pueda salir con una transición suave. Ahora mismo el final es demasiado abrupto.",
-        "enfoque_falta_ambos": "Para que funcione en sesión necesitas: intro y outro limpias de al menos 32 compases. Ahora mismo el track no tiene la estructura necesaria para que un DJ pueda mezclarlo cómodamente.",
-        "prioridad_extra_ok": "Prueba a mezclar tu track con otro del mismo género para confirmar que las transiciones funcionan.",
-        "prioridad_extra_fix": "Prueba a mezclar tu track con otro del mismo género. ¿La intro permite una transición limpia? ¿El outro da tiempo suficiente para salir?",
+    "todo": {
+        "mantra": "Primero que funcione, después que brille.",
+        "enfoque": "Quieres que tu track sirva para todo: tocarlo, publicarlo y enviarlo a sellos. Eso significa que tiene que cumplir el estándar más exigente de los tres. Enfócate primero en que la estructura y la mezcla sean sólidas — un track bien construido funciona en cualquier contexto.",
+        "prioridad_extra": "Define qué versión necesitas primero: un extended mix para DJ o un edit para plataformas. Trabaja una y adapta la otra después.",
     },
 }
 

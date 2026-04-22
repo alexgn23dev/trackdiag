@@ -405,31 +405,53 @@
         );
     }
 
-    function DiagnosticoScreen({ resultado, onReset }) {
+    function DiagnosticoScreen({ resultado, onReset, contexto }) {
         const r = resultado;
         const d = r.datos_audio;
+        const [feedbackStep, setFeedbackStep] = useState(0); // 0=results, 1=util?, 2=feedback real
+        const [feedbackUtil, setFeedbackUtil] = useState(null); // true/false
+        const [feedbackComentario, setFeedbackComentario] = useState('');
+        const [feedbackEnlace, setFeedbackEnlace] = useState('');
+        const [feedbackEnviado, setFeedbackEnviado] = useState(false);
+        const [feedbackRealEnviado, setFeedbackRealEnviado] = useState(false);
 
-        const badgeClass = r.estado_track === 'verde'
-            ? 'badge-verde' : r.estado_track === 'avanzado'
-            ? 'badge-avanzado' : 'badge-desarrollo';
+        const semaforoConfig = r.estado_track === 'verde'
+            ? { color: '#4ade80', bg: 'rgba(74,222,128,0.10)', border: '#14532d', label: 'Fase temprana', icon: '🟢' }
+            : r.estado_track === 'avanzado'
+            ? { color: '#a78bfa', bg: 'rgba(167,139,250,0.10)', border: '#1e1b4b', label: 'Listo para pulir', icon: '🟣' }
+            : { color: '#fb923c', bg: 'rgba(251,146,60,0.10)', border: '#422006', label: 'En desarrollo', icon: '🟠' };
 
         return (
             <div className="min-h-screen py-12 px-4 fade-in">
                 <div className="max-w-2xl mx-auto">
 
-                    {/* Estado del track */}
-                    <div className="text-center mb-8">
-                        <span className={`inline-block px-4 py-1.5 rounded-full text-sm font-medium ${badgeClass}`}>
-                            {r.estado_texto}
-                        </span>
+                    {/* ===== RESUMEN VISUAL ===== */}
+                    <div className="card p-8 mb-6 text-center" style={{borderTop: `3px solid ${semaforoConfig.color}`}}>
+                        <div className="text-5xl mb-3">{semaforoConfig.icon}</div>
+                        <p className="text-sm font-medium uppercase tracking-wider mb-2" style={{color: semaforoConfig.color}}>
+                            {semaforoConfig.label}
+                        </p>
+                        <h2 className="text-xl font-bold text-white mb-2">{r.diagnostico_principal.titulo}</h2>
+                        <p className="text-gray-400 text-sm mb-6">{r.estado_texto}</p>
+
+                        {/* Top 3 prioridades inline */}
+                        <div className="text-left space-y-3 max-w-md mx-auto">
+                            {r.prioridades.slice(0, 3).map((p, i) => (
+                                <div key={i} className="flex gap-3 items-start">
+                                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-green-900 text-green-400 flex items-center justify-center text-xs font-bold">{i + 1}</span>
+                                    <p className="text-gray-300 text-sm">{p}</p>
+                                </div>
+                            ))}
+                        </div>
                     </div>
 
-                    {/* Diagnóstico principal */}
-                    <div className="card p-6 mb-4">
-                        <p className="text-xs text-purple-400 font-medium uppercase tracking-wider mb-2">Diagnóstico principal</p>
-                        <h2 className="text-xl font-bold text-white mb-4">{r.diagnostico_principal.titulo}</h2>
-                        <div className="text-gray-400 text-sm whitespace-pre-line">{r.diagnostico_principal.explicacion}</div>
-                    </div>
+                    {/* Diagnóstico principal — detalles expandibles */}
+                    <details className="card p-6 mb-4">
+                        <summary className="cursor-pointer">
+                            <span className="text-xs text-purple-400 font-medium uppercase tracking-wider">Diagnóstico principal — por qué</span>
+                        </summary>
+                        <div className="mt-4 text-gray-400 text-sm whitespace-pre-line">{r.diagnostico_principal.explicacion}</div>
+                    </details>
 
                     {/* Nota contextual personalizada */}
                     {r.nota_contextual && (
@@ -460,18 +482,20 @@
                         </div>
                     )}
 
-                    {/* Prioridades */}
-                    <div className="card p-6 mb-4">
-                        <p className="text-xs text-green-400 font-medium uppercase tracking-wider mb-3">Prioridades</p>
-                        <div className="space-y-3">
-                            {r.prioridades.map((p, i) => (
-                                <div key={i} className="flex gap-3">
-                                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-green-900 text-green-400 flex items-center justify-center text-xs font-bold">{i + 1}</span>
-                                    <p className="text-gray-300 text-sm">{p}</p>
-                                </div>
-                            ))}
+                    {/* Prioridades extra (si hay más de 3) */}
+                    {r.prioridades.length > 3 && (
+                        <div className="card p-6 mb-4">
+                            <p className="text-xs text-green-400 font-medium uppercase tracking-wider mb-3">Prioridades adicionales</p>
+                            <div className="space-y-3">
+                                {r.prioridades.slice(3).map((p, i) => (
+                                    <div key={i} className="flex gap-3">
+                                        <span className="flex-shrink-0 w-6 h-6 rounded-full bg-green-900 text-green-400 flex items-center justify-center text-xs font-bold">{i + 4}</span>
+                                        <p className="text-gray-300 text-sm">{p}</p>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
-                    </div>
+                    )}
 
                     {/* Tips de género */}
                     {r.tips_genero && r.tips_genero.length > 0 && (
@@ -535,7 +559,13 @@
                                         'text-red-400'
                                     }>{d.balance_grave}</span>
                                 </div>
-                                <p className="text-gray-600 text-xs mt-1">Relación entre la energía de graves y medios. Normal = equilibrado para el género. Elevado/excesivo = los graves dominan demasiado.</p>
+                                <p className="text-gray-600 text-xs mt-1">Relación entre la energía de graves y medios.</p>
+                                {d.balance_grave === 'elevado' && (
+                                    <p className="text-yellow-400/70 text-xs mt-1">Los graves están algo por encima de lo habitual. Revisa si el kick o el sub están compitiendo con los medios. Prueba a bajar 2-3dB en la zona de 60-120Hz o aplicar sidechain al sub con el kick.</p>
+                                )}
+                                {d.balance_grave === 'excesivo' && (
+                                    <p className="text-red-400/70 text-xs mt-1">Los graves dominan la mezcla. Esto puede sonar bien en auriculares pero en un club será barro. Reduce el sub o el kick, y comprueba con un analizador que no estés acumulando energía por debajo de 50Hz.</p>
+                                )}
                             </div>
 
                             {/* Densidad */}
@@ -548,24 +578,65 @@
                                         'text-red-400'
                                     }>{d.densidad}</span>
                                 </div>
-                                <p className="text-gray-600 text-xs mt-1">Cuánto del espectro frecuencial está ocupado a la vez. Baja = hay espacio. Alta/saturada = muchos elementos compitiendo.</p>
+                                <p className="text-gray-600 text-xs mt-1">Cuánto del espectro frecuencial está ocupado a la vez.</p>
+                                {d.densidad === 'alta' && (
+                                    <p className="text-yellow-400/70 text-xs mt-1">La mezcla está algo cargada. Revisa si hay elementos que se pisan en la misma zona frecuencial. Prueba a silenciar pistas una a una para identificar cuáles sobran o necesitan EQ.</p>
+                                )}
+                                {d.densidad === 'saturada' && (
+                                    <p className="text-red-400/70 text-xs mt-1">El espectro está muy ocupado — casi no hay hueco entre elementos. Esto causa fatiga auditiva y pierde definición. Elimina o baja capas que no aporten, aplica EQ sustractivo agresivo, y prioriza: menos es más.</p>
+                                )}
                             </div>
 
                             {/* Loudness (LUFS) */}
-                            {d.loudness && d.loudness.lufs_integrado > -99 && (
+                            {d.loudness && d.loudness.lufs_integrado > -99 && (() => {
+                                const esSesion = contexto && (contexto.objetivo === 'pinchar' || contexto.objetivo === 'todo');
+                                const esSellos = contexto && contexto.objetivo === 'sellos';
+                                // Para sesión/pinchar: >-8 es verde, -8 a -12 amarillo, <-12 bajo
+                                // Para sellos: -10 a -6 verde (headroom para mastering)
+                                // Para aprender: usar nivel estándar
+                                let loudnessColor;
+                                let loudnessTip = '';
+                                if (esSesion) {
+                                    loudnessColor = d.loudness.lufs_integrado > -8 ? 'text-green-400' :
+                                                    d.loudness.lufs_integrado > -12 ? 'text-yellow-400' :
+                                                    'text-blue-400';
+                                    if (d.loudness.lufs_integrado <= -12) {
+                                        loudnessTip = 'Para tocar en sesión, tu track está bajo. Los DJs mezclan con tracks a -6/-8 LUFS. Si tu track está mucho más bajo, perderá impacto en la mezcla. Sube el limiter o revisa tu cadena de master.';
+                                    } else if (d.loudness.lufs_integrado > -5) {
+                                        loudnessTip = 'Cuidado: muy comprimido. Aunque suena fuerte, has perdido dinámica. En un sistema grande puede sonar plano y fatigante.';
+                                    }
+                                } else if (esSellos) {
+                                    loudnessColor = d.loudness.lufs_integrado >= -14 && d.loudness.lufs_integrado <= -8 ? 'text-green-400' :
+                                                    d.loudness.lufs_integrado > -8 ? 'text-yellow-400' :
+                                                    'text-blue-400';
+                                    if (d.loudness.lufs_integrado > -6) {
+                                        loudnessTip = 'Para enviar a sellos, el track debería tener algo de headroom para que el sello aplique su propio mastering. Apunta a -10/-8 LUFS.';
+                                    } else if (d.loudness.lufs_integrado < -14) {
+                                        loudnessTip = 'El nivel está bajo para un demo. Un A&R espera escuchar algo competitivo en volumen. Sube un poco sin destruir la dinámica.';
+                                    }
+                                } else {
+                                    loudnessColor = d.loudness.nivel === 'moderado' ? 'text-green-400' :
+                                                    d.loudness.nivel === 'bajo' ? 'text-blue-400' :
+                                                    d.loudness.nivel === 'alto' ? 'text-yellow-400' :
+                                                    d.loudness.nivel === 'muy_alto' ? 'text-red-400' :
+                                                    'text-gray-400';
+                                    if (d.loudness.nivel === 'bajo') {
+                                        loudnessTip = 'El volumen general es bajo. No te preocupes en las fases de producción, pero cuando vayas a exportar la versión final, necesitarás un limiter en el master.';
+                                    } else if (d.loudness.nivel === 'muy_alto') {
+                                        loudnessTip = 'El track está muy comprimido. Has perdido rango dinámico — los drops y breaks suenan al mismo nivel. Baja el limiter y deja respirar la mezcla.';
+                                    }
+                                }
+                                return (
                                 <div>
                                     <div className="border-t border-gray-800 pt-4 mt-4">
                                         <div className="flex justify-between items-baseline">
                                             <span className="text-gray-400">Loudness</span>
-                                            <span className={
-                                                d.loudness.nivel === 'moderado' ? 'text-green-400' :
-                                                d.loudness.nivel === 'bajo' ? 'text-blue-400' :
-                                                d.loudness.nivel === 'alto' ? 'text-yellow-400' :
-                                                d.loudness.nivel === 'muy_alto' ? 'text-red-400' :
-                                                'text-gray-400'
-                                            }>{d.loudness.lufs_integrado} LUFS</span>
+                                            <span className={loudnessColor}>{d.loudness.lufs_integrado} LUFS</span>
                                         </div>
                                         <p className="text-gray-600 text-xs mt-1">{d.loudness.referencia}</p>
+                                        {loudnessTip && (
+                                            <p className={`text-xs mt-1 ${loudnessColor.replace('text-', 'text-').replace('400', '400/70')}`}>{loudnessTip}</p>
+                                        )}
                                     </div>
 
                                     <div className="mt-3 grid grid-cols-2 gap-3">
@@ -581,7 +652,8 @@
                                         </div>
                                     </div>
                                 </div>
-                            )}
+                                );
+                            })()}
 
                             {/* Mono compatibility */}
                             {d.mono_compat && d.mono_compat.es_stereo && (
@@ -597,6 +669,12 @@
                                             }>{d.mono_compat.nivel_compatibilidad}</span>
                                         </div>
                                         <p className="text-gray-600 text-xs mt-1">{d.mono_compat.resumen}</p>
+                                        {d.mono_compat.nivel_compatibilidad === 'problematica' && (
+                                            <p className="text-yellow-400/70 text-xs mt-1">Algunas frecuencias se cancelan al sumar a mono. En un club con sistema mono (muy común), perderás parte de tu mezcla. Revisa elementos con mucho stereo widening, especialmente en graves y medios.</p>
+                                        )}
+                                        {d.mono_compat.nivel_compatibilidad === 'critica' && (
+                                            <p className="text-red-400/70 text-xs mt-1">Hay cancelaciones de fase serias. En mono perderás energía audible. Comprueba que el kick y el bass estén centrados, y reduce el stereo widener en los elementos importantes. Usa el botón mono de tu DAW para escuchar cómo suena.</p>
+                                        )}
                                     </div>
 
                                     <div className="mt-3 grid grid-cols-2 gap-3">
@@ -669,6 +747,12 @@
                                                 {d.harshness.zona_problema === 'brillos' && ' Zona afectada: brillos (6-8kHz) — hi-hats, crashes o efectos.'}
                                                 {d.harshness.zona_problema === 'ambas' && ' Todo el rango de medios-altos está elevado.'}
                                             </p>
+                                            {d.harshness.nivel === 'notable' && (
+                                                <p className="text-yellow-400/70 text-xs mt-1">Prueba un EQ dinámico (como TDR Nova, gratis) en el bus master, atenuando 2-3dB en la zona de 3-5kHz solo cuando supere un umbral. Así no pierdes brillo general.</p>
+                                            )}
+                                            {d.harshness.nivel === 'severo' && (
+                                                <p className="text-red-400/70 text-xs mt-1">Identifica qué elementos causan el chirriante: sintes con mucho overtone, percusiones con ataque agresivo, o saturaciones. Trata cada uno por separado con EQ sustractivo en 2-6kHz antes de tocar el master.</p>
+                                            )}
                                         </div>
                                     )}
                                     {!d.harshness.tiene_harshness && (
@@ -679,10 +763,10 @@
                         </div>
                     </details>
 
-                    {/* Datos técnicos (colapsable) */}
+                    {/* Datos del track (colapsable) */}
                     <details className="card p-5 mb-8">
                         <summary className="text-xs text-gray-500 font-medium uppercase tracking-wider cursor-pointer">
-                            Datos del análisis
+                            Datos del track
                         </summary>
                         <div className="mt-3 space-y-3 text-sm">
                             <div className="flex justify-between items-baseline">
@@ -697,16 +781,171 @@
                             </div>
                             <p className="text-gray-600 text-xs">Duración total del audio analizado.</p>
 
-                            <div className="flex justify-between items-baseline">
-                                <span className="text-gray-500">Desarrollo</span>
-                                <span className="text-gray-300">{d.desarrollo_temporal ? 'Sí' : 'No'}</span>
-                            </div>
-                            <p className="text-gray-600 text-xs">Si el track cambia de energía a lo largo del tiempo. Sí = hay secciones diferenciables. No = suena uniforme de principio a fin.</p>
+                            {d.armonia && d.armonia.key && (
+                                <div>
+                                    <div className="flex justify-between items-baseline">
+                                        <span className="text-gray-500">Tonalidad</span>
+                                        <span className={d.armonia.key_confidence > 0.5 ? 'text-gray-300' : 'text-gray-500'}>
+                                            {d.armonia.key} {d.armonia.modo === 'major' ? 'Mayor' : d.armonia.modo === 'minor' ? 'Menor' : d.armonia.modo}
+                                        </span>
+                                    </div>
+                                    <p className="text-gray-600 text-xs">
+                                        Tonalidad estimada{d.armonia.key_confidence <= 0.5 ? ' (confianza baja — el track puede ser muy percusivo o atonal)' : ''}.
+                                        {d.armonia.contenido_tonal === 'percusivo' ? ' Track predominantemente percusivo.' : ''}
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     </details>
 
+                    {/* ===== FEEDBACK POST-ANÁLISIS ===== */}
+                    {feedbackStep === 0 && (
+                        <div className="card p-6 mb-6 text-center">
+                            <p className="text-gray-300 text-sm mb-4">¿Te ha sido útil este diagnóstico?</p>
+                            <div className="flex gap-3 justify-center">
+                                <button
+                                    onClick={() => { setFeedbackUtil(true); setFeedbackStep(1); }}
+                                    className="px-5 py-2.5 bg-green-900/40 hover:bg-green-900/60 text-green-400 rounded-lg transition-colors text-sm"
+                                >
+                                    Sí, me ha ayudado
+                                </button>
+                                <button
+                                    onClick={() => { setFeedbackUtil(false); setFeedbackStep(1); }}
+                                    className="px-5 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-400 rounded-lg transition-colors text-sm"
+                                >
+                                    No mucho
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {feedbackStep === 1 && !feedbackEnviado && (
+                        <div className="card p-6 mb-6 fade-in">
+                            <p className="text-gray-300 text-sm mb-1">
+                                {feedbackUtil
+                                    ? '¡Genial! ¿Algo que quieras comentar?'
+                                    : '¿Qué podríamos mejorar? Tu feedback nos ayuda mucho.'}
+                            </p>
+                            <textarea
+                                value={feedbackComentario}
+                                onChange={(e) => setFeedbackComentario(e.target.value)}
+                                placeholder={feedbackUtil ? 'Opcional: cuéntanos qué te ha parecido más útil...' : '¿Qué esperabas que no has encontrado?'}
+                                maxLength={500}
+                                rows={3}
+                                className="w-full mt-3 px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 text-sm resize-none"
+                            />
+                            <div className="flex gap-3 mt-3 justify-end">
+                                <button
+                                    onClick={() => { setFeedbackStep(2); }}
+                                    className="text-gray-500 text-xs hover:text-gray-400 transition-colors"
+                                >
+                                    Saltar
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        // Guardar feedback en localStorage (y opcionalmente enviar a API)
+                                        const fb = {
+                                            timestamp: new Date().toISOString(),
+                                            util: feedbackUtil,
+                                            comentario: feedbackComentario,
+                                            diagnostico: r.diagnostico_principal?.id,
+                                        };
+                                        const feedbacks = JSON.parse(localStorage.getItem('trackdiag_feedbacks') || '[]');
+                                        feedbacks.push(fb);
+                                        localStorage.setItem('trackdiag_feedbacks', JSON.stringify(feedbacks));
+                                        // Intentar enviar a API (fire & forget)
+                                        fetch(`${API_URL}/api/feedback`, {
+                                            method: 'POST',
+                                            headers: {'Content-Type': 'application/json'},
+                                            body: JSON.stringify(fb),
+                                        }).catch(() => {});
+                                        setFeedbackEnviado(true);
+                                        setTimeout(() => setFeedbackStep(2), 1200);
+                                    }}
+                                    className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors text-sm"
+                                >
+                                    Enviar
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {feedbackStep === 1 && feedbackEnviado && (
+                        <div className="card p-6 mb-6 text-center fade-in">
+                            <p className="text-green-400 text-sm">Gracias por tu feedback</p>
+                        </div>
+                    )}
+
+                    {feedbackStep === 2 && (
+                        <div className="card p-6 mb-6 fade-in" style={{borderLeft: '3px solid #8b5cf6'}}>
+                            <p className="text-purple-400 text-sm font-medium mb-2">¿Quieres feedback real gratis?</p>
+                            <p className="text-gray-300 text-sm leading-relaxed mb-1">
+                                Alex, de Producción Online, puede darte feedback personalizado sobre tu track en menos de 48 horas. Gratis, sin compromiso.
+                            </p>
+                            <p className="text-gray-500 text-xs leading-relaxed mb-4">
+                                El trato: tú subes tu canción a Drive o Dropbox, Alex te da feedback detallado de productor a productor, y tu track + su feedback se usan para mejorar este algoritmo. Todos ganamos.
+                            </p>
+
+                            {!feedbackRealEnviado ? (
+                                <div>
+                                    <input
+                                        type="text"
+                                        value={feedbackEnlace}
+                                        onChange={(e) => setFeedbackEnlace(e.target.value)}
+                                        placeholder="Pega tu enlace de Drive, Dropbox o WeTransfer..."
+                                        className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 text-sm mb-3"
+                                    />
+                                    <div className="flex gap-3 justify-end">
+                                        <button
+                                            onClick={() => setFeedbackStep(3)}
+                                            className="text-gray-500 text-xs hover:text-gray-400 transition-colors"
+                                        >
+                                            No, gracias
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                if (!feedbackEnlace.trim()) return;
+                                                const req = {
+                                                    timestamp: new Date().toISOString(),
+                                                    enlace: feedbackEnlace.trim(),
+                                                    diagnostico_id: r.diagnostico_principal?.id,
+                                                    genero: contexto?.genero,
+                                                    objetivo: contexto?.objetivo,
+                                                };
+                                                // Guardar local
+                                                const reqs = JSON.parse(localStorage.getItem('trackdiag_feedback_requests') || '[]');
+                                                reqs.push(req);
+                                                localStorage.setItem('trackdiag_feedback_requests', JSON.stringify(reqs));
+                                                // Enviar a API
+                                                fetch(`${API_URL}/api/feedback-request`, {
+                                                    method: 'POST',
+                                                    headers: {'Content-Type': 'application/json'},
+                                                    body: JSON.stringify(req),
+                                                }).catch(() => {});
+                                                setFeedbackRealEnviado(true);
+                                            }}
+                                            disabled={!feedbackEnlace.trim()}
+                                            className={`px-5 py-2 rounded-lg transition-colors text-sm ${
+                                                feedbackEnlace.trim()
+                                                    ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                                                    : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                                            }`}
+                                        >
+                                            Quiero feedback
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="text-center py-2 fade-in">
+                                    <p className="text-green-400 text-sm mb-1">Recibido. Alex revisará tu track en las próximas 48h.</p>
+                                    <p className="text-gray-500 text-xs">Te contactaremos por el medio que uses para compartir el enlace.</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     {/* Acciones */}
-                    <div className="text-center">
+                    <div className="text-center mt-4 mb-8">
                         <button
                             onClick={onReset}
                             className="px-6 py-3 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl transition-colors"
@@ -761,10 +1000,10 @@
                             {value: "casi_listo", label: "Creo que está casi listo"},
                         ],
                         objetivos: [
-                            {value: "terminar", label: "Terminar y publicar"},
+                            {value: "pinchar", label: "Publicar y tocar en sesión"},
                             {value: "aprender", label: "Practicar y aprender"},
-                            {value: "sellos", label: "Enviar a sellos / playlists"},
-                            {value: "pinchar", label: "Pincharlo en sesión"},
+                            {value: "sellos", label: "Enviar demo a sellos"},
+                            {value: "todo", label: "Todo lo anterior"},
                         ],
                         experiencia: [
                             {value: "menos_6m", label: "Menos de 6 meses"},
@@ -881,7 +1120,7 @@
                 )}
                 {screen === 'processing' && <ProcessingScreen datos={resultado?.datos_audio} />}
                 {screen === 'diagnostico' && resultado && (
-                    <DiagnosticoScreen resultado={resultado} onReset={handleReset} />
+                    <DiagnosticoScreen resultado={resultado} onReset={handleReset} contexto={contexto} />
                 )}
             </div>
         );
