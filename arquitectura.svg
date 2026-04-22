@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" font-family="Inter, system-ui, sans-serif">
+  <defs>
+    <filter id="shadow" x="-4%" y="-4%" width="108%" height="108%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="520" rx="16" fill="#0a0a0a"/>
+
+  <!-- Title -->
+  <text x="450" y="40" text-anchor="middle" fill="#e5e5e5" font-size="18" font-weight="700">Arquitectura TrackDiag — ¿Quién es quién?</text>
+
+  <!-- 1. Claude (Yo) -->
+  <rect x="30" y="80" width="180" height="130" rx="12" fill="#1e1b4b" stroke="#8b5cf6" stroke-width="2" filter="url(#shadow)"/>
+  <text x="120" y="110" text-anchor="middle" fill="#a78bfa" font-size="13" font-weight="600">Claude (Yo)</text>
+  <text x="120" y="135" text-anchor="middle" fill="#9ca3af" font-size="11">Escribo y modifico</text>
+  <text x="120" y="150" text-anchor="middle" fill="#9ca3af" font-size="11">el código contigo.</text>
+  <text x="120" y="175" text-anchor="middle" fill="#6b7280" font-size="10">No puedo hacer push</text>
+  <text x="120" y="190" text-anchor="middle" fill="#6b7280" font-size="10">ni desplegar.</text>
+
+  <!-- Arrow Claude → Código -->
+  <line x1="210" y1="145" x2="270" y2="145" stroke="#8b5cf6" stroke-width="2" marker-end="url(#arrowPurple)"/>
+  <text x="240" y="137" text-anchor="middle" fill="#8b5cf6" font-size="9">edita</text>
+
+  <!-- 2. Tu Código (carpeta local) -->
+  <rect x="270" y="80" width="180" height="130" rx="12" fill="#1c1917" stroke="#fb923c" stroke-width="2" filter="url(#shadow)"/>
+  <text x="360" y="110" text-anchor="middle" fill="#fb923c" font-size="13" font-weight="600">Tu Código Local</text>
+  <text x="360" y="135" text-anchor="middle" fill="#9ca3af" font-size="11">trackdiag/</text>
+  <text x="360" y="155" text-anchor="middle" fill="#6b7280" font-size="10">frontend/ → la web</text>
+  <text x="360" y="170" text-anchor="middle" fill="#6b7280" font-size="10">backend/ → el motor</text>
+  <text x="360" y="185" text-anchor="middle" fill="#6b7280" font-size="10">Dockerfile → instrucciones</text>
+
+  <!-- Arrow Código → GitHub -->
+  <line x1="450" y1="145" x2="520" y2="145" stroke="#f97316" stroke-width="2" marker-end="url(#arrowOrange)"/>
+  <text x="485" y="132" text-anchor="middle" fill="#f97316" font-size="9">git push</text>
+  <text x="485" y="160" text-anchor="middle" fill="#f97316" font-size="9">(tú en terminal)</text>
+
+  <!-- 3. GitHub -->
+  <rect x="520" y="80" width="180" height="130" rx="12" fill="#0d1117" stroke="#58a6ff" stroke-width="2" filter="url(#shadow)"/>
+  <text x="610" y="110" text-anchor="middle" fill="#58a6ff" font-size="13" font-weight="600">GitHub</text>
+  <text x="610" y="135" text-anchor="middle" fill="#9ca3af" font-size="11">Guarda tu código</text>
+  <text x="610" y="150" text-anchor="middle" fill="#9ca3af" font-size="11">en la nube.</text>
+  <text x="610" y="175" text-anchor="middle" fill="#6b7280" font-size="10">Historial de versiones.</text>
+  <text x="610" y="190" text-anchor="middle" fill="#6b7280" font-size="10">Backup seguro.</text>
+
+  <!-- Arrow GitHub → Railway -->
+  <line x1="700" y1="145" x2="720" y2="145" stroke="#58a6ff" stroke-width="2"/>
+  <line x1="720" y1="145" x2="720" y2="310" stroke="#58a6ff" stroke-width="2"/>
+  <line x1="720" y1="310" x2="700" y2="310" stroke="#58a6ff" stroke-width="2" marker-end="url(#arrowBlue)"/>
+  <text x="740" y="230" text-anchor="start" fill="#58a6ff" font-size="9" transform="rotate(90, 740, 230)">detecta cambios</text>
+
+  <!-- 4. Railway -->
+  <rect x="520" y="250" width="180" height="140" rx="12" fill="#14120a" stroke="#facc15" stroke-width="2" filter="url(#shadow)"/>
+  <text x="610" y="280" text-anchor="middle" fill="#facc15" font-size="13" font-weight="600">Railway</text>
+  <text x="610" y="305" text-anchor="middle" fill="#9ca3af" font-size="11">Lee el Dockerfile,</text>
+  <text x="610" y="320" text-anchor="middle" fill="#9ca3af" font-size="11">construye y sirve</text>
+  <text x="610" y="335" text-anchor="middle" fill="#9ca3af" font-size="11">tu app al mundo.</text>
+  <text x="610" y="360" text-anchor="middle" fill="#6b7280" font-size="10">Servidor 24/7.</text>
+
+  <!-- Arrow Railway → Usuario -->
+  <line x1="520" y1="320" x2="450" y2="320" stroke="#facc15" stroke-width="2" marker-end="url(#arrowYellow)"/>
+  <text x="485" y="310" text-anchor="middle" fill="#facc15" font-size="9">sirve la app</text>
+
+  <!-- 5. Usuario final -->
+  <rect x="270" y="260" width="180" height="120" rx="12" fill="#0f1f0d" stroke="#4ade80" stroke-width="2" filter="url(#shadow)"/>
+  <text x="360" y="290" text-anchor="middle" fill="#4ade80" font-size="13" font-weight="600">Usuario (Productor)</text>
+  <text x="360" y="315" text-anchor="middle" fill="#9ca3af" font-size="11">Abre la URL,</text>
+  <text x="360" y="330" text-anchor="middle" fill="#9ca3af" font-size="11">sube su track,</text>
+  <text x="360" y="345" text-anchor="middle" fill="#9ca3af" font-size="11">recibe diagnóstico.</text>
+
+  <!-- 6. Dockerfile callout -->
+  <rect x="30" y="290" width="200" height="110" rx="12" fill="#141414" stroke="#333" stroke-width="1" stroke-dasharray="4"/>
+  <text x="130" y="315" text-anchor="middle" fill="#9ca3af" font-size="12" font-weight="600">Dockerfile</text>
+  <text x="130" y="338" text-anchor="middle" fill="#6b7280" font-size="10">"Instala Python 3.11,</text>
+  <text x="130" y="353" text-anchor="middle" fill="#6b7280" font-size="10">estas librerías, y</text>
+  <text x="130" y="368" text-anchor="middle" fill="#6b7280" font-size="10">arranca el servidor</text>
+  <text x="130" y="383" text-anchor="middle" fill="#6b7280" font-size="10">en el puerto X."</text>
+
+  <!-- Dashed line Dockerfile → Railway -->
+  <line x1="230" y1="345" x2="360" y2="345" stroke="#555" stroke-width="1" stroke-dasharray="4"/>
+  <line x1="360" y1="345" x2="360" y2="380" stroke="#555" stroke-width="1" stroke-dasharray="4"/>
+  <line x1="360" y1="400" x2="520" y2="340" stroke="#555" stroke-width="1" stroke-dasharray="4"/>
+  <text x="420" y="395" text-anchor="middle" fill="#555" font-size="9">Railway lo lee</text>
+
+  <!-- URL label -->
+  <rect x="280" y="440" width="340" height="36" rx="8" fill="#1a1a1a" stroke="#333" stroke-width="1"/>
+  <text x="450" y="463" text-anchor="middle" fill="#4ade80" font-size="12" font-weight="500">trackdiag-production.up.railway.app</text>
+
+  <!-- Arrow markers -->
+  <defs>
+    <marker id="arrowPurple" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#8b5cf6"/></marker>
+    <marker id="arrowOrange" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#f97316"/></marker>
+    <marker id="arrowBlue" markerWidth="8" markerHeight="6" refX="0" refY="3" orient="auto"><path d="M8,0 L0,3 L8,6" fill="#58a6ff"/></marker>
+    <marker id="arrowYellow" markerWidth="8" markerHeight="6" refX="0" refY="3" orient="auto"><path d="M8,0 L0,3 L8,6" fill="#facc15"/></marker>
+  </defs>
+</svg>
