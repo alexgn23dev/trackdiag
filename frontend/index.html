@@ -606,13 +606,16 @@
                                         loudnessTip = 'Cuidado: muy comprimido. Aunque suena fuerte, has perdido dinámica. En un sistema grande puede sonar plano y fatigante.';
                                     }
                                 } else if (esSellos) {
-                                    loudnessColor = d.loudness.lufs_integrado >= -14 && d.loudness.lufs_integrado <= -8 ? 'text-green-400' :
-                                                    d.loudness.lufs_integrado > -8 ? 'text-yellow-400' :
+                                    loudnessColor = d.loudness.lufs_integrado >= -10 && d.loudness.lufs_integrado <= -6 ? 'text-green-400' :
+                                                    d.loudness.lufs_integrado > -6 ? 'text-yellow-400' :
+                                                    d.loudness.lufs_integrado >= -14 ? 'text-yellow-400' :
                                                     'text-blue-400';
                                     if (d.loudness.lufs_integrado > -6) {
-                                        loudnessTip = 'Para enviar a sellos, el track debería tener algo de headroom para que el sello aplique su propio mastering. Apunta a -10/-8 LUFS.';
+                                        loudnessTip = 'Tu track suena fuerte, bien. Pero asegúrate de que tu mezcla suene bien también sin la cadena de mastering — si el sello te firma, probablemente te pidan la versión sin masterizar para que lo haga su ingeniero. Guarda siempre el proyecto sin mastering y comprueba que la mezcla funcione por sí sola aunque suene más baja en volumen.';
                                     } else if (d.loudness.lufs_integrado < -14) {
-                                        loudnessTip = 'El nivel está bajo para un demo. Un A&R espera escuchar algo competitivo en volumen. Sube un poco sin destruir la dinámica.';
+                                        loudnessTip = 'El nivel está bajo. Para enviar un demo a un sello, envía siempre tu mejor versión — masterizada y a volumen competitivo. Si te firman y quieren masterizarlo ellos, les mandas la versión sin mastering después. Por eso es clave que tu mezcla suene bien por sí sola, sin depender de la cadena de mastering para sonar bien.';
+                                    } else if (d.loudness.lufs_integrado >= -10 && d.loudness.lufs_integrado <= -6) {
+                                        loudnessTip = 'Buen nivel para un demo a sellos. Recuerda: envía siempre tu mejor versión masterizada. Si te firman y quieren re-masterizar, les mandas la versión sin mastering. Asegúrate de que tu mezcla suene bien por sí sola sin la cadena de mastering.';
                                     }
                                 } else {
                                     loudnessColor = d.loudness.nivel === 'moderado' ? 'text-green-400' :

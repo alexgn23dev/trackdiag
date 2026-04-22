@@ -110,9 +110,10 @@ TIPS_OBJETIVO = {
         "prioridad_extra": "Antes de aplicar los cambios, escucha el track e intenta identificar tú el problema que se describe. Entrenar el oído es más valioso que arreglar un track.",
     },
     "sellos": {
-        "mantra": "Los sellos buscan tracks terminados, no ideas con potencial.",
-        "enfoque": "Si tu objetivo es enviar a sellos, el track necesita estar a nivel profesional en estructura, mezcla y energía. Los A&R escuchan los primeros 30 segundos — si no engancha ahí, no llegan al drop.",
+        "mantra": "Envía siempre tu mejor versión — masterizada y a volumen competitivo.",
+        "enfoque": "Si tu objetivo es enviar a sellos, el track necesita estar a nivel profesional en estructura, mezcla y energía. Envía siempre la versión masterizada — es tu carta de presentación. Si te firman y quieren masterizarlo ellos, les mandas la versión sin mastering después. Por eso es clave que tu mezcla suene bien por sí sola, sin depender de la cadena de mastering para sonar bien.",
         "prioridad_extra": "Compara tu intro con la de 3 tracks de referencia del sello al que quieres enviar. ¿Engancha igual de rápido?",
+        "prioridad_extra_mezcla": "Bypasea tu cadena de mastering y escucha solo la mezcla. ¿Suena equilibrada y con energía? Si sin mastering suena débil o desequilibrada, trabaja primero la mezcla antes de volver a masterizar.",
     },
     "todo": {
         "mantra": "Primero que funcione, después que brille.",
@@ -213,6 +214,15 @@ def contextualizar_feedback(diagnostico_id: str, contexto: dict, senales: dict) 
         else:
             resultado["tip_objetivo"] = info_objetivo["enfoque"]
             resultado["prioridades_extra"].append(info_objetivo["prioridad_extra"])
+
+        # Para sellos: añadir prioridad de mezcla si hay problemas de mezcla
+        if objetivo == "sellos" and info_objetivo.get("prioridad_extra_mezcla"):
+            dx_mezcla = [
+                "exceso_lowend", "carencia_espectral", "exceso_densidad",
+                "harshness_mezcla",
+            ]
+            if diagnostico_id in dx_mezcla:
+                resultado["prioridades_extra"].append(info_objetivo["prioridad_extra_mezcla"])
 
     # --- Referencia temporal (BPM → compases en segundos) ---
     bpm = senales.get("bpm", 0)
@@ -565,7 +575,10 @@ def _generar_nota_contextual(
     elif objetivo == "sellos" and diagnostico_id not in ("sin_diagnostico",):
         partes.append(
             "Para enviar a sellos, este problema debería estar completamente resuelto. "
-            "Un A&R lo detectaría en los primeros 30 segundos de escucha."
+            "Un A&R lo detectaría en los primeros 30 segundos de escucha. "
+            "Recuerda: envía siempre tu mejor versión masterizada, pero asegúrate de que "
+            "la mezcla suene bien por sí sola sin la cadena de mastering — si te firman, "
+            "probablemente te pidan la versión sin masterizar."
         )
 
     # --- Dato contextual temporal ---
