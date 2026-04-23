@@ -85,34 +85,35 @@ function doPost(e) {
   var data = JSON.parse(e.postData.contents);
 
   if (data.tipo === 'feedback_real') {
-    // Buscar fila por email y actualizar columna 7
+    // Buscar fila por email y actualizar columna 8 (feedback_real)
     var rows = sheet.getDataRange().getValues();
     for (var i = rows.length - 1; i >= 1; i--) {
       if (String(rows[i][1]).trim().toLowerCase() === String(data.email).trim().toLowerCase()) {
-        sheet.getRange(i + 1, 7).setValue(data.enlace || '');
+        sheet.getRange(i + 1, 8).setValue(data.enlace || '');
         break;
       }
     }
   } else if (data.tipo === 'feedback_util') {
-    // Buscar fila por email y actualizar columnas 5 y 6
+    // Buscar fila por email y actualizar columnas 6 y 7 (fue_util, comentario)
     var rows = sheet.getDataRange().getValues();
     for (var i = rows.length - 1; i >= 1; i--) {
       if (String(rows[i][1]).trim().toLowerCase() === String(data.email).trim().toLowerCase()) {
-        sheet.getRange(i + 1, 5).setValue(data.fue_util || '');
-        sheet.getRange(i + 1, 6).setValue(data.comentario || '');
+        sheet.getRange(i + 1, 6).setValue(data.fue_util || '');
+        sheet.getRange(i + 1, 7).setValue(data.comentario || '');
         break;
       }
     }
   } else {
-    // Nuevo diagnóstico: append row con 7 columnas
+    // Nuevo diagnóstico: append row con 8 columnas
     sheet.appendRow([
-      new Date().toISOString(),   // timestamp
-      data.email || '',            // email
-      data.formulario || '',       // formulario
-      data.diagnostico || '',      // diagnóstico
-      '',                          // fue_util (vacío)
-      '',                          // comentario (vacío)
-      ''                           // feedback_real (vacío)
+      new Date().toISOString(),   // col 1: timestamp
+      data.email || '',            // col 2: email
+      data.nombre_proyecto || '',  // col 3: nombre del proyecto
+      data.formulario || '',       // col 4: formulario
+      data.diagnostico || '',      // col 5: diagnóstico
+      '',                          // col 6: fue_util (vacío)
+      '',                          // col 7: comentario (vacío)
+      ''                           // col 8: feedback_real (vacío)
     ]);
   }
 

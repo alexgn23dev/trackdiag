@@ -84,6 +84,7 @@
             timestamp: ts,
             date,
             email: row.email || '',
+            nombreProyecto: row.nombre_proyecto || '',
             formulario,
             formData,
             diagnostico: diag,
@@ -176,6 +177,7 @@
             <tr className="table-row border-t border-gray-800 cursor-pointer" onClick={onClick}>
                 <td className="py-3 px-4 text-xs text-gray-500">{formatDate(entry.date)}</td>
                 <td className="py-3 px-4 text-sm text-gray-300">{entry.email || '—'}</td>
+                <td className="py-3 px-4 text-xs text-gray-300">{entry.nombreProyecto || '—'}</td>
                 <td className="py-3 px-4 text-xs text-gray-400">{entry.genero || '—'}</td>
                 <td className="py-3 px-4 text-xs">{estadoEmoji} <span className="text-gray-400">{entry.estadoTrack}</span></td>
                 <td className="py-3 px-4 text-xs text-gray-400 max-w-xs truncate">{entry.diagPrincipal || '—'}</td>
@@ -873,6 +875,7 @@
                                     <tr className="border-b border-gray-800">
                                         <th className="text-left py-3 px-4 text-xs text-gray-500 font-medium">Fecha</th>
                                         <th className="text-left py-3 px-4 text-xs text-gray-500 font-medium">Email</th>
+                                        <th className="text-left py-3 px-4 text-xs text-gray-500 font-medium">Proyecto</th>
                                         <th className="text-left py-3 px-4 text-xs text-gray-500 font-medium">Género</th>
                                         <th className="text-left py-3 px-4 text-xs text-gray-500 font-medium">Estado</th>
                                         <th className="text-left py-3 px-4 text-xs text-gray-500 font-medium">Diagnóstico</th>

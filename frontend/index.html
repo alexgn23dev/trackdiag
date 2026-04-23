@@ -291,7 +291,7 @@
         );
     }
 
-    function QuestionnaireScreen({ opciones, contexto, onChange, onSubmit, isValid }) {
+    function QuestionnaireScreen({ opciones, contexto, onChange, onSubmit, isValid, nombreProyecto, onNombreChange }) {
         return (
             <div className="min-h-screen flex flex-col items-center py-12 px-4 fade-in">
                 <div className="max-w-lg w-full">
@@ -299,6 +299,17 @@
                     <p className="text-gray-400 text-sm mb-8">
                         Esto nos ayuda a no interpretar el audio a ciegas.
                     </p>
+
+                    <div className="mb-5">
+                        <label className="block text-sm font-medium text-gray-300 mb-2">Nombre del proyecto</label>
+                        <input
+                            type="text"
+                            value={nombreProyecto}
+                            onChange={(e) => onNombreChange(e.target.value)}
+                            placeholder="Ej.: El nombre de tu track v1"
+                            className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 text-sm"
+                        />
+                    </div>
 
                     <SelectField
                         label="¿Qué género estás produciendo?"
@@ -996,6 +1007,7 @@
         const [panelHistorial, setPanelHistorial] = useState([]);
         const [panelAuth, setPanelAuth] = useState(null); // email autenticado
         const [panelSelectedEntry, setPanelSelectedEntry] = useState(null);
+        const [nombreProyecto, setNombreProyecto] = useState('');
         const [contexto, setContexto] = useState({
             genero: '', fase: '', objetivo: '',
             bloqueo_percibido: '', experiencia: '',
@@ -1205,6 +1217,7 @@
                         tipo: 'registro',
                         timestamp: new Date().toISOString(),
                         email: userEmail,
+                        nombre_proyecto: nombreProyecto,
                         formulario: formularioTexto,
                         diagnostico: informe,
                     }),
@@ -1228,6 +1241,7 @@
             setUserEmail('');
             setUserPassword('');
             setEmailError('');
+            setNombreProyecto('');
             setContexto({
                 genero: '', fase: '', objetivo: '',
                 bloqueo_percibido: '', experiencia: '',
@@ -1350,6 +1364,8 @@
                         onChange={handleContextoChange}
                         onSubmit={handleGoToEmail}
                         isValid={isQuestionnaireValid}
+                        nombreProyecto={nombreProyecto}
+                        onNombreChange={setNombreProyecto}
                     />
                 )}
                 {screen === 'email' && (
