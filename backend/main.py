@@ -8,7 +8,9 @@ import uuid
 import json
 import tempfile
 import httpx
+import bcrypt
 from datetime import datetime
+from urllib.parse import urlencode
 
 from pathlib import Path
 
@@ -218,13 +220,38 @@ async def guardar_feedback_request(data: dict):
 
 
 # =========================================================================
-# Auth — Acceso por email (sin códigos)
+# Auth — Registro/Login con contraseña (bcrypt + Google Sheets)
 # =========================================================================
 
 SHEETS_WEBHOOK = os.environ.get(
     "SHEETS_WEBHOOK",
     "https://script.google.com/macros/s/AKfycby-LFa0ztbqPMD_E-zkRfAfSKLmiTjPjVXdAn44E_rHRHq3XYLCygZqoTlhhT8yT_Mh/exec",
 )
+
+
+def _hash_password(password: str) -> str:
+    """Genera un hash bcrypt de la contraseña."""
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def _verify_password(password: str, hashed: str) -> bool:
+    """Verifica una contraseña contra su hash bcrypt."""
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
+    except Exception:
+        return False
+
+
+async def _sheets_get(params: dict) -> dict:
+    """Hace GET al Apps Script con parámetros."""
+    try:
+        url = f"{SHEETS_WEBHOOK}?{urlencode(params)}"
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            resp = await client.get(url, timeout=15)
+            return resp.json()
+    except Exception as e:
+        print(f"[SHEETS] Error: {e}")
+        return {"error": str(e)}
 
 
 async def _obtener_historial_sheets(email: str) -> list:
@@ -240,13 +267,49 @@ async def _obtener_historial_sheets(email: str) -> list:
 
 @app.post("/api/auth/acceder")
 async def acceder(data: dict):
-    """Acceso directo por email: busca historial en Sheet y da acceso."""
+    """
+    Login/Registro unificado:
+    - Si el email existe → verifica contraseña → devuelve historial
+    - Si el email no existe → registra con la contraseña → devuelve historial vacío
+    """
     email = (data.get("email") or "").strip().lower()
+    password = (data.get("password") or "").strip()
+
     if not email or "@" not in email:
         return JSONResponse(status_code=400, content={"error": "Email inválido"})
+    if len(password) < 4:
+        return JSONResponse(status_code=400, content={"error": "La contraseña debe tener al menos 4 caracteres"})
 
+    # Buscar si el usuario existe en el Sheet
+    user_data = await _sheets_get({"action": "get_user", "email": email})
+
+    if user_data.get("found"):
+        # Usuario existe → verificar contraseña
+        if not _verify_password(password, user_data.get("password_hash", "")):
+            return JSONResponse(status_code=401, content={"error": "Contraseña incorrecta"})
+
+        historial = await _obtener_historial_sheets(email)
+        return {"ok": True, "email": email, "historial": historial, "nuevo": False}
+    else:
+        # Usuario nuevo → registrar
+        hashed = _hash_password(password)
+        result = await _sheets_get({"action": "register", "email": email, "hash": hashed})
+
+        if not result.get("ok") and result.get("error") == "El usuario ya existe":
+            return JSONResponse(status_code=409, content={"error": "El email ya está registrado. Prueba con tu contraseña."})
+
+        historial = await _obtener_historial_sheets(email)
+        return {"ok": True, "email": email, "historial": historial, "nuevo": True}
+
+
+@app.post("/api/auth/historial")
+async def obtener_historial(data: dict):
+    """Refresca historial de un usuario ya autenticado (no requiere contraseña)."""
+    email = (data.get("email") or "").strip().lower()
+    if not email:
+        return JSONResponse(status_code=400, content={"error": "Email requerido"})
     historial = await _obtener_historial_sheets(email)
-    return {"ok": True, "email": email, "historial": historial}
+    return {"ok": True, "historial": historial}
 
 
 # =========================================================================
