@@ -36,6 +36,8 @@
         ? 'http://localhost:8000'
         : '';
 
+    const SHEETS_WEBHOOK = 'https://script.google.com/macros/s/AKfycby-LFa0ztbqPMD_E-zkRfAfSKLmiTjPjVXdAn44E_rHRHq3XYLCygZqoTlhhT8yT_Mh/exec';
+
     // =========================================================================
     // Componentes de UI
     // =========================================================================
@@ -996,8 +998,6 @@
     // =========================================================================
     // App principal
     // =========================================================================
-
-    const SHEETS_WEBHOOK = 'https://script.google.com/macros/s/AKfycby-LFa0ztbqPMD_E-zkRfAfSKLmiTjPjVXdAn44E_rHRHq3XYLCygZqoTlhhT8yT_Mh/exec';
 
     function App() {
         const [screen, setScreen] = useState('landing'); // landing | upload | questionnaire | email | processing | diagnostico | historial
