@@ -1006,6 +1006,7 @@
         const [userEmail, setUserEmail] = useState('');
         const [userPassword, setUserPassword] = useState('');
         const [emailError, setEmailError] = useState('');
+        const [emailLoading, setEmailLoading] = useState(false);
         // Panel de usuario
         const [panelEmail, setPanelEmail] = useState('');
         const [panelPassword, setPanelPassword] = useState('');
@@ -1084,8 +1085,6 @@
         const handleGoToEmail = () => {
             setScreen('email');
         };
-
-        const [emailLoading, setEmailLoading] = useState(false);
 
         const handleSubmit = async () => {
             setEmailError('');
