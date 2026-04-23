@@ -38,7 +38,7 @@ TEMPLATES = {
         ),
     },
     "falta_impacto": {
-        "titulo": "La subida y el drop suenan al mismo volumen — se pierde el impacto.",
+        "titulo": "La subida y el drop suenan a un volumen similar — se pierde impacto.",
         "prioridades": [
             "Crea una automatización de volumen en el bus master (o en los elementos principales) que baje ligeramente el nivel durante la subida, y vuelva al volumen original justo al entrar el drop. Aunque suene contraintuitivo, este truco es muy usado en producción profesional para aumentar la sensación de impacto.",
             "Revisa los elementos de la subida: si tienes risers, snare rolls o efectos que suben de volumen progresivamente, asegúrate de que no igualan o superan el nivel del drop.",

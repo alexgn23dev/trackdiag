@@ -76,7 +76,7 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     score, razones = 0, []
     if senales["tiene_desarrollo"] and senales["duracion_seg"] > 120:
         if senales["rango_dinamico"] < 1.8:
-            score += 3; razones.append(f"Rango dinámico muy bajo ({senales['rango_dinamico']:.1f}) — la subida y el drop suenan prácticamente al mismo volumen")
+            score += 3; razones.append(f"Rango dinámico muy bajo ({senales['rango_dinamico']:.1f}) — la subida y el drop suenan a un volumen muy similar")
         elif senales["rango_dinamico"] < 2.3:
             score += 2; razones.append(f"Rango dinámico reducido ({senales['rango_dinamico']:.1f}) — poca diferencia de energía entre la subida y el drop")
         # Cruce: loudness alto + rango dinámico bajo = over-compression aplasta la dinámica
