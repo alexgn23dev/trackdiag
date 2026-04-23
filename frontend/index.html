@@ -1210,6 +1210,71 @@
                     informe += `SCORES: ${Object.entries(dx.scores).map(([k,v]) => `${k}=${v}`).join(', ')}\n`;
                 }
 
+                // Construir señales crudas para calibración del motor
+                const senales = {
+                    // Identificación
+                    bpm: da.bpm,
+                    duracion: da.duracion,
+                    // Espectro y balance
+                    balance_grave: da.balance_grave,
+                    db_grave: dx.senales?.db_grave,
+                    db_media: dx.senales?.db_media,
+                    db_aguda: dx.senales?.db_aguda,
+                    diff_grave_media: dx.senales?.diff_grave_media,
+                    densidad: da.densidad,
+                    densidad_espectral: dx.senales?.densidad_espectral,
+                    // Dinámica y estructura
+                    contraste: da.contraste,
+                    varianza_energia: dx.senales?.varianza_energia,
+                    rango_dinamico: dx.senales?.rango_dinamico,
+                    tiene_desarrollo: da.desarrollo_temporal,
+                    cambios_significativos: dx.senales?.cambios_significativos,
+                    n_bloques: da.n_bloques,
+                    madurez: dx.senales?.madurez_estimada,
+                    // Distribución
+                    break_largo: da.distribucion?.break_largo,
+                    drop_corto: da.distribucion?.drop_corto,
+                    sin_intro: da.distribucion?.sin_intro,
+                    sin_outro: da.distribucion?.sin_outro,
+                    estructura_problematica: da.distribucion?.estructura_problematica,
+                    // Armonía
+                    key: da.armonia?.key,
+                    modo: da.armonia?.modo,
+                    key_confidence: da.armonia?.key_confidence,
+                    contenido_tonal: da.armonia?.contenido_tonal,
+                    consistencia_armonica: da.armonia?.consistencia_armonica,
+                    complejidad_armonica: da.armonia?.complejidad_armonica,
+                    ratio_tonal_percusivo: da.armonia?.ratio_tonal_percusivo,
+                    n_notas_activas: da.armonia?.n_notas_activas,
+                    // Loudness
+                    lufs_integrado: da.loudness?.lufs_integrado,
+                    lufs_short_term_max: da.loudness?.lufs_short_term_max,
+                    rango_loudness: da.loudness?.rango_loudness,
+                    nivel_loudness: da.loudness?.nivel,
+                    // Mono compatibility
+                    es_stereo: da.mono_compat?.es_stereo,
+                    correlacion_lr: da.mono_compat?.correlacion_lr,
+                    perdida_mono_db: da.mono_compat?.perdida_mono_db,
+                    nivel_mono: da.mono_compat?.nivel_compatibilidad,
+                    fase_invertida: da.mono_compat?.fase_invertida,
+                    mono_graves: da.mono_compat?.bandas?.graves?.estado,
+                    mono_medios: da.mono_compat?.bandas?.medios?.estado,
+                    mono_agudos: da.mono_compat?.bandas?.agudos?.estado,
+                    // Harshness
+                    tiene_harshness: da.harshness?.tiene_harshness,
+                    harshness_nivel: da.harshness?.nivel,
+                    harshness_p95: da.harshness?.pico_p95,
+                    harshness_pct: da.harshness?.pct_frames_harsh,
+                    // Carencias
+                    carencia_medios: dx.senales?.carencia_medios,
+                    carencia_agudos: dx.senales?.carencia_agudos,
+                    // Diagnósticos emitidos y scores
+                    diag_principal: dx.diagnostico_principal?.id,
+                    diag_secundario: dx.diagnostico_secundario?.id || null,
+                    scores: dx.scores,
+                    estado: dx.estado_track,
+                };
+
                 // Enviar a Google Sheets
                 fetch(SHEETS_WEBHOOK, {
                     method: 'POST',
@@ -1220,6 +1285,7 @@
                         nombre_proyecto: nombreProyecto,
                         formulario: formularioTexto,
                         diagnostico: informe,
+                        senales_json: JSON.stringify(senales),
                     }),
                 }).catch(() => {});
                 setScreen('diagnostico');
