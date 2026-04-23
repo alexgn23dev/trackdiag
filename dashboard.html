@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TrackDiag — Dashboard Admin</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background: #09090b; color: #e5e5e5; margin: 0; }
+        .fade-in { animation: fadeIn 0.4s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        .card { background: #141414; border: 1px solid #222; border-radius: 12px; }
+        .stat-card { background: #141414; border: 1px solid #222; border-radius: 12px; padding: 20px; }
+        .bar { transition: width 0.6s ease-out; border-radius: 4px; min-width: 2px; }
+        .filter-btn { padding: 4px 12px; border-radius: 6px; font-size: 12px; border: 1px solid #333; background: transparent; color: #9ca3af; cursor: pointer; transition: all 0.15s; }
+        .filter-btn:hover { border-color: #555; color: #e5e5e5; }
+        .filter-btn.active { background: #8b5cf6; border-color: #8b5cf6; color: white; }
+        .table-row:hover { background: rgba(139, 92, 246, 0.05); }
+        .spinner { border: 3px solid #222; border-top: 3px solid #8b5cf6; border-radius: 50%; width: 32px; height: 32px; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0a0a0a; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+    const { useState, useEffect, useMemo } = React;
+
+    const SHEETS_API = 'https://script.google.com/macros/s/AKfycby-LFa0ztbqPMD_E-zkRfAfSKLmiTjPjVXdAn44E_rHRHq3XYLCygZqoTlhhT8yT_Mh/exec';
+
+    // =========================================================================
+    // Utilidades
+    // =========================================================================
+
+    function parseRow(row) {
+        const ts = row.timestamp || row.fecha || '';
+        const date = ts ? new Date(ts) : null;
+
+        // Parsear formulario — formato: "Tech House | Arreglo en progreso | Publicar... | 2 a 5 años | Mezcla..."
+        // Los campos van en orden fijo: género, fase, objetivo, experiencia, dificultad, [bloqueo]
+        const formulario = row.formulario || '';
+        const formData = {};
+        if (formulario) {
+            const parts = formulario.split(' | ').map(p => p.trim());
+            const fieldNames = ['Género', 'Fase', 'Objetivo', 'Experiencia', 'Dificultad habitual'];
+            parts.forEach((val, idx) => {
+                if (val.startsWith('Bloqueo: ')) {
+                    formData['Bloqueo'] = val.replace('Bloqueo: ', '');
+                } else if (idx < fieldNames.length) {
+                    formData[fieldNames[idx]] = val;
+                }
+            });
+        }
+
+        // Parsear diagnóstico para extraer datos clave
+        const diag = row.diagnostico || '';
+        let estadoTrack = 'desconocido';
+        let diagPrincipal = '';
+        let diagSecundario = '';
+        let prioridades = [];
+
+        const estadoMatch = diag.match(/ESTADO:\s*(.+)/i);
+        if (estadoMatch) estadoTrack = estadoMatch[1].trim();
+
+        const dpMatch = diag.match(/DIAGNÓSTICO PRINCIPAL:\s*(.+)/i);
+        if (dpMatch) diagPrincipal = dpMatch[1].trim();
+
+        const dsMatch = diag.match(/DIAGNÓSTICO SECUNDARIO:\s*(.+)/i);
+        if (dsMatch) diagSecundario = dsMatch[1].trim();
+
+        const prioMatch = diag.match(/PRIORIDADES:\s*(.+?)(?:\n[A-Z]|\n\n|$)/is);
+        if (prioMatch) {
+            prioridades = prioMatch[1].split(/\n/).map(l => l.replace(/^[\d\.\-\s]+/, '').trim()).filter(Boolean);
+        }
+
+        return {
+            timestamp: ts,
+            date,
+            email: row.email || '',
+            formulario,
+            formData,
+            diagnostico: diag,
+            estadoTrack,
+            diagPrincipal,
+            diagSecundario,
+            prioridades,
+            fueUtil: row.fue_util || '',
+            comentario: row.comentario || '',
+            enlaceFeedback: row.enlace_feedback_real || '',
+            genero: formData['Género'] || '',
+            experiencia: formData['Experiencia'] || '',
+            fase: formData['Fase'] || '',
+            objetivo: formData['Objetivo'] || '',
+            dificultad: formData['Dificultad habitual'] || '',
+        };
+    }
+
+    function formatDate(d) {
+        if (!d) return '—';
+        return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+
+    function countBy(arr, key) {
+        const counts = {};
+        arr.forEach(item => {
+            const val = item[key] || 'Sin dato';
+            counts[val] = (counts[val] || 0) + 1;
+        });
+        return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    }
+
+    // =========================================================================
+    // Componentes
+    // =========================================================================
+
+    function StatCard({ label, value, sub, color = '#8b5cf6', icon }) {
+        return (
+            <div className="stat-card fade-in">
+                <div className="flex items-center justify-between mb-2">
+                    <span className="text-gray-500 text-xs uppercase tracking-wide">{label}</span>
+                    {icon && <span className="text-lg">{icon}</span>}
+                </div>
+                <div className="text-2xl font-bold" style={{ color }}>{value}</div>
+                {sub && <div className="text-gray-500 text-xs mt-1">{sub}</div>}
+            </div>
+        );
+    }
+
+    function BarChart({ data, color = '#8b5cf6', maxBars = 8 }) {
+        const sliced = data.slice(0, maxBars);
+        const max = Math.max(...sliced.map(d => d[1]), 1);
+        return (
+            <div className="space-y-2">
+                {sliced.map(([label, count]) => (
+                    <div key={label} className="flex items-center gap-3">
+                        <div className="text-xs text-gray-400 w-32 truncate text-right" title={label}>{label}</div>
+                        <div className="flex-1 h-5 bg-gray-800 rounded overflow-hidden">
+                            <div className="bar h-full" style={{ width: `${(count / max) * 100}%`, background: color }}></div>
+                        </div>
+                        <div className="text-xs text-gray-300 w-8 text-right">{count}</div>
+                    </div>
+                ))}
+            </div>
+        );
+    }
+
+    function FilterBar({ label, options, value, onChange }) {
+        return (
+            <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-gray-500 text-xs">{label}:</span>
+                <button className={`filter-btn ${value === 'todos' ? 'active' : ''}`} onClick={() => onChange('todos')}>Todos</button>
+                {options.map(opt => (
+                    <button key={opt} className={`filter-btn ${value === opt ? 'active' : ''}`} onClick={() => onChange(opt)}>{opt}</button>
+                ))}
+            </div>
+        );
+    }
+
+    function UserRow({ entry, onClick }) {
+        const estadoEmoji = entry.estadoTrack.includes('temprana') || entry.estadoTrack.includes('verde')
+            ? '🔴'
+            : entry.estadoTrack.includes('desarrollo') || entry.estadoTrack.includes('amarillo')
+            ? '🟡'
+            : entry.estadoTrack.includes('pulir') || entry.estadoTrack.includes('avanzado') || entry.estadoTrack.includes('azul')
+            ? '🔵'
+            : '⚪';
+
+        return (
+            <tr className="table-row border-t border-gray-800 cursor-pointer" onClick={onClick}>
+                <td className="py-3 px-4 text-xs text-gray-500">{formatDate(entry.date)}</td>
+                <td className="py-3 px-4 text-sm text-gray-300">{entry.email || '—'}</td>
+                <td className="py-3 px-4 text-xs text-gray-400">{entry.genero || '—'}</td>
+                <td className="py-3 px-4 text-xs">{estadoEmoji} <span className="text-gray-400">{entry.estadoTrack}</span></td>
+                <td className="py-3 px-4 text-xs text-gray-400 max-w-xs truncate">{entry.diagPrincipal || '—'}</td>
+                <td className="py-3 px-4 text-xs">
+                    {entry.fueUtil === 'Sí' ? <span className="text-green-400">Sí</span>
+                     : entry.fueUtil === 'No' ? <span className="text-red-400">No</span>
+                     : <span className="text-gray-600">—</span>}
+                </td>
+                <td className="py-3 px-4 text-xs">
+                    {entry.enlaceFeedback ? <span className="text-purple-400">Solicitado</span> : <span className="text-gray-600">—</span>}
+                </td>
+            </tr>
+        );
+    }
+
+    function parseDiagnostico(text) {
+        if (!text) return {};
+        const get = (regex) => { const m = text.match(regex); return m ? m[1].trim() : ''; };
+        const getAll = (regex) => { const m = text.match(regex); return m ? m[1].trim() : ''; };
+
+        // Estado
+        const estado = get(/^ESTADO:\s*(.+)$/m);
+
+        // Diagnóstico principal
+        const diagPrincipalRaw = get(/^DIAGNÓSTICO PRINCIPAL:\s*(.+)$/m);
+        const diagPrincipalTitulo = diagPrincipalRaw.replace(/\s*\([^)]*\)\s*$/, '');
+        const diagPrincipalId = (diagPrincipalRaw.match(/\(([^)]+)\)/) || [])[1] || '';
+        const explicacion = get(/^Explicación:\s*(.+)$/m);
+
+        // Diagnóstico secundario
+        const diagSecundarioRaw = get(/^DIAGNÓSTICO SECUNDARIO:\s*(.+)$/m);
+        const diagSecundarioTitulo = diagSecundarioRaw.replace(/\s*\([^)]*\)\s*$/, '');
+
+        // Prioridades
+        const prioRaw = get(/^PRIORIDADES:\s*(.+)$/m);
+        const prioridades = prioRaw ? prioRaw.split(' | ').map(p => p.replace(/^\d+\.\s*/, '').trim()).filter(Boolean) : [];
+
+        // Contexto y tips
+        const notaContextual = get(/^NOTA CONTEXTUAL:\s*(.+)$/m);
+        const motivacion = get(/^MOTIVACIÓN:\s*(.+)$/m);
+        const tipsGeneroRaw = get(/^TIPS GÉNERO:\s*(.+)$/m);
+        const tipsGenero = tipsGeneroRaw ? tipsGeneroRaw.split(' | ').filter(Boolean) : [];
+        const noTocarRaw = get(/^NO TOCAR AÚN:\s*(.+)$/m);
+        const noTocar = noTocarRaw ? noTocarRaw.split(' | ').filter(Boolean) : [];
+        const tipObjetivo = get(/^TIP OBJETIVO:\s*(.+)$/m);
+        const siguienteSesion = get(/^SIGUIENTE SESIÓN:\s*(.+)$/m);
+        const atencion = get(/^ATENCIÓN:\s*(.+)$/m);
+        const refTemporal = get(/^REFERENCIA TEMPORAL:\s*(.+)$/m);
+        const disclaimer = get(/^DISCLAIMER:\s*(.+)$/m);
+
+        // Mezcla
+        const bpmDur = get(/^BPM:\s*(.+)$/m);
+        const bpm = (bpmDur.match(/^(\d+)/) || [])[1] || '?';
+        const duracion = (bpmDur.match(/Duración:\s*(.+)/) || [])[1] || '?';
+        const balanceGrave = get(/^Balance grave:\s*(.+)$/m);
+        const densidad = get(/^Densidad:\s*(.+)$/m);
+
+        // Loudness
+        const loudnessRaw = get(/^Loudness:\s*(.+)$/m);
+        let loudness = {};
+        if (loudnessRaw) {
+            loudness.lufs = (loudnessRaw.match(/([-\d.]+)\s*LUFS/) || [])[1] || '';
+            loudness.nivel = (loudnessRaw.match(/\(([^)]+)\)/) || [])[1] || '';
+            loudness.pico = (loudnessRaw.match(/Pico:\s*([-\d.]+)/) || [])[1] || '';
+            loudness.rango = (loudnessRaw.match(/Rango:\s*([-\d.]+)/) || [])[1] || '';
+        }
+
+        // Mono compat
+        const monoRaw = get(/^Mono compat:\s*(.+)$/m);
+        let mono = {};
+        if (monoRaw) {
+            mono.nivel = monoRaw.split('|')[0].trim();
+            mono.correlacion = (monoRaw.match(/Correlación:\s*(\d+)%/) || [])[1] || '';
+            mono.perdida = (monoRaw.match(/Pérdida:\s*([-\d.]+)dB/) || [])[1] || '';
+            mono.graves = (monoRaw.match(/Graves:\s*(\w+)/) || [])[1] || '';
+            mono.medios = (monoRaw.match(/Medios:\s*(\w+)/) || [])[1] || '';
+            mono.agudos = (monoRaw.match(/Agudos:\s*(\w+)/) || [])[1] || '';
+        }
+
+        // Harshness
+        const harshnessRaw = get(/^Harshness:\s*(.+)$/m);
+        let harshness = {};
+        if (harshnessRaw) {
+            harshness.nivel = harshnessRaw.split('|')[0].trim();
+            harshness.pico = (harshnessRaw.match(/p95:\s*([-\d.]+)dB/) || [])[1] || '';
+            harshness.frames = (harshnessRaw.match(/([\d.]+)%\s*frames/) || [])[1] || '';
+        }
+
+        // Scores
+        const scoresRaw = get(/^SCORES:\s*(.+)$/m);
+        let scores = {};
+        if (scoresRaw) {
+            scoresRaw.split(',').forEach(pair => {
+                const [k, v] = pair.split('=').map(s => s.trim());
+                if (k && v) scores[k] = v;
+            });
+        }
+
+        return { estado, diagPrincipalTitulo, diagPrincipalId, explicacion, diagSecundarioTitulo,
+                 prioridades, notaContextual, motivacion, tipsGenero, noTocar, tipObjetivo,
+                 siguienteSesion, atencion, refTemporal, disclaimer,
+                 bpm, duracion, balanceGrave, densidad, loudness, mono, harshness, scores };
+    }
+
+    function estadoSemaforo(estado) {
+        const e = (estado || '').toLowerCase();
+        if (e.includes('temprana') || e.includes('verde')) return { emoji: '🔴', color: '#f87171', bg: 'rgba(248,113,113,0.10)', border: '#7f1d1d' };
+        if (e.includes('pulir') || e.includes('avanzado') || e.includes('azul')) return { emoji: '🔵', color: '#60a5fa', bg: 'rgba(96,165,250,0.10)', border: '#1e3a5f' };
+        return { emoji: '🟡', color: '#facc15', bg: 'rgba(250,204,21,0.10)', border: '#713f12' };
+    }
+
+    function MixMeter({ label, value, status }) {
+        const colorMap = { ok: '#4ade80', buena: '#4ade80', normal: '#4ade80', mono: '#4ade80',
+                          elevado: '#facc15', alta: '#facc15', alto: '#facc15', notable: '#facc15', moderado: '#facc15', revisar: '#facc15',
+                          excesivo: '#f87171', saturada: '#f87171', severo: '#f87171', critica: '#f87171', problema: '#f87171', problematica: '#f87171',
+                          no: '#4ade80' };
+        const s = (status || '').toLowerCase();
+        const color = Object.entries(colorMap).find(([k]) => s.includes(k))?.[1] || '#6b7280';
+        return (
+            <div className="flex items-center justify-between py-2 px-3 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                <span className="text-gray-400 text-xs">{label}</span>
+                <div className="flex items-center gap-2">
+                    <span className="text-gray-200 text-xs">{value}</span>
+                    <div className="w-2 h-2 rounded-full" style={{ background: color }}></div>
+                </div>
+            </div>
+        );
+    }
+
+    function ScoreBar({ label, value, max = 100 }) {
+        const v = parseFloat(value) || 0;
+        const pct = Math.min((v / max) * 100, 100);
+        const color = v >= 70 ? '#4ade80' : v >= 40 ? '#facc15' : '#f87171';
+        return (
+            <div className="mb-2">
+                <div className="flex justify-between mb-1">
+                    <span className="text-gray-400 text-xs">{label}</span>
+                    <span className="text-xs" style={{ color }}>{value}</span>
+                </div>
+                <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: color }}></div>
+                </div>
+            </div>
+        );
+    }
+
+    function DetailModal({ entry, onClose }) {
+        if (!entry) return null;
+        const d = parseDiagnostico(entry.diagnostico);
+        const sem = estadoSemaforo(d.estado);
+
+        return (
+            <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4" onClick={onClose}>
+                <div className="card p-0 max-w-2xl w-full max-h-screen overflow-y-auto" onClick={e => e.stopPropagation()} style={{ maxHeight: '90vh' }}>
+
+                    {/* Header con estado */}
+                    <div className="p-5 border-b border-gray-800">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <p className="text-gray-500 text-xs mb-1">{formatDate(entry.date)}</p>
+                                <h3 className="text-white font-semibold text-sm">{entry.email || 'Sin email'}</h3>
+                            </div>
+                            <button onClick={onClose} className="text-gray-500 hover:text-white text-xl leading-none">&times;</button>
+                        </div>
+                        {d.estado && (
+                            <div className="mt-3 px-4 py-3 rounded-lg" style={{ background: sem.bg, border: `1px solid ${sem.border}` }}>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-lg">{sem.emoji}</span>
+                                    <span className="text-sm font-medium" style={{ color: sem.color }}>{d.estado}</span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Formulario */}
+                    {Object.keys(entry.formData).length > 0 && (
+                        <div className="px-5 py-4 border-b border-gray-800">
+                            <h4 className="text-gray-500 text-xs uppercase tracking-wide mb-3">Formulario</h4>
+                            <div className="flex flex-wrap gap-2">
+                                {Object.entries(entry.formData).map(([k, v]) => (
+                                    <span key={k} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs" style={{ background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)' }}>
+                                        <span className="text-gray-500">{k}:</span>
+                                        <span className="text-gray-200">{v}</span>
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Diagnóstico principal + secundario */}
+                    {d.diagPrincipalTitulo && (
+                        <div className="px-5 py-4 border-b border-gray-800">
+                            <h4 className="text-gray-500 text-xs uppercase tracking-wide mb-3">Diagnóstico</h4>
+                            <div className="rounded-lg p-4 mb-2" style={{ background: 'rgba(249,115,22,0.08)', border: '1px solid rgba(249,115,22,0.15)' }}>
+                                <p className="text-orange-400 text-sm font-medium mb-1">{d.diagPrincipalTitulo}</p>
+                                {d.diagPrincipalId && <span className="text-gray-600 text-xs">#{d.diagPrincipalId}</span>}
+                                {d.explicacion && <p className="text-gray-300 text-xs mt-2 leading-relaxed">{d.explicacion}</p>}
+                            </div>
+                            {d.diagSecundarioTitulo && (
+                                <div className="rounded-lg p-3 mt-2" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                                    <p className="text-gray-400 text-xs"><span className="text-gray-500">Secundario:</span> {d.diagSecundarioTitulo}</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Prioridades */}
+                    {d.prioridades.length > 0 && (
+                        <div className="px-5 py-4 border-b border-gray-800">
+                            <h4 className="text-gray-500 text-xs uppercase tracking-wide mb-3">Prioridades</h4>
+                            <div className="space-y-2">
+                                {d.prioridades.map((p, i) => (
+                                    <div key={i} className="flex items-start gap-3">
+                                        <span className="flex-shrink-0 w-5 h-5 rounded-full bg-purple-900/40 text-purple-400 text-xs flex items-center justify-center font-medium">{i + 1}</span>
+                                        <p className="text-gray-300 text-xs leading-relaxed pt-0.5">{p}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Notas contextuales, tips, motivación */}
+                    {(d.notaContextual || d.motivacion || d.tipObjetivo || d.siguienteSesion || d.atencion || d.tipsGenero.length > 0 || d.noTocar.length > 0) && (
+                        <div className="px-5 py-4 border-b border-gray-800">
+                            <h4 className="text-gray-500 text-xs uppercase tracking-wide mb-3">Contexto y recomendaciones</h4>
+                            <div className="space-y-3">
+                                {d.notaContextual && (
+                                    <div className="rounded-lg p-3" style={{ background: 'rgba(96,165,250,0.06)', borderLeft: '3px solid #60a5fa' }}>
+                                        <p className="text-gray-300 text-xs leading-relaxed">{d.notaContextual}</p>
+                                    </div>
+                                )}
+                                {d.motivacion && (
+                                    <div className="rounded-lg p-3" style={{ background: 'rgba(74,222,128,0.06)', borderLeft: '3px solid #4ade80' }}>
+                                        <p className="text-gray-400 text-xs mb-1">Motivación</p>
+                                        <p className="text-gray-300 text-xs leading-relaxed">{d.motivacion}</p>
+                                    </div>
+                                )}
+                                {d.atencion && (
+                                    <div className="rounded-lg p-3" style={{ background: 'rgba(248,113,113,0.06)', borderLeft: '3px solid #f87171' }}>
+                                        <p className="text-red-400 text-xs mb-1">Atención</p>
+                                        <p className="text-gray-300 text-xs leading-relaxed">{d.atencion}</p>
+                                    </div>
+                                )}
+                                {d.tipsGenero.length > 0 && (
+                                    <div>
+                                        <p className="text-gray-500 text-xs mb-1.5">Tips de género</p>
+                                        {d.tipsGenero.map((t, i) => (
+                                            <p key={i} className="text-gray-300 text-xs leading-relaxed ml-3 mb-1">• {t}</p>
+                                        ))}
+                                    </div>
+                                )}
+                                {d.noTocar.length > 0 && (
+                                    <div>
+                                        <p className="text-gray-500 text-xs mb-1.5">No tocar aún</p>
+                                        {d.noTocar.map((t, i) => (
+                                            <p key={i} className="text-gray-400 text-xs leading-relaxed ml-3 mb-1">• {t}</p>
+                                        ))}
+                                    </div>
+                                )}
+                                {d.tipObjetivo && (
+                                    <div>
+                                        <p className="text-gray-500 text-xs mb-1">Tip para tu objetivo</p>
+                                        <p className="text-gray-300 text-xs leading-relaxed">{d.tipObjetivo}</p>
+                                    </div>
+                                )}
+                                {d.siguienteSesion && (
+                                    <div>
+                                        <p className="text-gray-500 text-xs mb-1">Siguiente sesión</p>
+                                        <p className="text-gray-300 text-xs leading-relaxed">{d.siguienteSesion}</p>
+                                    </div>
+                                )}
+                                {d.refTemporal && (
+                                    <div>
+                                        <p className="text-gray-500 text-xs mb-1">Referencia temporal</p>
+                                        <p className="text-gray-300 text-xs leading-relaxed">{d.refTemporal}</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Datos de mezcla */}
+                    <div className="px-5 py-4 border-b border-gray-800">
+                        <h4 className="text-gray-500 text-xs uppercase tracking-wide mb-3">Datos de mezcla</h4>
+
+                        {/* BPM + Duración */}
+                        <div className="flex gap-4 mb-3">
+                            <div className="flex-1 text-center py-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                                <p className="text-gray-500 text-xs">BPM</p>
+                                <p className="text-white text-lg font-semibold">{d.bpm}</p>
+                            </div>
+                            <div className="flex-1 text-center py-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                                <p className="text-gray-500 text-xs">Duración</p>
+                                <p className="text-white text-lg font-semibold">{d.duracion}</p>
+                            </div>
+                        </div>
+
+                        {/* Meters */}
+                        <div className="space-y-1 mb-3">
+                            <MixMeter label="Balance grave" value={d.balanceGrave} status={d.balanceGrave} />
+                            <MixMeter label="Densidad" value={d.densidad} status={d.densidad} />
+                        </div>
+
+                        {/* Loudness */}
+                        {d.loudness.lufs && (
+                            <div className="rounded-lg p-3 mb-2" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                                <p className="text-gray-400 text-xs mb-2">Loudness</p>
+                                <div className="grid grid-cols-3 gap-3">
+                                    <div className="text-center">
+                                        <p className="text-white text-sm font-semibold">{d.loudness.lufs}</p>
+                                        <p className="text-gray-500 text-xs">LUFS</p>
+                                    </div>
+                                    <div className="text-center">
+                                        <p className="text-white text-sm font-semibold">{d.loudness.pico || '—'}</p>
+                                        <p className="text-gray-500 text-xs">Pico</p>
+                                    </div>
+                                    <div className="text-center">
+                                        <p className="text-white text-sm font-semibold">{d.loudness.rango || '—'}</p>
+                                        <p className="text-gray-500 text-xs">Rango LU</p>
+                                    </div>
+                                </div>
+                                {d.loudness.nivel && <p className="text-center text-xs mt-2" style={{ color: d.loudness.nivel.includes('ok') || d.loudness.nivel.includes('competitivo') ? '#4ade80' : d.loudness.nivel.includes('bajo') || d.loudness.nivel.includes('alto') ? '#facc15' : '#6b7280' }}>{d.loudness.nivel}</p>}
+                            </div>
+                        )}
+
+                        {/* Mono compat */}
+                        {d.mono.nivel && (
+                            <div className="rounded-lg p-3 mb-2" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                                <div className="flex items-center justify-between mb-2">
+                                    <p className="text-gray-400 text-xs">Compatibilidad mono</p>
+                                    <MixMeter label="" value={d.mono.nivel} status={d.mono.nivel} />
+                                </div>
+                                {(d.mono.correlacion || d.mono.perdida) && (
+                                    <div className="flex gap-4 mb-2">
+                                        {d.mono.correlacion && <p className="text-gray-500 text-xs">Correlación: <span className="text-gray-300">{d.mono.correlacion}%</span></p>}
+                                        {d.mono.perdida && <p className="text-gray-500 text-xs">Pérdida: <span className="text-gray-300">{d.mono.perdida}dB</span></p>}
+                                    </div>
+                                )}
+                                {(d.mono.graves || d.mono.medios || d.mono.agudos) && (
+                                    <div className="flex gap-2">
+                                        {['graves', 'medios', 'agudos'].map(band => d.mono[band] && (
+                                            <span key={band} className="px-2 py-1 rounded text-xs" style={{
+                                                background: d.mono[band] === 'ok' ? 'rgba(74,222,128,0.1)' : d.mono[band] === 'revisar' ? 'rgba(250,204,21,0.1)' : 'rgba(248,113,113,0.1)',
+                                                color: d.mono[band] === 'ok' ? '#4ade80' : d.mono[band] === 'revisar' ? '#facc15' : '#f87171'
+                                            }}>
+                                                {band}: {d.mono[band]}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Harshness */}
+                        {d.harshness.nivel && (
+                            <MixMeter label={`Harshness (${d.harshness.frames || '?'}% frames, pico ${d.harshness.pico || '?'}dB)`} value={d.harshness.nivel} status={d.harshness.nivel} />
+                        )}
+                    </div>
+
+                    {/* Scores */}
+                    {Object.keys(d.scores).length > 0 && (
+                        <div className="px-5 py-4 border-b border-gray-800">
+                            <h4 className="text-gray-500 text-xs uppercase tracking-wide mb-3">Scores</h4>
+                            {Object.entries(d.scores).map(([k, v]) => (
+                                <ScoreBar key={k} label={k} value={v} />
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Disclaimer */}
+                    {d.disclaimer && (
+                        <div className="px-5 py-3 border-b border-gray-800">
+                            <p className="text-gray-600 text-xs italic">{d.disclaimer}</p>
+                        </div>
+                    )}
+
+                    {/* Feedback del usuario */}
+                    {(entry.fueUtil || entry.comentario || entry.enlaceFeedback) && (
+                        <div className="px-5 py-4">
+                            <h4 className="text-gray-500 text-xs uppercase tracking-wide mb-3">Feedback del usuario</h4>
+                            {entry.fueUtil && (
+                                <p className="text-gray-300 text-sm mb-2">
+                                    ¿Fue útil? <span className={entry.fueUtil === 'Sí' ? 'text-green-400 font-medium' : 'text-red-400 font-medium'}>{entry.fueUtil}</span>
+                                </p>
+                            )}
+                            {entry.comentario && (
+                                <div className="rounded-lg p-3 mb-2" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                                    <p className="text-gray-300 text-xs italic">"{entry.comentario}"</p>
+                                </div>
+                            )}
+                            {entry.enlaceFeedback && (
+                                <div className="mt-2">
+                                    <p className="text-gray-500 text-xs mb-1">Feedback real solicitado</p>
+                                    <a href={entry.enlaceFeedback} target="_blank" rel="noopener" className="text-purple-400 text-xs hover:underline break-all">{entry.enlaceFeedback}</a>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    }
+
+    // =========================================================================
+    // Dashboard principal
+    // =========================================================================
+
+    function Dashboard() {
+        const [rawData, setRawData] = useState(null);
+        const [loading, setLoading] = useState(true);
+        const [error, setError] = useState(null);
+        const [filterGenero, setFilterGenero] = useState('todos');
+        const [filterUtil, setFilterUtil] = useState('todos');
+        const [filterEstado, setFilterEstado] = useState('todos');
+        const [selectedEntry, setSelectedEntry] = useState(null);
+        const [selectedUser, setSelectedUser] = useState(null);
+        const [tab, setTab] = useState('overview'); // overview | analisis | users | feedback
+        const [calendarMonth, setCalendarMonth] = useState(() => new Date(2026, 3, 1)); // Abril 2026
+
+        useEffect(() => {
+            fetch(SHEETS_API)
+                .then(r => r.json())
+                .then(data => {
+                    setRawData(data);
+                    setLoading(false);
+                })
+                .catch(err => {
+                    setError('No se pudo conectar con el Sheet. ¿Desplegaste el doGet()?');
+                    setLoading(false);
+                });
+        }, []);
+
+        const entries = useMemo(() => {
+            if (!rawData) return [];
+            return rawData.map(parseRow).filter(e => e.email || e.diagnostico);
+        }, [rawData]);
+
+        const filtered = useMemo(() => {
+            return entries.filter(e => {
+                if (filterGenero !== 'todos' && e.genero !== filterGenero) return false;
+                if (filterUtil === 'Sí' && e.fueUtil !== 'Sí') return false;
+                if (filterUtil === 'No' && e.fueUtil !== 'No') return false;
+                if (filterUtil === 'Sin respuesta' && e.fueUtil) return false;
+                if (filterEstado !== 'todos') {
+                    const est = e.estadoTrack.toLowerCase();
+                    if (filterEstado === '🔴' && !est.includes('temprana') && !est.includes('verde')) return false;
+                    if (filterEstado === '🟡' && !est.includes('desarrollo') && !est.includes('amarillo')) return false;
+                    if (filterEstado === '🔵' && !est.includes('pulir') && !est.includes('avanzado') && !est.includes('azul')) return false;
+                }
+                return true;
+            });
+        }, [entries, filterGenero, filterUtil, filterEstado]);
+
+        // Métricas
+        const totalUsers = entries.length;
+        const uniqueEmails = new Set(entries.map(e => e.email).filter(Boolean)).size;
+        const feedbackReal = entries.filter(e => e.enlaceFeedback).length;
+        const utilSi = entries.filter(e => e.fueUtil === 'Sí').length;
+        const utilNo = entries.filter(e => e.fueUtil === 'No').length;
+        const utilTotal = utilSi + utilNo;
+        const utilRate = utilTotal > 0 ? Math.round((utilSi / utilTotal) * 100) : 0;
+        const conComentario = entries.filter(e => e.comentario).length;
+
+        // Agrupar usuarios únicos por email
+        const userMap = useMemo(() => {
+            const map = {};
+            entries.forEach(e => {
+                if (!e.email) return;
+                if (!map[e.email]) {
+                    map[e.email] = { email: e.email, analyses: [], firstSeen: e.date, lastSeen: e.date };
+                }
+                map[e.email].analyses.push(e);
+                if (e.date && (!map[e.email].firstSeen || e.date < map[e.email].firstSeen)) map[e.email].firstSeen = e.date;
+                if (e.date && (!map[e.email].lastSeen || e.date > map[e.email].lastSeen)) map[e.email].lastSeen = e.date;
+            });
+            return map;
+        }, [entries]);
+        const uniqueUsers = useMemo(() => Object.values(userMap).sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0)), [userMap]);
+
+        const generos = [...new Set(entries.map(e => e.genero).filter(Boolean))];
+        const generoCounts = countBy(entries.filter(e => e.genero), 'genero');
+        const experienciaCounts = countBy(entries.filter(e => e.experiencia), 'experiencia');
+        const faseCounts = countBy(entries.filter(e => e.fase), 'fase');
+        const objetivoCounts = countBy(entries.filter(e => e.objetivo), 'objetivo');
+        const dificultadCounts = countBy(entries.filter(e => e.dificultad), 'dificultad');
+        const diagCounts = countBy(entries.filter(e => e.diagPrincipal), 'diagPrincipal');
+
+        // Semáforo counts
+        const semaforoCounts = useMemo(() => {
+            let rojo = 0, amarillo = 0, azul = 0;
+            entries.forEach(e => {
+                const est = e.estadoTrack.toLowerCase();
+                if (est.includes('temprana') || est.includes('verde')) rojo++;
+                else if (est.includes('pulir') || est.includes('avanzado') || est.includes('azul')) azul++;
+                else amarillo++;
+            });
+            return { rojo, amarillo, azul };
+        }, [entries]);
+
+        // Calendario mensual — análisis por día del mes seleccionado
+        const calendarData = useMemo(() => {
+            const year = calendarMonth.getFullYear();
+            const month = calendarMonth.getMonth();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const counts = {};
+            entries.forEach(e => {
+                if (e.date && e.date.getFullYear() === year && e.date.getMonth() === month) {
+                    const day = e.date.getDate();
+                    counts[day] = (counts[day] || 0) + 1;
+                }
+            });
+            const days = [];
+            for (let d = 1; d <= daysInMonth; d++) {
+                days.push({ day: d, count: counts[d] || 0 });
+            }
+            const maxCount = Math.max(...days.map(d => d.count), 1);
+            const totalMonth = days.reduce((sum, d) => sum + d.count, 0);
+            return { days, maxCount, totalMonth, daysInMonth };
+        }, [entries, calendarMonth]);
+
+        const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+        if (loading) {
+            return (
+                <div className="min-h-screen flex items-center justify-center">
+                    <div className="text-center">
+                        <div className="spinner mx-auto mb-4"></div>
+                        <p className="text-gray-500 text-sm">Cargando datos del Sheet...</p>
+                    </div>
+                </div>
+            );
+        }
+
+        if (error) {
+            return (
+                <div className="min-h-screen flex items-center justify-center">
+                    <div className="card p-8 max-w-md text-center">
+                        <p className="text-red-400 text-sm mb-2">Error</p>
+                        <p className="text-gray-400 text-xs">{error}</p>
+                    </div>
+                </div>
+            );
+        }
+
+        return (
+            <div className="min-h-screen px-4 py-6 max-w-7xl mx-auto">
+                {/* Header */}
+                <div className="flex items-center justify-between mb-6">
+                    <div>
+                        <h1 className="text-xl font-bold text-white">TrackDiag Dashboard</h1>
+                        <p className="text-gray-500 text-xs mt-1">{totalUsers} análisis · {uniqueEmails} usuarios únicos · Actualizado al abrir</p>
+                    </div>
+                    <button
+                        onClick={() => { setLoading(true); fetch(SHEETS_API).then(r => r.json()).then(data => { setRawData(data); setLoading(false); }); }}
+                        className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-xs transition-colors"
+                    >
+                        Actualizar
+                    </button>
+                </div>
+
+                {/* Tabs */}
+                <div className="flex gap-1 mb-6 bg-gray-800/50 rounded-lg p-1 w-fit">
+                    {[['overview', 'Resumen'], ['analisis', 'Análisis'], ['users', 'Usuarios'], ['feedback', 'Feedback']].map(([id, label]) => (
+                        <button
+                            key={id}
+                            onClick={() => setTab(id)}
+                            className={`px-4 py-2 rounded-md text-xs transition-colors ${tab === id ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                        >
+                            {label}
+                        </button>
+                    ))}
+                </div>
+
+                {/* ============ TAB: OVERVIEW ============ */}
+                {tab === 'overview' && (
+                    <div className="fade-in">
+                        {/* KPI Cards */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                            <StatCard label="Análisis totales" value={totalUsers} icon="📊" />
+                            <StatCard label="Usuarios únicos" value={uniqueEmails} color="#60a5fa" icon="👤" />
+                            <StatCard label="Feedback real" value={feedbackReal} sub={`de ${totalUsers} análisis`} color="#a78bfa" icon="🎧" />
+                            <StatCard label="Satisfacción" value={`${utilRate}%`} sub={`${utilSi} sí / ${utilNo} no`} color={utilRate >= 70 ? '#4ade80' : utilRate >= 40 ? '#facc15' : '#f87171'} icon="💬" />
+                        </div>
+
+                        {/* Semáforo + Charts Grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                            {/* Semáforo */}
+                            <div className="card p-5">
+                                <h3 className="text-sm font-medium text-gray-300 mb-4">Estado de los tracks</h3>
+                                <div className="space-y-3">
+                                    {[
+                                        { emoji: '🔴', label: 'Fase temprana', count: semaforoCounts.rojo, color: '#f87171', bg: 'rgba(248,113,113,0.08)' },
+                                        { emoji: '🟡', label: 'En desarrollo', count: semaforoCounts.amarillo, color: '#facc15', bg: 'rgba(250,204,21,0.08)' },
+                                        { emoji: '🔵', label: 'Listo para pulir', count: semaforoCounts.azul, color: '#60a5fa', bg: 'rgba(96,165,250,0.08)' },
+                                    ].map(s => {
+                                        const pct = totalUsers > 0 ? Math.round((s.count / totalUsers) * 100) : 0;
+                                        return (
+                                            <div key={s.label} className="flex items-center gap-3">
+                                                <span className="text-lg w-7 text-center">{s.emoji}</span>
+                                                <div className="flex-1">
+                                                    <div className="flex justify-between mb-1">
+                                                        <span className="text-gray-400 text-xs">{s.label}</span>
+                                                        <span className="text-xs font-medium" style={{ color: s.color }}>{s.count} ({pct}%)</span>
+                                                    </div>
+                                                    <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+                                                        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: s.color }}></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* Géneros */}
+                            <div className="card p-5">
+                                <h3 className="text-sm font-medium text-gray-300 mb-4">Géneros más analizados</h3>
+                                <BarChart data={generoCounts} color="#8b5cf6" />
+                            </div>
+
+                            {/* Objetivo */}
+                            <div className="card p-5">
+                                <h3 className="text-sm font-medium text-gray-300 mb-4">Objetivo</h3>
+                                <BarChart data={objetivoCounts} color="#4ade80" />
+                            </div>
+
+                            {/* Experiencia */}
+                            <div className="card p-5">
+                                <h3 className="text-sm font-medium text-gray-300 mb-4">Experiencia de los usuarios</h3>
+                                <BarChart data={experienciaCounts} color="#60a5fa" />
+                            </div>
+                        </div>
+
+                        {/* Calendario mensual — barras verticales */}
+                        <div className="card p-5 mb-8">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-sm font-medium text-gray-300">Análisis por día</h3>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1))}
+                                        className="w-7 h-7 rounded-md bg-gray-800 hover:bg-gray-700 text-gray-400 flex items-center justify-center text-xs transition-colors"
+                                    >◀</button>
+                                    <span className="text-gray-300 text-sm font-medium w-36 text-center">
+                                        {monthNames[calendarMonth.getMonth()]} {calendarMonth.getFullYear()}
+                                    </span>
+                                    <button
+                                        onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1))}
+                                        className="w-7 h-7 rounded-md bg-gray-800 hover:bg-gray-700 text-gray-400 flex items-center justify-center text-xs transition-colors"
+                                    >▶</button>
+                                    <span className="text-gray-600 text-xs ml-2">{calendarData.totalMonth} análisis</span>
+                                </div>
+                            </div>
+                            <div className="flex items-end gap-1" style={{ height: '160px' }}>
+                                {calendarData.days.map(d => {
+                                    const barH = d.count > 0 ? Math.max((d.count / calendarData.maxCount) * 130, 4) : 0;
+                                    const today = new Date();
+                                    const isToday = today.getDate() === d.day && today.getMonth() === calendarMonth.getMonth() && today.getFullYear() === calendarMonth.getFullYear();
+                                    return (
+                                        <div key={d.day} className="flex-1 flex flex-col items-center justify-end" style={{ minWidth: 0 }}>
+                                            {d.count > 0 && <span className="text-gray-400 text-xs mb-1" style={{ fontSize: '9px' }}>{d.count}</span>}
+                                            <div
+                                                className="w-full rounded-t-sm transition-all"
+                                                style={{
+                                                    height: `${barH}px`,
+                                                    background: d.count > 0 ? '#8b5cf6' : 'rgba(255,255,255,0.03)',
+                                                    minHeight: d.count === 0 ? '2px' : undefined,
+                                                    opacity: d.count > 0 ? 1 : 0.3,
+                                                }}
+                                                title={`${d.day} ${monthNames[calendarMonth.getMonth()]}: ${d.count} análisis`}
+                                            ></div>
+                                            <span className={`text-xs mt-1 ${isToday ? 'text-purple-400 font-bold' : 'text-gray-600'}`} style={{ fontSize: '9px' }}>{d.day}</span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* ============ TAB: ANÁLISIS ============ */}
+                {tab === 'analisis' && (
+                    <div className="fade-in">
+                        {/* Filters */}
+                        <div className="card p-4 mb-6 space-y-3">
+                            <FilterBar label="Género" options={generos.slice(0, 6)} value={filterGenero} onChange={setFilterGenero} />
+                            <FilterBar label="Estado" options={['🔴', '🟡', '🔵']} value={filterEstado} onChange={setFilterEstado} />
+                        </div>
+
+                        <p className="text-gray-500 text-xs mb-3">{filtered.length} análisis</p>
+
+                        {/* Table */}
+                        <div className="card overflow-x-auto">
+                            <table className="w-full">
+                                <thead>
+                                    <tr className="border-b border-gray-800">
+                                        <th className="text-left py-3 px-4 text-xs text-gray-500 font-medium">Fecha</th>
+                                        <th className="text-left py-3 px-4 text-xs text-gray-500 font-medium">Email</th>
+                                        <th className="text-left py-3 px-4 text-xs text-gray-500 font-medium">Género</th>
+                                        <th className="text-left py-3 px-4 text-xs text-gray-500 font-medium">Estado</th>
+                                        <th className="text-left py-3 px-4 text-xs text-gray-500 font-medium">Diagnóstico</th>
+                                        <th className="text-left py-3 px-4 text-xs text-gray-500 font-medium">Útil</th>
+                                        <th className="text-left py-3 px-4 text-xs text-gray-500 font-medium">Feedback</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {filtered.slice().reverse().map((entry, i) => (
+                                        <UserRow key={i} entry={entry} onClick={() => setSelectedEntry(entry)} />
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+
+                {/* ============ TAB: USUARIOS ============ */}
+                {tab === 'users' && (
+                    <div className="fade-in">
+                        <p className="text-gray-500 text-xs mb-4">{uniqueUsers.length} usuarios únicos</p>
+
+                        <div className="space-y-3">
+                            {uniqueUsers.map(user => {
+                                const isExpanded = selectedUser === user.email;
+                                const totalAnalyses = user.analyses.length;
+                                const lastGenero = user.analyses[user.analyses.length - 1]?.genero || '';
+                                const lastExperiencia = user.analyses[user.analyses.length - 1]?.experiencia || '';
+                                const anyFeedbackReal = user.analyses.some(a => a.enlaceFeedback);
+                                const anyUtil = user.analyses.find(a => a.fueUtil);
+                                const lastComment = [...user.analyses].reverse().find(a => a.comentario);
+
+                                return (
+                                    <div key={user.email} className="card overflow-hidden">
+                                        {/* User header — clickable */}
+                                        <div
+                                            className="p-4 cursor-pointer hover:bg-gray-800/30 transition-colors flex items-center justify-between"
+                                            onClick={() => setSelectedUser(isExpanded ? null : user.email)}
+                                        >
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-9 h-9 rounded-full bg-purple-900/40 flex items-center justify-center text-purple-400 text-sm font-semibold">
+                                                    {user.email.charAt(0).toUpperCase()}
+                                                </div>
+                                                <div>
+                                                    <p className="text-white text-sm font-medium">{user.email}</p>
+                                                    <p className="text-gray-500 text-xs">
+                                                        {totalAnalyses} {totalAnalyses === 1 ? 'análisis' : 'análisis'}
+                                                        {lastGenero ? ` · ${lastGenero}` : ''}
+                                                        {lastExperiencia ? ` · ${lastExperiencia}` : ''}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                {anyFeedbackReal && <span className="text-purple-400 text-xs">🎧 Feedback real</span>}
+                                                {anyUtil && (
+                                                    <span className={`text-xs ${anyUtil.fueUtil === 'Sí' ? 'text-green-400' : 'text-red-400'}`}>
+                                                        {anyUtil.fueUtil === 'Sí' ? '👍' : '👎'}
+                                                    </span>
+                                                )}
+                                                <span className="text-gray-500 text-xs">{formatDate(user.lastSeen)}</span>
+                                                <span className="text-gray-600 text-xs">{isExpanded ? '▲' : '▼'}</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Expanded: list of analyses */}
+                                        {isExpanded && (
+                                            <div className="border-t border-gray-800">
+                                                {user.analyses.slice().reverse().map((entry, idx) => {
+                                                    const estadoEmoji = entry.estadoTrack.includes('temprana') || entry.estadoTrack.includes('verde')
+                                                        ? '🔴'
+                                                        : entry.estadoTrack.includes('desarrollo') || entry.estadoTrack.includes('amarillo')
+                                                        ? '🟡'
+                                                        : entry.estadoTrack.includes('pulir') || entry.estadoTrack.includes('avanzado') || entry.estadoTrack.includes('azul')
+                                                        ? '🔵' : '⚪';
+
+                                                    return (
+                                                        <div
+                                                            key={idx}
+                                                            className="px-4 py-3 border-t border-gray-800/50 hover:bg-gray-800/20 cursor-pointer transition-colors flex items-center justify-between"
+                                                            onClick={(e) => { e.stopPropagation(); setSelectedEntry(entry); }}
+                                                        >
+                                                            <div className="flex items-center gap-3">
+                                                                <span className="text-gray-600 text-xs w-5 text-right">#{user.analyses.length - idx}</span>
+                                                                <span className="text-xs">{estadoEmoji}</span>
+                                                                <span className="text-gray-300 text-xs">{entry.genero || 'Sin género'}</span>
+                                                                <span className="text-gray-600 text-xs">·</span>
+                                                                <span className="text-gray-400 text-xs truncate max-w-xs">{entry.diagPrincipal || 'Sin diagnóstico'}</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-3">
+                                                                {entry.fueUtil && (
+                                                                    <span className={`text-xs ${entry.fueUtil === 'Sí' ? 'text-green-400' : 'text-red-400'}`}>
+                                                                        {entry.fueUtil === 'Sí' ? '👍' : '👎'}
+                                                                    </span>
+                                                                )}
+                                                                {entry.comentario && <span className="text-gray-500 text-xs">💬</span>}
+                                                                {entry.enlaceFeedback && <span className="text-purple-400 text-xs">🎧</span>}
+                                                                <span className="text-gray-600 text-xs">{formatDate(entry.date)}</span>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+
+                                                {/* User comments summary */}
+                                                {lastComment && (
+                                                    <div className="px-4 py-3 border-t border-gray-800/50 bg-gray-900/30">
+                                                        <p className="text-gray-500 text-xs mb-1">Último comentario:</p>
+                                                        <p className="text-gray-300 text-xs italic">"{lastComment.comentario}"</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
+                {/* ============ TAB: FEEDBACK ============ */}
+                {tab === 'feedback' && (
+                    <div className="fade-in">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                            <StatCard label="Respondieron" value={utilTotal} sub={`de ${totalUsers}`} icon="📝" />
+                            <StatCard label="Fue útil" value={utilSi} color="#4ade80" icon="👍" />
+                            <StatCard label="No fue útil" value={utilNo} color="#f87171" icon="👎" />
+                            <StatCard label="Con comentario" value={conComentario} color="#60a5fa" icon="💬" />
+                        </div>
+
+                        {/* Comentarios */}
+                        <div className="card p-5 mb-6">
+                            <h3 className="text-sm font-medium text-gray-300 mb-4">Comentarios de usuarios</h3>
+                            <div className="space-y-3">
+                                {entries.filter(e => e.comentario).length === 0 && (
+                                    <p className="text-gray-500 text-xs">Aún no hay comentarios.</p>
+                                )}
+                                {entries.filter(e => e.comentario).slice().reverse().map((e, i) => (
+                                    <div key={i} className="bg-gray-800/50 rounded-lg p-4">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <span className={e.fueUtil === 'Sí' ? 'text-green-400 text-xs' : 'text-red-400 text-xs'}>
+                                                {e.fueUtil === 'Sí' ? '👍 Útil' : '👎 No útil'}
+                                            </span>
+                                            <span className="text-gray-600 text-xs">·</span>
+                                            <span className="text-gray-500 text-xs">{e.email}</span>
+                                            <span className="text-gray-600 text-xs">·</span>
+                                            <span className="text-gray-600 text-xs">{formatDate(e.date)}</span>
+                                        </div>
+                                        <p className="text-gray-300 text-sm">"{e.comentario}"</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Solicitudes de feedback real */}
+                        <div className="card p-5">
+                            <h3 className="text-sm font-medium text-gray-300 mb-4">Solicitudes de feedback real ({feedbackReal})</h3>
+                            <div className="space-y-2">
+                                {entries.filter(e => e.enlaceFeedback).length === 0 && (
+                                    <p className="text-gray-500 text-xs">Aún no hay solicitudes.</p>
+                                )}
+                                {entries.filter(e => e.enlaceFeedback).slice().reverse().map((e, i) => (
+                                    <div key={i} className="bg-gray-800/50 rounded-lg p-3 flex items-center justify-between">
+                                        <div>
+                                            <span className="text-gray-300 text-sm">{e.email}</span>
+                                            <span className="text-gray-600 text-xs ml-2">{e.genero} · {formatDate(e.date)}</span>
+                                        </div>
+                                        <a href={e.enlaceFeedback} target="_blank" rel="noopener" className="text-purple-400 text-xs hover:underline">Abrir enlace</a>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Detail Modal */}
+                <DetailModal entry={selectedEntry} onClose={() => setSelectedEntry(null)} />
+            </div>
+        );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<Dashboard />);
+    </script>
+</body>
+</html>

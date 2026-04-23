@@ -6,8 +6,10 @@ Endpoint principal: POST /api/diagnostico
 import os
 import uuid
 import json
+import random
 import tempfile
-from datetime import datetime
+import httpx
+from datetime import datetime, timedelta
 
 from pathlib import Path
 
@@ -214,6 +216,95 @@ async def guardar_feedback_request(data: dict):
     with open(FEEDBACK_REQUESTS_FILE, "a") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
     return {"ok": True}
+
+
+# =========================================================================
+# Auth — Magic Link (código por email)
+# =========================================================================
+
+SHEETS_WEBHOOK = os.environ.get(
+    "SHEETS_WEBHOOK",
+    "https://script.google.com/macros/s/AKfycby-LFa0ztbqPMD_E-zkRfAfSKLmiTjPjVXdAn44E_rHRHq3XYLCygZqoTlhhT8yT_Mh/exec",
+)
+
+# Almacén temporal de códigos: {email: {code, expires}}
+_auth_codes: dict = {}
+
+
+@app.post("/api/auth/enviar-codigo")
+async def enviar_codigo(data: dict):
+    """Genera un código de 6 dígitos y lo envía por email vía Apps Script."""
+    email = (data.get("email") or "").strip().lower()
+    if not email or "@" not in email:
+        return JSONResponse(status_code=400, content={"error": "Email inválido"})
+
+    code = str(random.randint(100000, 999999))
+    _auth_codes[email] = {
+        "code": code,
+        "expires": datetime.utcnow() + timedelta(minutes=10),
+    }
+
+    # Enviar email vía Apps Script (fire & forget con timeout)
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(
+                SHEETS_WEBHOOK,
+                json={"tipo": "enviar_codigo", "email": email, "codigo": code},
+                timeout=10,
+            )
+    except Exception:
+        pass  # Apps Script puede no responder, pero el email se envía
+
+    return {"ok": True}
+
+
+@app.post("/api/auth/verificar-codigo")
+async def verificar_codigo(data: dict):
+    """Verifica el código enviado al email."""
+    email = (data.get("email") or "").strip().lower()
+    code = (data.get("codigo") or "").strip()
+
+    stored = _auth_codes.get(email)
+    if not stored:
+        return JSONResponse(status_code=401, content={"error": "No hay código pendiente"})
+
+    if datetime.utcnow() > stored["expires"]:
+        del _auth_codes[email]
+        return JSONResponse(status_code=401, content={"error": "Código expirado"})
+
+    if stored["code"] != code:
+        return JSONResponse(status_code=401, content={"error": "Código incorrecto"})
+
+    del _auth_codes[email]
+
+    # Obtener historial del usuario desde Google Sheets
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(SHEETS_WEBHOOK, timeout=10)
+            all_rows = resp.json()
+    except Exception:
+        all_rows = []
+
+    user_rows = [r for r in all_rows if (r.get("email") or "").strip().lower() == email]
+    return {"ok": True, "email": email, "historial": user_rows}
+
+
+@app.post("/api/auth/historial")
+async def obtener_historial(data: dict):
+    """Obtiene historial de un usuario autenticado (sin re-verificar, solo por email)."""
+    email = (data.get("email") or "").strip().lower()
+    if not email:
+        return JSONResponse(status_code=400, content={"error": "Email requerido"})
+
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(SHEETS_WEBHOOK, timeout=10)
+            all_rows = resp.json()
+    except Exception:
+        all_rows = []
+
+    user_rows = [r for r in all_rows if (r.get("email") or "").strip().lower() == email]
+    return {"ok": True, "historial": user_rows}
 
 
 # =========================================================================
