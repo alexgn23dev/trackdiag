@@ -405,7 +405,7 @@
         );
     }
 
-    function DiagnosticoScreen({ resultado, onReset, contexto }) {
+    function DiagnosticoScreen({ resultado, onReset, contexto, userEmail }) {
         const r = resultado;
         const d = r.datos_audio;
         const [feedbackStep, setFeedbackStep] = useState(0); // 0=results, 1=util?, 2=feedback real
@@ -921,6 +921,7 @@
                                                 if (!feedbackEnlace.trim()) return;
                                                 const req = {
                                                     timestamp: new Date().toISOString(),
+                                                    email: userEmail || '',
                                                     enlace: feedbackEnlace.trim(),
                                                     diagnostico_id: r.diagnostico_principal?.id,
                                                     genero: contexto?.genero,
@@ -930,7 +931,12 @@
                                                 const reqs = JSON.parse(localStorage.getItem('trackdiag_feedback_requests') || '[]');
                                                 reqs.push(req);
                                                 localStorage.setItem('trackdiag_feedback_requests', JSON.stringify(reqs));
-                                                // Enviar a API
+                                                // Enviar a Google Sheets
+                                                fetch(SHEETS_WEBHOOK, {
+                                                    method: 'POST',
+                                                    body: JSON.stringify(req),
+                                                }).catch(() => {});
+                                                // Enviar a API (backup)
                                                 fetch(`${API_URL}/api/feedback-request`, {
                                                     method: 'POST',
                                                     headers: {'Content-Type': 'application/json'},
@@ -981,10 +987,13 @@
     // App principal
     // =========================================================================
 
+    const SHEETS_WEBHOOK = 'https://script.google.com/macros/s/AKfycby-LFa0ztbqPMD_E-zkRfAfSKLmiTjPjVXdAn44E_rHRHq3XYLCygZqoTlhhT8yT_Mh/exec';
+
     function App() {
-        const [screen, setScreen] = useState('landing'); // landing | upload | questionnaire | processing | diagnostico | historial
+        const [screen, setScreen] = useState('landing'); // landing | upload | questionnaire | email | processing | diagnostico | historial
         const [file, setFile] = useState(null);
         const [opciones, setOpciones] = useState(null);
+        const [userEmail, setUserEmail] = useState('');
         const [contexto, setContexto] = useState({
             genero: '', fase: '', objetivo: '',
             bloqueo_percibido: '', experiencia: '',
@@ -1052,6 +1061,10 @@
 
         const isQuestionnaireValid = contexto.genero && contexto.fase && contexto.objetivo && contexto.experiencia && contexto.dificultad_habitual;
 
+        const handleGoToEmail = () => {
+            setScreen('email');
+        };
+
         const handleSubmit = async () => {
             setScreen('processing');
             setError(null);
@@ -1087,6 +1100,7 @@
 
         const handleReset = () => {
             setFile(null);
+            setUserEmail('');
             setContexto({
                 genero: '', fase: '', objetivo: '',
                 bloqueo_percibido: '', experiencia: '',
@@ -1133,13 +1147,43 @@
                         opciones={opciones}
                         contexto={contexto}
                         onChange={handleContextoChange}
-                        onSubmit={handleSubmit}
+                        onSubmit={handleGoToEmail}
                         isValid={isQuestionnaireValid}
                     />
                 )}
+                {screen === 'email' && (
+                    <div className="min-h-screen flex items-center justify-center px-4 fade-in">
+                        <div className="max-w-md w-full">
+                            <div className="card p-8 text-center">
+                                <p className="text-purple-400 text-sm font-medium uppercase tracking-wider mb-2">Último paso</p>
+                                <h2 className="text-xl font-bold text-white mb-2">¿Dónde te enviamos el diagnóstico?</h2>
+                                <p className="text-gray-500 text-xs mb-6">Tu email solo se usará para contactarte si solicitas feedback personalizado. No spam.</p>
+                                <input
+                                    type="email"
+                                    value={userEmail}
+                                    onChange={(e) => setUserEmail(e.target.value)}
+                                    placeholder="tu@email.com"
+                                    className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 text-sm mb-4"
+                                    onKeyDown={(e) => { if (e.key === 'Enter' && userEmail.includes('@')) handleSubmit(); }}
+                                />
+                                <button
+                                    onClick={handleSubmit}
+                                    disabled={!userEmail.includes('@')}
+                                    className={`w-full py-3 rounded-xl font-medium transition-colors text-sm ${
+                                        userEmail.includes('@')
+                                            ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                                            : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                                    }`}
+                                >
+                                    Analizar mi track
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
                 {screen === 'processing' && <ProcessingScreen datos={resultado?.datos_audio} />}
                 {screen === 'diagnostico' && resultado && (
-                    <DiagnosticoScreen resultado={resultado} onReset={handleReset} contexto={contexto} />
+                    <DiagnosticoScreen resultado={resultado} onReset={handleReset} contexto={contexto} userEmail={userEmail} />
                 )}
             </div>
         );
