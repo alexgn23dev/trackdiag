@@ -1089,7 +1089,7 @@
                 // Guardar en historial
                 guardarEnHistorial(file.name, contexto, data);
                 setHistorialCount(obtenerHistorial().length);
-                // Registrar usuario en Google Sheets (con diagnóstico ya conocido)
+                // Registrar usuario + diagnóstico completo en Google Sheets
                 fetch(SHEETS_WEBHOOK, {
                     method: 'POST',
                     body: JSON.stringify({
@@ -1097,9 +1097,19 @@
                         timestamp: new Date().toISOString(),
                         email: userEmail,
                         genero: contexto.genero,
+                        fase: contexto.fase,
                         objetivo: contexto.objetivo,
                         experiencia: contexto.experiencia,
+                        dificultad: contexto.dificultad_habitual,
                         diagnostico_id: data.diagnostico_principal?.id || '',
+                        estado: data.estado_track || '',
+                        bpm: data.datos_audio?.bpm || '',
+                        duracion: data.datos_audio?.duracion || '',
+                        balance_grave: data.datos_audio?.balance_grave || '',
+                        densidad: data.datos_audio?.densidad || '',
+                        loudness: data.datos_audio?.loudness?.lufs_integrado || '',
+                        mono_compat: data.datos_audio?.mono_compat?.nivel_compatibilidad || '',
+                        harshness: data.datos_audio?.harshness?.nivel || 'sin_harshness',
                     }),
                 }).catch(() => {});
                 setScreen('diagnostico');
