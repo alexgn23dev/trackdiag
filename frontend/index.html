@@ -1089,27 +1089,102 @@
                 // Guardar en historial
                 guardarEnHistorial(file.name, contexto, data);
                 setHistorialCount(obtenerHistorial().length);
-                // Registrar usuario + diagnóstico completo en Google Sheets
+                // Construir texto formulario
+                const labelMap = {
+                    genero: opciones?.generos,
+                    fase: opciones?.fases,
+                    objetivo: opciones?.objetivos,
+                    experiencia: opciones?.experiencia,
+                    dificultad_habitual: opciones?.dificultad_habitual,
+                };
+                const getLabel = (field, value) => {
+                    const opts = labelMap[field];
+                    if (!opts) return value;
+                    const found = opts.find(o => o.value === value);
+                    return found ? found.label : value;
+                };
+                const formularioTexto = [
+                    getLabel('genero', contexto.genero),
+                    getLabel('fase', contexto.fase),
+                    getLabel('objetivo', contexto.objetivo),
+                    getLabel('experiencia', contexto.experiencia),
+                    getLabel('dificultad_habitual', contexto.dificultad_habitual),
+                    contexto.bloqueo_percibido ? `Bloqueo: ${contexto.bloqueo_percibido}` : '',
+                ].filter(Boolean).join(' | ');
+
+                // Construir informe diagnóstico completo
+                const dx = data;
+                const da = dx.datos_audio || {};
+                let informe = '';
+                // Estado
+                informe += `ESTADO: ${dx.estado_texto || dx.estado_track || ''}\n`;
+                // Diagnóstico principal
+                informe += `DIAGNÓSTICO PRINCIPAL: ${dx.diagnostico_principal?.titulo || ''} (${dx.diagnostico_principal?.id || ''})\n`;
+                informe += `Explicación: ${dx.diagnostico_principal?.explicacion || ''}\n`;
+                // Diagnóstico secundario
+                if (dx.diagnostico_secundario) {
+                    informe += `DIAGNÓSTICO SECUNDARIO: ${dx.diagnostico_secundario.titulo} (${dx.diagnostico_secundario.id})\n`;
+                }
+                // Prioridades
+                if (dx.prioridades && dx.prioridades.length > 0) {
+                    informe += `PRIORIDADES: ${dx.prioridades.map((p, i) => `${i+1}. ${p}`).join(' | ')}\n`;
+                }
+                // Nota contextual
+                if (dx.nota_contextual) informe += `NOTA CONTEXTUAL: ${dx.nota_contextual}\n`;
+                if (dx.nota_motivacional) informe += `MOTIVACIÓN: ${dx.nota_motivacional}\n`;
+                // Tips género
+                if (dx.tips_genero && dx.tips_genero.length > 0) {
+                    informe += `TIPS GÉNERO: ${dx.tips_genero.join(' | ')}\n`;
+                }
+                // No tocar
+                if (dx.no_tocar_aun && dx.no_tocar_aun.length > 0) {
+                    informe += `NO TOCAR AÚN: ${dx.no_tocar_aun.join(' | ')}\n`;
+                }
+                // Tip objetivo
+                if (dx.tip_objetivo) informe += `TIP OBJETIVO: ${dx.tip_objetivo}\n`;
+                // Siguiente sesión
+                if (dx.siguiente_sesion) informe += `SIGUIENTE SESIÓN: ${dx.siguiente_sesion}\n`;
+                // Error de foco
+                if (dx.error_de_foco) informe += `ATENCIÓN: ${dx.error_de_foco_mensaje}\n`;
+                // Referencia temporal
+                if (dx.referencia_temporal) informe += `REFERENCIA TEMPORAL: ${dx.referencia_temporal}\n`;
+                // Disclaimer
+                if (dx.disclaimer) informe += `DISCLAIMER: ${dx.disclaimer}\n`;
+                // Datos de mezcla
+                informe += `--- MEZCLA ---\n`;
+                informe += `BPM: ${da.bpm || '?'} | Duración: ${da.duracion || '?'}\n`;
+                informe += `Balance grave: ${da.balance_grave || '?'}\n`;
+                informe += `Densidad: ${da.densidad || '?'}\n`;
+                if (da.loudness) {
+                    informe += `Loudness: ${da.loudness.lufs_integrado} LUFS (${da.loudness.nivel}) | Pico: ${da.loudness.lufs_short_term_max} LUFS | Rango: ${da.loudness.rango_loudness} LU\n`;
+                }
+                if (da.mono_compat) {
+                    informe += `Mono compat: ${da.mono_compat.nivel_compatibilidad || 'N/A'}`;
+                    if (da.mono_compat.es_stereo) {
+                        informe += ` | Correlación: ${(da.mono_compat.correlacion_lr * 100).toFixed(0)}% | Pérdida: ${da.mono_compat.perdida_mono_db}dB`;
+                        if (da.mono_compat.bandas) {
+                            informe += ` | Graves: ${da.mono_compat.bandas.graves?.estado} | Medios: ${da.mono_compat.bandas.medios?.estado} | Agudos: ${da.mono_compat.bandas.agudos?.estado}`;
+                        }
+                    }
+                    informe += '\n';
+                }
+                if (da.harshness) {
+                    informe += `Harshness: ${da.harshness.tiene_harshness ? da.harshness.nivel : 'no'} | p95: ${da.harshness.pico_p95?.toFixed(1) || '?'}dB | ${da.harshness.pct_frames_harsh?.toFixed(0) || '?'}% frames\n`;
+                }
+                // Scores
+                if (dx.scores) {
+                    informe += `SCORES: ${Object.entries(dx.scores).map(([k,v]) => `${k}=${v}`).join(', ')}\n`;
+                }
+
+                // Enviar a Google Sheets
                 fetch(SHEETS_WEBHOOK, {
                     method: 'POST',
                     body: JSON.stringify({
                         tipo: 'registro',
                         timestamp: new Date().toISOString(),
                         email: userEmail,
-                        genero: contexto.genero,
-                        fase: contexto.fase,
-                        objetivo: contexto.objetivo,
-                        experiencia: contexto.experiencia,
-                        dificultad: contexto.dificultad_habitual,
-                        diagnostico_id: data.diagnostico_principal?.id || '',
-                        estado: data.estado_track || '',
-                        bpm: data.datos_audio?.bpm || '',
-                        duracion: data.datos_audio?.duracion || '',
-                        balance_grave: data.datos_audio?.balance_grave || '',
-                        densidad: data.datos_audio?.densidad || '',
-                        loudness: data.datos_audio?.loudness?.lufs_integrado || '',
-                        mono_compat: data.datos_audio?.mono_compat?.nivel_compatibilidad || '',
-                        harshness: data.datos_audio?.harshness?.nivel || 'sin_harshness',
+                        formulario: formularioTexto,
+                        diagnostico: informe,
                     }),
                 }).catch(() => {});
                 setScreen('diagnostico');
