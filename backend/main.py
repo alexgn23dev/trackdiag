@@ -1,5 +1,5 @@
 """
-TrackDiag API — Backend FastAPI
+Mentotrack API — Backend FastAPI
 Endpoint principal: POST /api/diagnostico
 """
 
@@ -22,7 +22,7 @@ from fastapi.staticfiles import StaticFiles
 from engine.extractor import extraer_senales
 from engine.diagnostico import generar_diagnostico
 
-app = FastAPI(title="TrackDiag API", version="0.3.0")
+app = FastAPI(title="Mentotrack API", version="0.3.0")
 
 # Ruta al frontend
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
@@ -326,7 +326,7 @@ async def obtener_historial(data: dict):
 # Dashboard admin — ruta protegida con clave
 # =========================================================================
 
-ADMIN_KEY = os.environ.get("ADMIN_KEY", "trackdiag2024")
+ADMIN_KEY = os.environ.get("ADMIN_KEY", "mentotrack2024")
 
 
 @app.get("/dashboard")

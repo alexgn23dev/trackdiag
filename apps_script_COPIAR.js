@@ -1,5 +1,5 @@
 /**
- * TrackDiag — Google Apps Script
+ * Mentotrack — Google Apps Script
  * Gestiona: diagnósticos (lectura/escritura), feedback, y usuarios (registro/login).
  *
  * REQUISITOS:

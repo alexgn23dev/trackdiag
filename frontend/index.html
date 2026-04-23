@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TrackDiag — Diagnóstico para productores</title>
+    <title>Mentotrack — Diagnóstico para productores</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
@@ -90,7 +90,7 @@
     // Historial (localStorage)
     // =========================================================================
 
-    const HISTORIAL_KEY = 'trackdiag_historial';
+    const HISTORIAL_KEY = 'mentotrack_historial';
 
     function guardarEnHistorial(filename, contexto, resultado) {
         const historial = JSON.parse(localStorage.getItem(HISTORIAL_KEY) || '[]');
@@ -204,7 +204,7 @@
             <div className="min-h-screen flex flex-col items-center justify-center px-4 fade-in">
                 <div className="max-w-lg text-center">
                     <div className="text-4xl mb-3">🎛️</div>
-                    <h1 className="text-3xl font-bold text-white mb-4">TrackDiag</h1>
+                    <h1 className="text-3xl font-bold text-white mb-4">Mentotrack</h1>
                     <p className="text-gray-400 text-lg mb-2">
                         Detecta qué debería corregirse antes, qué no conviene tocar todavía
                         y cuál es el siguiente paso para avanzar con tu track.
@@ -940,7 +940,7 @@
                         <div className="card p-6 mb-6 fade-in" style={{borderLeft: '3px solid #8b5cf6'}}>
                             <p className="text-purple-400 text-sm font-medium mb-3">¿Quieres ayudar a mejorar esta app?</p>
                             <p className="text-gray-300 text-sm leading-relaxed mb-4">
-                                Hasta ahora tu música no se ha almacenado, pero si me compartes un enlace la escucharé personalmente para mejorar el motor de análisis. Gracias a tu música, y nuestro feedback real humano podremos hacer una mejor herramienta para nuestra comunidad. Gracias por formar parte de esto :) - Alex
+                                Hasta ahora tu música no se ha almacenado, pero si me compartes un enlace la escucharé personalmente para mejorar el motor de análisis. Gracias a tu música, y nuestro feedback real y humano podremos hacer una mejor herramienta para nuestra comunidad. Gracias por formar parte de esto :) - Alex
                             </p>
 
                             {!feedbackRealEnviado ? (
@@ -1016,7 +1016,7 @@
 
                     {/* Footer privacidad */}
                     <div className="text-center mb-8">
-                        <p className="text-gray-600 text-xs">TrackDiag no almacena el archivo de tu canción, solo los datos extraídos tras el análisis.</p>
+                        <p className="text-gray-600 text-xs">Mentotrack no almacena el archivo de tu canción, solo los datos extraídos tras el análisis.</p>
                     </div>
                 </div>
             </div>
@@ -1771,7 +1771,7 @@
 
                             {/* Footer */}
                             <div className="text-center mt-8 mb-4">
-                                <p className="text-gray-600 text-xs">TrackDiag no almacena el archivo de tu canción, solo los datos extraídos tras el análisis.</p>
+                                <p className="text-gray-600 text-xs">Mentotrack no almacena el archivo de tu canción, solo los datos extraídos tras el análisis.</p>
                             </div>
                         </div>
                     </div>
