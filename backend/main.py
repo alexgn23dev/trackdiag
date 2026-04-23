@@ -244,13 +244,13 @@ async def enviar_codigo(data: dict):
         "expires": datetime.utcnow() + timedelta(minutes=10),
     }
 
-    # Enviar email vía Apps Script (fire & forget con timeout)
+    # Enviar email vía Apps Script (follow_redirects necesario para Google)
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
             await client.post(
                 SHEETS_WEBHOOK,
                 json={"tipo": "enviar_codigo", "email": email, "codigo": code},
-                timeout=10,
+                timeout=15,
             )
     except Exception:
         pass  # Apps Script puede no responder, pero el email se envía
@@ -279,7 +279,7 @@ async def verificar_codigo(data: dict):
 
     # Obtener historial del usuario desde Google Sheets
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
             resp = await client.get(SHEETS_WEBHOOK, timeout=10)
             all_rows = resp.json()
     except Exception:
@@ -297,7 +297,7 @@ async def obtener_historial(data: dict):
         return JSONResponse(status_code=400, content={"error": "Email requerido"})
 
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
             resp = await client.get(SHEETS_WEBHOOK, timeout=10)
             all_rows = resp.json()
     except Exception:
