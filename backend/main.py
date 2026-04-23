@@ -248,7 +248,12 @@ async def _sheets_get(params: dict) -> dict:
         url = f"{SHEETS_WEBHOOK}?{urlencode(params)}"
         async with httpx.AsyncClient(follow_redirects=True) as client:
             resp = await client.get(url, timeout=15)
-            return resp.json()
+            data = resp.json()
+            # Si el Apps Script devuelve un array (no actualizado), tratarlo como error
+            if isinstance(data, list):
+                print(f"[SHEETS] Apps Script devolvió array en vez de objeto — ¿falta actualizar el script?")
+                return {"error": "Apps Script no actualizado"}
+            return data
     except Exception as e:
         print(f"[SHEETS] Error: {e}")
         return {"error": str(e)}
@@ -282,6 +287,11 @@ async def acceder(data: dict):
 
     # Buscar si el usuario existe en el Sheet
     user_data = await _sheets_get({"action": "get_user", "email": email})
+
+    if user_data.get("error"):
+        return JSONResponse(status_code=503, content={
+            "error": "No se pudo conectar con la base de datos. Verifica que el Apps Script esté actualizado."
+        })
 
     if user_data.get("found"):
         # Usuario existe → verificar contraseña

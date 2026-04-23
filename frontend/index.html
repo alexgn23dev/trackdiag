@@ -1104,7 +1104,7 @@
                 setPanelAuth(authData.email);
                 setPanelHistorial(authData.historial || []);
             } catch (e) {
-                setEmailError('No se pudo conectar. Inténtalo de nuevo.');
+                setEmailError(e.message || 'No se pudo conectar. Inténtalo de nuevo.');
                 return;
             }
 
