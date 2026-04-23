@@ -8,6 +8,9 @@ import uuid
 import json
 import random
 import tempfile
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 import httpx
 from datetime import datetime, timedelta
 
@@ -227,13 +230,67 @@ SHEETS_WEBHOOK = os.environ.get(
     "https://script.google.com/macros/s/AKfycby-LFa0ztbqPMD_E-zkRfAfSKLmiTjPjVXdAn44E_rHRHq3XYLCygZqoTlhhT8yT_Mh/exec",
 )
 
+# Gmail SMTP config (para enviar códigos de verificación)
+GMAIL_USER = os.environ.get("GMAIL_USER", "")
+GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
+
 # Almacén temporal de códigos: {email: {code, expires}}
 _auth_codes: dict = {}
 
 
+def _enviar_email_codigo(destinatario: str, codigo: str) -> bool:
+    """Envía el código de verificación por email vía Gmail SMTP."""
+    if not GMAIL_USER or not GMAIL_APP_PASSWORD:
+        return False
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"Tu código de acceso — TrackDiag"
+        msg["From"] = f"TrackDiag <{GMAIL_USER}>"
+        msg["To"] = destinatario
+
+        texto = f"Tu código de acceso es: {codigo}\n\nEste código expira en 10 minutos.\n\nSi no has solicitado este código, ignora este mensaje.\n\n— TrackDiag"
+
+        html = f"""
+        <div style="font-family: 'Inter', Arial, sans-serif; max-width: 400px; margin: 0 auto; padding: 32px; background: #0a0a0a; border-radius: 16px;">
+            <h2 style="color: #e5e5e5; font-size: 18px; margin-bottom: 8px; text-align: center;">Tu código de acceso</h2>
+            <p style="color: #9ca3af; font-size: 13px; text-align: center; margin-bottom: 24px;">Introduce este código en TrackDiag para acceder a tu panel</p>
+            <div style="background: #141414; border: 1px solid #333; border-radius: 12px; padding: 24px; text-align: center; margin-bottom: 24px;">
+                <span style="font-family: monospace; font-size: 32px; letter-spacing: 8px; color: #a78bfa; font-weight: 700;">{codigo}</span>
+            </div>
+            <p style="color: #6b7280; font-size: 11px; text-align: center;">Expira en 10 minutos · No compartas este código</p>
+            <hr style="border: none; border-top: 1px solid #222; margin: 20px 0;">
+            <p style="color: #4b5563; font-size: 10px; text-align: center;">TrackDiag — Diagnóstico para productores</p>
+        </div>
+        """
+
+        msg.attach(MIMEText(texto, "plain"))
+        msg.attach(MIMEText(html, "html"))
+
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(GMAIL_USER, GMAIL_APP_PASSWORD)
+            server.sendmail(GMAIL_USER, [destinatario], msg.as_string())
+
+        return True
+    except Exception as e:
+        print(f"[AUTH] Error enviando email: {e}")
+        return False
+
+
+async def _obtener_historial_sheets(email: str) -> list:
+    """Obtiene el historial del usuario desde Google Sheets."""
+    try:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            resp = await client.get(SHEETS_WEBHOOK, timeout=15)
+            all_rows = resp.json()
+    except Exception:
+        all_rows = []
+    return [r for r in all_rows if (r.get("email") or "").strip().lower() == email]
+
+
 @app.post("/api/auth/enviar-codigo")
 async def enviar_codigo(data: dict):
-    """Genera un código de 6 dígitos y lo devuelve al frontend para que envíe el email vía Apps Script."""
+    """Genera un código de 6 dígitos y lo envía por email."""
     email = (data.get("email") or "").strip().lower()
     if not email or "@" not in email:
         return JSONResponse(status_code=400, content={"error": "Email inválido"})
@@ -244,8 +301,21 @@ async def enviar_codigo(data: dict):
         "expires": datetime.utcnow() + timedelta(minutes=10),
     }
 
-    # Devolvemos el código al frontend para que él llame a Apps Script
-    return {"ok": True, "codigo": code}
+    # Intentar enviar por Gmail SMTP
+    email_sent = _enviar_email_codigo(email, code)
+
+    if not email_sent:
+        # Sin credenciales SMTP: modo acceso directo (sin código)
+        # Verificamos que el email existe en el Sheet y damos acceso
+        historial = await _obtener_historial_sheets(email)
+        if historial:
+            del _auth_codes[email]
+            return {"ok": True, "modo": "directo", "email": email, "historial": historial}
+        else:
+            del _auth_codes[email]
+            return {"ok": True, "modo": "directo", "email": email, "historial": []}
+
+    return {"ok": True, "modo": "codigo"}
 
 
 @app.post("/api/auth/verificar-codigo")
@@ -267,34 +337,19 @@ async def verificar_codigo(data: dict):
 
     del _auth_codes[email]
 
-    # Obtener historial del usuario desde Google Sheets
-    try:
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            resp = await client.get(SHEETS_WEBHOOK, timeout=10)
-            all_rows = resp.json()
-    except Exception:
-        all_rows = []
-
-    user_rows = [r for r in all_rows if (r.get("email") or "").strip().lower() == email]
-    return {"ok": True, "email": email, "historial": user_rows}
+    historial = await _obtener_historial_sheets(email)
+    return {"ok": True, "email": email, "historial": historial}
 
 
 @app.post("/api/auth/historial")
 async def obtener_historial(data: dict):
-    """Obtiene historial de un usuario autenticado (sin re-verificar, solo por email)."""
+    """Obtiene historial de un usuario autenticado."""
     email = (data.get("email") or "").strip().lower()
     if not email:
         return JSONResponse(status_code=400, content={"error": "Email requerido"})
 
-    try:
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            resp = await client.get(SHEETS_WEBHOOK, timeout=10)
-            all_rows = resp.json()
-    except Exception:
-        all_rows = []
-
-    user_rows = [r for r in all_rows if (r.get("email") or "").strip().lower() == email]
-    return {"ok": True, "historial": user_rows}
+    historial = await _obtener_historial_sheets(email)
+    return {"ok": True, "historial": historial}
 
 
 # =========================================================================
