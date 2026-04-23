@@ -21,9 +21,9 @@
         input[type="range"] { -webkit-appearance: none; background: #222; height: 4px; border-radius: 2px; }
         input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; background: #8b5cf6; border-radius: 50%; cursor: pointer; }
         .card { background: #141414; border: 1px solid #222; border-radius: 12px; }
-        .badge-verde { background: #14532d; color: #4ade80; }
-        .badge-desarrollo { background: #422006; color: #fb923c; }
-        .badge-avanzado { background: #1e1b4b; color: #a78bfa; }
+        .badge-verde { background: #7f1d1d; color: #f87171; }
+        .badge-desarrollo { background: #713f12; color: #facc15; }
+        .badge-avanzado { background: #1e3a5f; color: #60a5fa; }
     </style>
 </head>
 <body>
@@ -132,7 +132,7 @@
         };
 
         const estadoColor = (estado) => {
-            if (estado === 'verde') return 'bg-green-900/30 text-green-400';
+            if (estado === 'verde') return 'bg-red-900/30 text-red-400';
             if (estado === 'avanzado') return 'bg-blue-900/30 text-blue-400';
             return 'bg-yellow-900/30 text-yellow-400';
         };
@@ -416,10 +416,10 @@
         const [feedbackRealEnviado, setFeedbackRealEnviado] = useState(false);
 
         const semaforoConfig = r.estado_track === 'verde'
-            ? { color: '#4ade80', bg: 'rgba(74,222,128,0.10)', border: '#14532d', label: 'Fase temprana', icon: '🟢' }
+            ? { color: '#f87171', bg: 'rgba(248,113,113,0.10)', border: '#7f1d1d', label: 'Fase temprana', icon: '🔴' }
             : r.estado_track === 'avanzado'
-            ? { color: '#a78bfa', bg: 'rgba(167,139,250,0.10)', border: '#1e1b4b', label: 'Listo para pulir', icon: '🟣' }
-            : { color: '#fb923c', bg: 'rgba(251,146,60,0.10)', border: '#422006', label: 'En desarrollo', icon: '🟠' };
+            ? { color: '#60a5fa', bg: 'rgba(96,165,250,0.10)', border: '#1e3a5f', label: 'Listo para pulir', icon: '🔵' }
+            : { color: '#facc15', bg: 'rgba(250,204,21,0.10)', border: '#713f12', label: 'En desarrollo', icon: '🟡' };
 
         return (
             <div className="min-h-screen py-12 px-4 fade-in">
