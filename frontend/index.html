@@ -1088,13 +1088,20 @@
 
         const handleSubmit = async () => {
             setEmailError('');
-            setEmailLoading(true);
 
-            // Lanzar auth y audio en paralelo para mayor velocidad
+            // Ir directo a la pantalla de procesamiento para que el usuario vea actividad
+            setScreen('processing');
+            setError(null);
+
+            // Lanzar auth y audio en paralelo
             const authPromise = fetch(`${API_URL}/api/auth/acceder`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ email: userEmail.trim().toLowerCase(), password: userPassword }),
+            }).then(async (resp) => {
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.error || 'Error de autenticación');
+                return data;
             });
 
             const formData = new FormData();
@@ -1103,39 +1110,22 @@
             const audioPromise = fetch(`${API_URL}/api/diagnostico`, {
                 method: 'POST',
                 body: formData,
-            });
-
-            // Esperar auth primero — si falla, no seguimos
-            try {
-                const authResp = await authPromise;
-                const authData = await authResp.json();
-                if (!authResp.ok) {
-                    setEmailError(authData.error || 'Error de autenticación');
-                    setEmailLoading(false);
-                    return;
-                }
-                setPanelAuth(authData.email);
-                setPanelHistorial(authData.historial || []);
-            } catch (e) {
-                setEmailError(e.message || 'No se pudo conectar. Inténtalo de nuevo.');
-                setEmailLoading(false);
-                return;
-            }
-
-            // Auth OK — mostrar pantalla de procesamiento mientras el audio termina
-            setEmailLoading(false);
-            setScreen('processing');
-            setError(null);
-
-            try {
-                const response = await audioPromise;
-
-                if (!response.ok) {
-                    const err = await response.json();
+            }).then(async (resp) => {
+                if (!resp.ok) {
+                    const err = await resp.json();
                     throw new Error(err.error || 'Error procesando el track');
                 }
+                return resp.json();
+            });
 
-                const data = await response.json();
+            try {
+                // Esperar ambos en paralelo
+                const [authData, data] = await Promise.all([authPromise, audioPromise]);
+
+                // Auth OK
+                setPanelAuth(authData.email);
+                setPanelHistorial(authData.historial || []);
+
                 setResultado(data);
                 // Guardar en historial
                 guardarEnHistorial(file.name, contexto, data);
@@ -1240,8 +1230,15 @@
                 }).catch(() => {});
                 setScreen('diagnostico');
             } catch (err) {
-                setError(err.message);
-                setScreen('questionnaire');
+                const msg = err.message || 'Error inesperado';
+                // Si es error de auth, volver a la pantalla de email
+                if (msg.includes('autenticación') || msg.includes('Contraseña') || msg.includes('conectar') || msg.includes('base de datos') || msg.includes('4 caracteres')) {
+                    setEmailError(msg);
+                    setScreen('email');
+                } else {
+                    setError(msg);
+                    setScreen('questionnaire');
+                }
             }
         };
 
@@ -1399,14 +1396,14 @@
                                 {emailError && <p className="text-red-400 text-xs mb-3">{emailError}</p>}
                                 <button
                                     onClick={handleSubmit}
-                                    disabled={!userEmail.includes('@') || userPassword.length < 4 || emailLoading}
+                                    disabled={!userEmail.includes('@') || userPassword.length < 4}
                                     className={`w-full py-3 rounded-xl font-medium transition-colors text-sm ${
-                                        userEmail.includes('@') && userPassword.length >= 4 && !emailLoading
+                                        userEmail.includes('@') && userPassword.length >= 4
                                             ? 'bg-purple-600 hover:bg-purple-700 text-white'
                                             : 'bg-gray-700 text-gray-500 cursor-not-allowed'
                                     }`}
                                 >
-                                    {emailLoading ? 'Conectando...' : 'Analizar mi track'}
+                                    Analizar mi track
                                 </button>
                                 <p className="text-gray-600 text-xs mt-4">Si es tu primera vez, se creará tu cuenta automáticamente.</p>
                             </div>
