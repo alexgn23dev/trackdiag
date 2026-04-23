@@ -10,11 +10,17 @@ import soundfile as sf
 
 
 def extraer_senales(audio_path: str, bpm_manual: int | None = None) -> dict:
-    y, sr = librosa.load(audio_path, sr=22050, mono=True)
-
-    # Cargar versión estéreo para análisis de mono compatibility
-    y_stereo, sr_stereo = librosa.load(audio_path, sr=22050, mono=False)
+    # Carga única: stereo a 22050 Hz (sin límite de duración para no perder estructura)
+    y_stereo, sr = librosa.load(audio_path, sr=22050, mono=False)
     es_stereo = y_stereo.ndim == 2 and y_stereo.shape[0] == 2
+
+    # Derivar mono del stereo (evita segunda carga)
+    if es_stereo:
+        y = np.mean(y_stereo, axis=0)
+    else:
+        y = y_stereo if y_stereo.ndim == 1 else y_stereo[0]
+
+    # Duración calculada del array cargado (evita re-lectura del archivo)
     duracion_seg = librosa.get_duration(y=y, sr=sr)
 
     # Tempo — usa BPM manual si se proporciona, si no detecta automáticamente
@@ -175,7 +181,9 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None) -> dict:
     harshness = _analizar_harshness(mel_db, mel_freqs)
 
     # === Loudness (LUFS) ===
-    loudness = _analizar_loudness(audio_path)
+    # Pasamos audio ya cargado para evitar re-lectura desde disco
+    loudness = _analizar_loudness(audio_path, y_preloaded=y, sr_preloaded=sr,
+                                  y_stereo_preloaded=y_stereo if es_stereo else None)
 
     # Madurez estimada
     if duracion_seg < 120 or (not tiene_desarrollo and contraste_energetico == "bajo"):
@@ -299,10 +307,11 @@ def _analizar_harshness(mel_db: np.ndarray, mel_freqs: np.ndarray) -> dict:
     return resultado
 
 
-def _analizar_loudness(audio_path: str) -> dict:
+def _analizar_loudness(audio_path: str, y_preloaded=None, sr_preloaded=None,
+                       y_stereo_preloaded=None) -> dict:
     """
     Mide loudness según ITU-R BS.1770 (LUFS).
-    Carga a sample rate original para máxima precisión.
+    Usa audio precargado si está disponible para evitar re-lectura de disco.
     Retorna: LUFS integrado, short-term max, rango, y nivel relativo.
     """
     resultado = {
@@ -314,12 +323,19 @@ def _analizar_loudness(audio_path: str) -> dict:
     }
 
     try:
-        # Cargar a sample rate original para precisión LUFS
-        data, rate = sf.read(audio_path)
-
-        # Si es mono, duplicar a estéreo (pyloudnorm espera al menos 1D)
-        if data.ndim == 1:
-            data = np.column_stack([data, data])
+        # Usar audio precargado si disponible, si no cargar desde disco
+        if y_preloaded is not None and sr_preloaded is not None:
+            rate = sr_preloaded
+            if y_stereo_preloaded is not None:
+                # Stereo: transponer de (2, N) a (N, 2) para pyloudnorm
+                data = y_stereo_preloaded.T
+            else:
+                # Mono: duplicar a estéreo
+                data = np.column_stack([y_preloaded, y_preloaded])
+        else:
+            data, rate = sf.read(audio_path)
+            if data.ndim == 1:
+                data = np.column_stack([data, data])
 
         meter = pyln.Meter(rate)
 
@@ -329,7 +345,7 @@ def _analizar_loudness(audio_path: str) -> dict:
 
         # Short-term loudness (ventanas de 3 segundos) para encontrar el pico
         block_size = int(rate * 3)  # 3 segundos
-        hop = int(rate * 1)         # salto de 1 segundo
+        hop = int(rate * 1)         # salto de 1 segundo para no perder picos
         lufs_blocks = []
         for i in range(0, len(data) - block_size, hop):
             block = data[i:i + block_size]
@@ -498,11 +514,12 @@ def _analizar_mono_compatibility(y_stereo: np.ndarray, sr: int) -> dict:
         "agudos": (4000, sr // 2),
     }
 
+    # Computar STFT una sola vez fuera del bucle (antes se calculaba 6 veces)
+    stft_left = librosa.stft(left, n_fft=n_fft)
+    stft_right = librosa.stft(right, n_fft=n_fft)
+    freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
+
     for banda_nombre, (freq_min, freq_max) in bandas_config.items():
-        # Filtrar por banda usando STFT
-        stft_left = librosa.stft(left, n_fft=n_fft)
-        stft_right = librosa.stft(right, n_fft=n_fft)
-        freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
 
         mask = (freqs >= freq_min) & (freqs < freq_max)
         if not mask.any():
@@ -660,7 +677,7 @@ def _analizar_armonia(y: np.ndarray, sr: int, hop_length: int,
         energia_tonal / (energia_total + 1e-10), 3
     )
 
-    # Chromagrama sobre la parte armónica (más limpio que sobre el mix completo)
+    # Chromagrama sobre la parte armónica (CQT para máxima precisión tonal en graves)
     chroma = librosa.feature.chroma_cqt(
         y=y_harmonic, sr=sr, hop_length=hop_length, n_chroma=12
     )
