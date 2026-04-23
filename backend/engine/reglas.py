@@ -45,31 +45,54 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     scores["problema_arreglo"] = score
     detalles["problema_arreglo"] = razones
 
-    # --- 2: Poco contraste entre secciones ---
+    # --- 2: Falta de desarrollo / estructura pobre ---
+    # SOLO se activa en casos MUY obvios: loops continuos sin parones, sin desarrollo real.
+    # NO opinamos sobre "contraste entre secciones" porque es subjetivo y difícil de acertar.
+    # Si hay al menos un parón/break y desarrollo, no damos este diagnóstico.
     score, razones = 0, []
-    if senales["contraste_energetico"] == "bajo" and senales["duracion_seg"] > 150:
-        score += 3; razones.append("Contraste bajo en un track de duración razonable")
-    elif senales["contraste_energetico"] == "bajo":
-        score += 1; razones.append("Contraste energético bajo")
-    if not senales["tiene_desarrollo"] and senales["duracion_seg"] > 180:
-        score += 2; razones.append("Track largo sin cambios significativos de energía")
-    if senales["rango_dinamico"] < 2.0:
-        score += 1; razones.append(f"Rango dinámico reducido ({senales['rango_dinamico']})")
+    if not senales["tiene_desarrollo"] and senales["contraste_energetico"] == "bajo" and senales["duracion_seg"] > 150:
+        # Caso claro: track largo, sin desarrollo, sin contraste = loop continuo
+        score += 4; razones.append("El track suena como un loop continuo sin desarrollo ni variaciones de energía")
+    elif not senales["tiene_desarrollo"] and senales["duracion_seg"] > 180:
+        score += 2; razones.append("Track largo sin cambios significativos de energía — falta desarrollo")
+    if senales["cambios_significativos"] == 0 and senales["duracion_seg"] > 120:
+        score += 2; razones.append("No se detectan transiciones ni parones en todo el track")
     if any(p in bloqueo for p in ["repetitivo", "repite", "loop", "monótono", "monotono", "aburrido", "igual"]):
         score += 2; razones.append("El usuario percibe repetitividad")
     if dist["break_desproporcionado"] and senales["duracion_seg"] > 150:
         score += 2; razones.append("Hay un break tan largo que el track pierde narrativa")
     if senales["duracion_seg"] < 120:
-        score -= 2; razones.append("(−) Track muy corto — contraste bajo es esperado en ideas")
-    # Cruce: contraste bajo + densidad alta = muro de sonido constante (refuerza poco_contraste)
-    if senales["contraste_energetico"] == "bajo" and senales["densidad_global"] in ["alta", "saturada"]:
-        score += 1; razones.append("Contraste bajo combinado con densidad alta — el track suena lleno todo el rato sin respiro")
-    # Cruce: contraste bajo + loudness rango bajo = todo aplastado al mismo nivel
-    loudness = senales.get("loudness", {})
-    if senales["contraste_energetico"] == "bajo" and loudness.get("rango_loudness", 99) < 4:
-        score += 1; razones.append("Contraste bajo y rango de loudness muy estrecho — todo suena al mismo volumen sin dinámica")
+        score -= 2; razones.append("(−) Track muy corto — es normal que no haya mucho desarrollo aún")
+    # Si hay desarrollo y contraste, descartar este diagnóstico
+    if senales["tiene_desarrollo"] and senales["contraste_energetico"] in ["medio", "alto"]:
+        score -= 3; razones.append("(−) El track tiene desarrollo y variación de energía")
     scores["poco_contraste"] = score
     detalles["poco_contraste"] = razones
+
+    # --- 2b: Falta de impacto (rango dinámico bajo) ---
+    # Cuando el track tiene estructura pero la subida llega al mismo volumen que el drop,
+    # se pierde la sensación de impacto al entrar el drop.
+    # Solo aplica si el track tiene cierto desarrollo (no es un loop corto).
+    score, razones = 0, []
+    if senales["tiene_desarrollo"] and senales["duracion_seg"] > 120:
+        if senales["rango_dinamico"] < 1.8:
+            score += 3; razones.append(f"Rango dinámico muy bajo ({senales['rango_dinamico']:.1f}) — la subida y el drop suenan prácticamente al mismo volumen")
+        elif senales["rango_dinamico"] < 2.3:
+            score += 2; razones.append(f"Rango dinámico reducido ({senales['rango_dinamico']:.1f}) — poca diferencia de energía entre la subida y el drop")
+        # Cruce: loudness alto + rango dinámico bajo = over-compression aplasta la dinámica
+        loudness = senales.get("loudness", {})
+        if senales["rango_dinamico"] < 2.3 and loudness.get("nivel") in ["alto", "muy_alto"]:
+            score += 1; razones.append("Loudness alto combinado con poco rango dinámico — posible over-compression que aplasta las diferencias de volumen")
+        # Si el contraste energético es alto pero el rango dinámico es bajo, la estructura está pero falta dinámica
+        if senales["contraste_energetico"] == "alto" and senales["rango_dinamico"] < 2.3:
+            score += 1; razones.append("Hay variación estructural pero el volumen se mantiene plano — la estructura no se traduce en impacto")
+    # Track corto o sin desarrollo: no aplica
+    if senales["duracion_seg"] < 120:
+        score -= 2; razones.append("(−) Track corto — el impacto del drop no es relevante aún")
+    if not senales["tiene_desarrollo"]:
+        score -= 2; razones.append("(−) Sin estructura clara — el problema es de desarrollo, no de impacto")
+    scores["falta_impacto"] = score
+    detalles["falta_impacto"] = razones
 
     # --- 3: Mezcla prematura ---
     score, razones = 0, []
@@ -141,27 +164,34 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     detalles["exceso_lowend"] = razones
 
     # --- 5: Exceso de capas / densidad ---
+    # SOLO se activa si la densidad medida es alta o saturada.
+    # Si la densidad es baja o media, este diagnóstico no aplica (evitar incoherencia).
     score, razones = 0, []
-    if senales["densidad_global"] == "saturada":
-        score += 3; razones.append(f"Densidad espectral saturada ({senales['densidad_espectral']:.4f})")
-    elif senales["densidad_global"] == "alta":
-        score += 2; razones.append(f"Densidad espectral alta ({senales['densidad_espectral']:.4f})")
-    if senales["rango_dinamico"] < 1.8:
-        score += 2; razones.append(f"Muy poco rango dinámico ({senales['rango_dinamico']}) — todo suena al mismo nivel")
-    elif senales["rango_dinamico"] < 2.5:
-        score += 1; razones.append(f"Rango dinámico reducido ({senales['rango_dinamico']})")
-    if any(p in bloqueo for p in ["lleno", "denso", "saturado", "confuso", "empastad", "cargado", "capas"]):
-        score += 2; razones.append("El usuario percibe exceso de densidad")
-    # Cruce: densidad alta + contraste bajo = muro de sonido (problema real)
-    if senales["densidad_global"] in ["alta", "saturada"] and senales["contraste_energetico"] == "bajo":
-        score += 2; razones.append("Densidad alta sin variación — suena como un muro de sonido constante")
-    # Cruce: densidad alta + contraste alto = solo son los drops, probablemente ok
-    if senales["densidad_global"] in ["alta", "saturada"] and senales["contraste_energetico"] == "alto":
-        score -= 1; razones.append("(−) Hay contraste — la densidad puede ser solo de las secciones de alta energía")
-    # Cruce: densidad + loudness alto = posible over-compression aplastando la mezcla
-    loudness = senales.get("loudness", {})
-    if senales["densidad_global"] in ["alta", "saturada"] and loudness.get("nivel") in ["alto", "muy_alto"]:
-        score += 1; razones.append("Densidad alta combinada con loudness alto — posible over-compression aplastando la mezcla")
+    if senales["densidad_global"] in ["alta", "saturada"]:
+        if senales["densidad_global"] == "saturada":
+            score += 3; razones.append(f"Densidad espectral saturada ({senales['densidad_espectral']:.4f})")
+        else:
+            score += 2; razones.append(f"Densidad espectral alta ({senales['densidad_espectral']:.4f})")
+        if senales["rango_dinamico"] < 1.8:
+            score += 2; razones.append(f"Muy poco rango dinámico ({senales['rango_dinamico']}) — todo suena al mismo nivel")
+        elif senales["rango_dinamico"] < 2.5:
+            score += 1; razones.append(f"Rango dinámico reducido ({senales['rango_dinamico']})")
+        if any(p in bloqueo for p in ["lleno", "denso", "saturado", "confuso", "empastad", "cargado", "capas"]):
+            score += 2; razones.append("El usuario percibe exceso de densidad")
+        # Cruce: densidad alta + contraste bajo = muro de sonido (problema real)
+        if senales["contraste_energetico"] == "bajo":
+            score += 2; razones.append("Densidad alta sin variación — suena como un muro de sonido constante")
+        # Cruce: densidad alta + contraste alto = solo son los drops, probablemente ok
+        if senales["contraste_energetico"] == "alto":
+            score -= 1; razones.append("(−) Hay contraste — la densidad puede ser solo de las secciones de alta energía")
+        # Cruce: densidad + loudness alto = posible over-compression aplastando la mezcla
+        loudness = senales.get("loudness", {})
+        if loudness.get("nivel") in ["alto", "muy_alto"]:
+            score += 1; razones.append("Densidad alta combinada con loudness alto — posible over-compression aplastando la mezcla")
+    else:
+        # Densidad baja/media: solo considerar si el usuario lo percibe explícitamente
+        if any(p in bloqueo for p in ["lleno", "denso", "saturado", "confuso", "empastad", "cargado", "capas"]):
+            score += 1; razones.append("El usuario percibe exceso de densidad (aunque las mediciones no lo confirman)")
     scores["exceso_densidad"] = score
     detalles["exceso_densidad"] = razones
 

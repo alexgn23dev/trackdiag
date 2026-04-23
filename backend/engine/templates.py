@@ -21,20 +21,37 @@ TEMPLATES = {
         ),
     },
     "poco_contraste": {
-        "titulo": "El track suena demasiado uniforme — falta contraste entre secciones.",
+        "titulo": "El track necesita más desarrollo — suena como un loop continuo sin evolución.",
         "prioridades": [
-            "Identifica qué sección debería ser el momento de máxima energía y cuál el de mínima.",
-            "Quita elementos en las secciones tranquilas y añade capas solo en los momentos de máxima energía.",
-            "Usa filtros, automatizaciones o silencios para marcar transiciones entre bloques.",
+            "Crea al menos una sección de alta energía y una de baja energía claramente diferenciadas.",
+            "Añade un break o parón que rompa la monotonía y genere expectativa antes del drop.",
+            "Usa filtros, automatizaciones o silencios para crear transiciones entre las secciones.",
         ],
         "no_tocar": [
-            "No sigas sumando capas por todo el track — el problema no es falta de elementos, es falta de variación.",
-            "No mezcles en detalle hasta que el contraste entre secciones sea evidente.",
+            "No sigas sumando capas por todo el track — el problema no es falta de elementos, es falta de estructura.",
+            "No mezcles en detalle hasta que tengas una estructura con intro, desarrollo, clímax y cierre.",
         ],
         "siguiente_sesion": (
-            "En tu próxima sesión, elige el momento de mayor energía (drop o clímax) y el de menor energía "
-            "(break o intro). Haz que suenen claramente distintos: quita al menos 3-4 elementos del momento bajo "
-            "y asegúrate de que el momento alto tenga todo lo que necesita."
+            "En tu próxima sesión, escucha un track de referencia de tu género y fíjate en su estructura: "
+            "dónde quita elementos, dónde los suma, dónde hay un parón. Intenta replicar ese esquema "
+            "con tus propios sonidos."
+        ),
+    },
+    "falta_impacto": {
+        "titulo": "La subida y el drop suenan al mismo volumen — se pierde el impacto.",
+        "prioridades": [
+            "Crea una automatización de volumen en el bus master (o en los elementos principales) que baje ligeramente el nivel durante la subida, y vuelva al volumen original justo al entrar el drop. Aunque suene contraintuitivo, este truco es muy usado en producción profesional para aumentar la sensación de impacto.",
+            "Revisa los elementos de la subida: si tienes risers, snare rolls o efectos que suben de volumen progresivamente, asegúrate de que no igualan o superan el nivel del drop.",
+            "Prueba a quitar algún elemento justo antes del drop (un compás de silencio, un corte de kick, un filtro) — el contraste momentáneo hará que la entrada del drop se sienta mucho más potente.",
+        ],
+        "no_tocar": [
+            "No subas el volumen del drop para compensar — el truco está en bajar lo que viene antes, no en subir lo que viene después.",
+            "No apliques más compresión o limiting al master para intentar igualar niveles — eso aplasta más la dinámica.",
+        ],
+        "siguiente_sesion": (
+            "En tu próxima sesión, escucha tu track de referencia favorito con un medidor de volumen. "
+            "Fíjate en cómo el volumen baja justo antes del drop y sube al entrar. "
+            "Intenta replicar esa curva de energía con automatizaciones en tu track."
         ),
     },
     "mezcla_prematura": {

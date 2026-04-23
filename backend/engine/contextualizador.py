@@ -326,6 +326,21 @@ def _generar_tips_genero(diagnostico_id: str, info_genero: dict, genero: str, se
                 f"Menos elementos bien colocados suenan mejor que muchos compitiendo."
             )
 
+    elif diagnostico_id == "falta_impacto":
+        tips.append(
+            f"En {_label_genero(genero)}, el impacto del drop es clave. "
+            f"Escucha una referencia con un medidor de volumen y fíjate en cómo "
+            f"la energía baja justo antes del drop y sube al entrar."
+        )
+        bpm = senales.get("bpm", 0)
+        if bpm > 0:
+            compas_seg = 4 * 60 / bpm
+            tips.append(
+                f"A {bpm} BPM, prueba a hacer la automatización de bajada de volumen "
+                f"durante los últimos 4 compases antes del drop ({compas_seg * 4:.0f}s). "
+                f"Una bajada sutil de 1-3dB es suficiente para crear la sensación de impacto."
+            )
+
     elif diagnostico_id == "carencia_espectral":
         tips.append(
             f"Escucha 2-3 referencias de {_label_genero(genero)} y compara qué elementos "
@@ -449,6 +464,22 @@ def _generar_nota_contextual(
                 "El exceso de graves suele ser un problema de acumulación: kick, bajo, "
                 "pads con contenido sub, efectos con cola grave... Cada uno parece poco, "
                 "pero juntos saturan la zona."
+            )
+
+    elif diagnostico_id == "falta_impacto":
+        if experiencia == "menos_6m":
+            partes.append(
+                "¿Sabes esa sensación cuando un drop entra y se siente potente? "
+                "El secreto no está en subir el volumen del drop, sino en bajar la energía "
+                "justo antes. Es contraintuitivo, pero es uno de los trucos más usados "
+                "en producción profesional."
+            )
+        else:
+            partes.append(
+                "El impacto de un drop se crea con contraste de volumen: si la subida llega "
+                "al mismo nivel que el drop, no hay sorpresa. Una automatización sutil de volumen "
+                "hacia abajo en los últimos compases antes del drop crea esa sensación de 'explosión' "
+                "cuando entra. 1-3dB de bajada es suficiente."
             )
 
     elif diagnostico_id == "exceso_densidad":
