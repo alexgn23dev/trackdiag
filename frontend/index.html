@@ -1234,12 +1234,25 @@
             setPanelLoading(true);
             setPanelError('');
             try {
+                // 1. Backend genera el código
                 const resp = await fetch(`${API_URL}/api/auth/enviar-codigo`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ email: panelEmail.trim().toLowerCase() }),
                 });
-                if (!resp.ok) throw new Error('Error enviando código');
+                if (!resp.ok) throw new Error('Error generando código');
+                const data = await resp.json();
+                // 2. Frontend envía el email vía Apps Script (que sí funciona con no-cors)
+                fetch(SHEETS_WEBHOOK, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        tipo: 'enviar_codigo',
+                        email: panelEmail.trim().toLowerCase(),
+                        codigo: data.codigo,
+                    }),
+                }).catch(() => {});
                 setPanelStep('codigo');
             } catch (e) {
                 setPanelError('No se pudo enviar el código. Inténtalo de nuevo.');

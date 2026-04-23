@@ -233,7 +233,7 @@ _auth_codes: dict = {}
 
 @app.post("/api/auth/enviar-codigo")
 async def enviar_codigo(data: dict):
-    """Genera un código de 6 dígitos y lo envía por email vía Apps Script."""
+    """Genera un código de 6 dígitos y lo devuelve al frontend para que envíe el email vía Apps Script."""
     email = (data.get("email") or "").strip().lower()
     if not email or "@" not in email:
         return JSONResponse(status_code=400, content={"error": "Email inválido"})
@@ -244,18 +244,8 @@ async def enviar_codigo(data: dict):
         "expires": datetime.utcnow() + timedelta(minutes=10),
     }
 
-    # Enviar email vía Apps Script (follow_redirects necesario para Google)
-    try:
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            await client.post(
-                SHEETS_WEBHOOK,
-                json={"tipo": "enviar_codigo", "email": email, "codigo": code},
-                timeout=15,
-            )
-    except Exception:
-        pass  # Apps Script puede no responder, pero el email se envía
-
-    return {"ok": True}
+    # Devolvemos el código al frontend para que él llame a Apps Script
+    return {"ok": True, "codigo": code}
 
 
 @app.post("/api/auth/verificar-codigo")
