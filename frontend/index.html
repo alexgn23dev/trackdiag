@@ -870,6 +870,18 @@
                                             headers: {'Content-Type': 'application/json'},
                                             body: JSON.stringify(fb),
                                         }).catch(() => {});
+                                        // Enviar a Google Sheets
+                                        fetch(SHEETS_WEBHOOK, {
+                                            method: 'POST',
+                                            mode: 'no-cors',
+                                            headers: {'Content-Type': 'application/json'},
+                                            body: JSON.stringify({
+                                                tipo: 'feedback_util',
+                                                email: userEmail,
+                                                util: feedbackUtil ? 'Sí' : 'No',
+                                                comentario: feedbackComentario || '',
+                                            }),
+                                        }).catch(() => {});
                                         setFeedbackEnviado(true);
                                         setTimeout(() => setFeedbackStep(2), 1200);
                                     }}
