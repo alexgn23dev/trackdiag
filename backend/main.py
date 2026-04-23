@@ -323,6 +323,24 @@ async def obtener_historial(data: dict):
 
 
 # =========================================================================
+# Dashboard admin — ruta protegida con clave
+# =========================================================================
+
+ADMIN_KEY = os.environ.get("ADMIN_KEY", "trackdiag2024")
+
+
+@app.get("/dashboard")
+def serve_dashboard(key: str = ""):
+    """Dashboard admin protegido por clave en query param."""
+    if key != ADMIN_KEY:
+        return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
+    dashboard_path = FRONTEND_DIR / "dashboard.html"
+    if not dashboard_path.is_file():
+        return JSONResponse(status_code=404, content={"error": "Dashboard no encontrado"})
+    return FileResponse(dashboard_path)
+
+
+# =========================================================================
 # Frontend — servir el SPA
 # =========================================================================
 
@@ -334,6 +352,9 @@ def serve_frontend():
 @app.get("/{full_path:path}")
 def serve_catch_all(full_path: str):
     """Catch-all para SPA: si no es /api, devuelve index.html."""
+    # Proteger acceso directo al archivo dashboard.html
+    if full_path == "dashboard.html":
+        return JSONResponse(status_code=403, content={"error": "Usa /dashboard?key=..."})
     file_path = FRONTEND_DIR / full_path
     if file_path.is_file():
         return FileResponse(file_path)
