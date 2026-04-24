@@ -33,7 +33,8 @@
     <script type="text/babel">
     const { useState, useEffect, useMemo } = React;
 
-    const SHEETS_API = 'https://script.google.com/macros/s/AKfycby-LFa0ztbqPMD_E-zkRfAfSKLmiTjPjVXdAn44E_rHRHq3XYLCygZqoTlhhT8yT_Mh/exec';
+    // Dashboard data is fetched via backend proxy (no direct Sheets access)
+    const API_URL = window.location.hostname === 'localhost' ? 'http://localhost:8000' : '';
 
     // =========================================================================
     // Utilidades
@@ -597,15 +598,18 @@
         const [tab, setTab] = useState('overview'); // overview | analisis | users | feedback
         const [calendarMonth, setCalendarMonth] = useState(() => new Date(2026, 3, 1)); // Abril 2026
 
+        // Get admin key from referrer URL (passed when dashboard was served)
+        const adminKey = new URLSearchParams(window.location.search).get('key') || '';
+
         useEffect(() => {
-            fetch(SHEETS_API)
-                .then(r => r.json())
+            fetch(`${API_URL}/api/sheets/datos?key=${encodeURIComponent(adminKey)}`)
+                .then(r => { if (!r.ok) throw new Error('Acceso denegado'); return r.json(); })
                 .then(data => {
                     setRawData(data);
                     setLoading(false);
                 })
                 .catch(err => {
-                    setError('No se pudo conectar con el Sheet. ¿Desplegaste el doGet()?');
+                    setError('No se pudo conectar con el Sheet o acceso denegado.');
                     setLoading(false);
                 });
         }, []);
@@ -731,7 +735,7 @@
                         <p className="text-gray-500 text-xs mt-1">{totalUsers} análisis · {uniqueEmails} usuarios únicos · Actualizado al abrir</p>
                     </div>
                     <button
-                        onClick={() => { setLoading(true); fetch(SHEETS_API).then(r => r.json()).then(data => { setRawData(data); setLoading(false); }); }}
+                        onClick={() => { setLoading(true); fetch(`${API_URL}/api/sheets/datos?key=${encodeURIComponent(adminKey)}`).then(r => r.json()).then(data => { setRawData(data); setLoading(false); }); }}
                         className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-xs transition-colors"
                     >
                         Actualizar

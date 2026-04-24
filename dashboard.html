@@ -33,7 +33,8 @@
     <script type="text/babel">
     const { useState, useEffect, useMemo } = React;
 
-    const SHEETS_API = 'https://script.google.com/macros/s/AKfycby-LFa0ztbqPMD_E-zkRfAfSKLmiTjPjVXdAn44E_rHRHq3XYLCygZqoTlhhT8yT_Mh/exec';
+    // Dashboard data is fetched via backend proxy (no direct Sheets access)
+    const API_URL = window.location.hostname === 'localhost' ? 'http://localhost:8000' : '';
 
     // =========================================================================
     // Utilidades

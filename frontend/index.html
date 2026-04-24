@@ -114,8 +114,6 @@
         ? 'http://localhost:8000'
         : '';
 
-    const SHEETS_WEBHOOK = 'https://script.google.com/macros/s/AKfycby-LFa0ztbqPMD_E-zkRfAfSKLmiTjPjVXdAn44E_rHRHq3XYLCygZqoTlhhT8yT_Mh/exec';
-
     // =========================================================================
     // Componentes de UI
     // =========================================================================
@@ -1002,25 +1000,23 @@
                                             comentario: feedbackComentario,
                                             diagnostico: r.diagnostico_principal?.id,
                                         };
-                                        // Enviar a API local
+                                        // Enviar a API local (con JWT auth)
                                         fetch(`${API_URL}/api/feedback`, {
                                             method: 'POST',
-                                            headers: {'Content-Type': 'application/json'},
+                                            headers: authHeaders(),
                                             body: JSON.stringify(fb),
                                         }).catch(() => {});
-                                        // Enviar a Google Sheets — construir comentario completo
+                                        // Enviar feedback a Google Sheets via backend proxy
                                         const comentarioCompleto = [
                                             feedbackCoincide === 'si' ? '[COINCIDE]' : feedbackCoincide === 'masomenos' ? '[PARCIAL]' : '[NO COINCIDE]',
                                             feedbackProblemaReal ? `Problema real: ${feedbackProblemaReal}` : '',
                                             feedbackNoDetectado ? `No detectado: ${feedbackNoDetectado}` : '',
                                             feedbackComentario ? `Comentario: ${feedbackComentario}` : '',
                                         ].filter(Boolean).join(' | ');
-                                        fetch(SHEETS_WEBHOOK, {
+                                        fetch(`${API_URL}/api/sheets/feedback`, {
                                             method: 'POST',
-                                            mode: 'no-cors',
                                             headers: {'Content-Type': 'application/json'},
                                             body: JSON.stringify({
-                                                tipo: 'feedback_util',
                                                 email: userEmail,
                                                 fue_util: feedbackCoincide === 'si' ? 'Sí' : feedbackCoincide === 'masomenos' ? 'Parcial' : 'No',
                                                 comentario: comentarioCompleto,
@@ -1069,19 +1065,19 @@
                                         <button
                                             onClick={() => {
                                                 if (!feedbackEnlace.trim()) return;
-                                                // Enviar a Google Sheets (actualizar fila existente)
-                                                fetch(SHEETS_WEBHOOK, {
+                                                // Enviar enlace de feedback real via backend proxy
+                                                fetch(`${API_URL}/api/sheets/feedback-real`, {
                                                     method: 'POST',
+                                                    headers: {'Content-Type': 'application/json'},
                                                     body: JSON.stringify({
-                                                        tipo: 'feedback_real',
                                                         email: userEmail,
                                                         enlace: feedbackEnlace.trim(),
                                                     }),
                                                 }).catch(() => {});
-                                                // Enviar a API local
+                                                // Enviar a API local (con JWT auth)
                                                 fetch(`${API_URL}/api/feedback-request`, {
                                                     method: 'POST',
-                                                    headers: {'Content-Type': 'application/json'},
+                                                    headers: authHeaders(),
                                                     body: JSON.stringify({
                                                         enlace: feedbackEnlace.trim(),
                                                         diagnostico_id: r.diagnostico_principal?.id,
@@ -1133,6 +1129,30 @@
     // =========================================================================
     // App principal
     // =========================================================================
+
+    // =========================================================================
+    // Token helpers
+    // =========================================================================
+    const TOKEN_KEY = 'mentotrack_token';
+    const TOKEN_EMAIL_KEY = 'mentotrack_email';
+
+    function saveAuth(email, token) {
+        localStorage.setItem(TOKEN_KEY, token);
+        localStorage.setItem(TOKEN_EMAIL_KEY, email);
+    }
+    function getAuth() {
+        return { email: localStorage.getItem(TOKEN_EMAIL_KEY) || '', token: localStorage.getItem(TOKEN_KEY) || '' };
+    }
+    function clearAuth() {
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(TOKEN_EMAIL_KEY);
+    }
+    function authHeaders() {
+        const { token } = getAuth();
+        const h = { 'Content-Type': 'application/json' };
+        if (token) h['Authorization'] = `Bearer ${token}`;
+        return h;
+    }
 
     function App() {
         const [screen, setScreen] = useState('landing'); // landing | upload | questionnaire | email | processing | diagnostico | historial | panel_login | panel
@@ -1258,7 +1278,10 @@
                 // Esperar ambos en paralelo
                 const [authData, data] = await Promise.all([authPromise, audioPromise]);
 
-                // Auth OK
+                // Auth OK — save JWT token
+                if (authData.token) {
+                    saveAuth(authData.email, authData.token);
+                }
                 setPanelAuth(authData.email);
                 setPanelHistorial(authData.historial || []);
 
@@ -1418,13 +1441,11 @@
                     estado: dx.estado_track,
                 };
 
-                // Enviar a Google Sheets
-                fetch(SHEETS_WEBHOOK, {
+                // Enviar registro a Google Sheets via backend proxy
+                fetch(`${API_URL}/api/sheets/registro`, {
                     method: 'POST',
-                    mode: 'no-cors',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        tipo: 'registro',
                         timestamp: new Date().toISOString(),
                         email: userEmail,
                         nombre_proyecto: nombreProyecto,
@@ -1437,7 +1458,7 @@
             } catch (err) {
                 const msg = err.message || 'Error inesperado';
                 // Si es error de auth, volver a la pantalla de email
-                if (msg.includes('autenticación') || msg.includes('Contraseña') || msg.includes('conectar') || msg.includes('base de datos') || msg.includes('4 caracteres')) {
+                if (msg.includes('autenticación') || msg.includes('Contraseña') || msg.includes('conectar') || msg.includes('base de datos') || msg.includes('8 caracteres')) {
                     setEmailError(msg);
                     setScreen('email');
                 } else {
@@ -1465,7 +1486,7 @@
 
         // ---- Auth: acceder con contraseña ----
         const handleAccederPanel = async () => {
-            if (!panelEmail.includes('@') || panelPassword.length < 4) return;
+            if (!panelEmail.includes('@') || panelPassword.length < 8) return;
             setPanelLoading(true);
             setPanelError('');
             try {
@@ -1480,6 +1501,10 @@
                     setPanelLoading(false);
                     return;
                 }
+                // Save JWT token
+                if (data.token) {
+                    saveAuth(data.email, data.token);
+                }
                 setPanelAuth(data.email);
                 setPanelHistorial(data.historial || []);
                 setScreen('panel');
@@ -1491,6 +1516,7 @@
 
         // ---- Panel: cerrar sesión ----
         const handlePanelLogout = () => {
+            clearAuth();
             setPanelAuth(null);
             setPanelHistorial([]);
             setPanelEmail('');
@@ -1502,16 +1528,29 @@
 
         // ---- Panel: abrir ----
         const handleOpenPanel = () => {
-            if (panelAuth) {
-                // Ya autenticado, refrescar historial sin pedir contraseña
+            const saved = getAuth();
+            if (panelAuth || saved.token) {
+                const email = panelAuth || saved.email;
+                setPanelAuth(email);
+                // Ya autenticado, refrescar historial con JWT token
                 setPanelLoading(true);
                 fetch(`${API_URL}/api/auth/historial`, {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ email: panelAuth }),
+                    headers: authHeaders(),
+                    body: JSON.stringify({ email }),
                 })
-                .then(r => r.json())
-                .then(data => { setPanelHistorial(data.historial || []); setPanelLoading(false); })
+                .then(r => {
+                    if (r.status === 401) {
+                        // Token expirado, limpiar y pedir login
+                        clearAuth();
+                        setPanelAuth(null);
+                        setPanelLoading(false);
+                        setScreen('panel_login');
+                        return null;
+                    }
+                    return r.json();
+                })
+                .then(data => { if (data) { setPanelHistorial(data.historial || []); setPanelLoading(false); } })
                 .catch(() => setPanelLoading(false));
                 setScreen('panel');
             } else {
@@ -1598,14 +1637,14 @@
                                     onChange={(e) => { setUserPassword(e.target.value); setEmailError(''); }}
                                     placeholder="Contraseña"
                                     className="w-full px-4 py-3 rounded-lg text-sm input-field mb-3"
-                                    onKeyDown={(e) => { if (e.key === 'Enter' && userEmail.includes('@') && userPassword.length >= 4) handleSubmit(); }}
+                                    onKeyDown={(e) => { if (e.key === 'Enter' && userEmail.includes('@') && userPassword.length >= 8) handleSubmit(); }}
                                 />
                                 {emailError && <p className="text-red-400 text-xs mb-3">{emailError}</p>}
                                 <button
                                     onClick={handleSubmit}
-                                    disabled={!userEmail.includes('@') || userPassword.length < 4}
+                                    disabled={!userEmail.includes('@') || userPassword.length < 8}
                                     className={`w-full py-3 rounded-xl font-medium transition-colors text-sm ${
-                                        userEmail.includes('@') && userPassword.length >= 4
+                                        userEmail.includes('@') && userPassword.length >= 8
                                             ? 'btn-primary'
                                             : 'btn-primary'
                                     }`}
@@ -1652,14 +1691,14 @@
                                         onChange={(e) => { setPanelPassword(e.target.value); setPanelError(''); }}
                                         placeholder="Contraseña"
                                         className="w-full px-4 py-3 rounded-lg text-sm input-field mb-3"
-                                        onKeyDown={(e) => { if (e.key === 'Enter' && panelEmail.includes('@') && panelPassword.length >= 4) handleAccederPanel(); }}
+                                        onKeyDown={(e) => { if (e.key === 'Enter' && panelEmail.includes('@') && panelPassword.length >= 8) handleAccederPanel(); }}
                                     />
                                     {panelError && <p className="text-red-400 text-xs mb-3">{panelError}</p>}
                                     <button
                                         onClick={handleAccederPanel}
-                                        disabled={!panelEmail.includes('@') || panelPassword.length < 4 || panelLoading}
+                                        disabled={!panelEmail.includes('@') || panelPassword.length < 8 || panelLoading}
                                         className={`w-full py-3 rounded-xl font-medium transition-colors text-sm ${
-                                            panelEmail.includes('@') && panelPassword.length >= 4 && !panelLoading
+                                            panelEmail.includes('@') && panelPassword.length >= 8 && !panelLoading
                                                 ? 'btn-primary'
                                                 : 'btn-primary'
                                         }`}
