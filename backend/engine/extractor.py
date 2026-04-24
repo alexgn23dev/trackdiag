@@ -443,19 +443,26 @@ def _analizar_distribucion(bloques_rms: list) -> dict:
     distribucion["max_seccion_alta"] = max_alta
     distribucion["ratio_bajo_alto"] = round(n_bloques_bajos / (n_bloques_altos + 1e-10), 2)
 
-    if len(secciones) >= 2 and secciones[0][0] == "alto" and secciones[0][1] >= 2:
+    # Inicio abrupto: solo si arranca con ≥3 bloques altos seguidos (≥24 compases)
+    # En electrónica, 2 bloques altos al inicio (~16 compases) es una intro
+    # normal con kick/hats para mezcla DJ, no un "inicio abrupto".
+    if len(secciones) >= 2 and secciones[0][0] == "alto" and secciones[0][1] >= 3:
         distribucion["inicio_abrupto"] = True
-    if len(secciones) >= 2 and secciones[-1][0] == "alto" and secciones[-1][1] >= 2:
+    # Sin outro: ≥3 bloques altos al final sin caída
+    if len(secciones) >= 2 and secciones[-1][0] == "alto" and secciones[-1][1] >= 3:
         distribucion["sin_outro"] = True
     if max_baja > total_bloques * 0.35:
         distribucion["break_desproporcionado"] = True
     if max_alta > 0 and max_alta < total_bloques * 0.20 and max_baja > max_alta * 1.5:
         distribucion["drop_corto"] = True
 
+    # Estructura problemática: solo por distribución real (break largo o drop corto).
+    # inicio_abrupto + sin_outro NO es problemático por sí solo en electrónica —
+    # muchos tracks bien producidos empiezan y acaban con energía alta (kick/hats
+    # para mezcla DJ). Lo reportamos como dato informativo, no como problema.
     distribucion["estructura_problematica"] = (
         distribucion["break_desproporcionado"]
         or distribucion["drop_corto"]
-        or (distribucion["inicio_abrupto"] and distribucion["sin_outro"])
     )
 
     return distribucion

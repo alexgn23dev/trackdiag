@@ -37,10 +37,11 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     if dist["drop_corto"]:
         score += 2; razones.append(f"La sección de alta energía más larga es muy corta ({dist['max_seccion_alta']} bloques)")
     if dist["inicio_abrupto"]:
-        score += 1; razones.append("El track empieza directamente con energía alta, sin introducción")
+        score += 1; razones.append("El track empieza directamente con energía alta, sin introducción gradual")
     if dist["sin_outro"]:
-        score += 1; razones.append("El track termina con energía alta, sin outro")
-    if senales["contraste_energetico"] == "alto" and senales["tiene_desarrollo"] and not dist["estructura_problematica"]:
+        score += 1; razones.append("El track termina con energía alta, sin outro gradual")
+    # Track con buen contraste y desarrollo: descontar puntos de estructura
+    if senales["contraste_energetico"] in ["medio", "alto"] and senales["tiene_desarrollo"] and not dist["estructura_problematica"]:
         score -= 3; razones.append("(−) El track muestra buen contraste, desarrollo y distribución")
     scores["problema_arreglo"] = score
     detalles["problema_arreglo"] = razones
@@ -70,22 +71,20 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     detalles["poco_contraste"] = razones
 
     # --- 2b: Falta de impacto (rango dinámico bajo) ---
-    # Cuando el track tiene estructura pero la subida llega al mismo volumen que el drop,
-    # se pierde la sensación de impacto al entrar el drop.
-    # Solo aplica si el track tiene cierto desarrollo (no es un loop corto).
+    # SOLO diagnosticar en casos MUY obvios donde el track es realmente plano.
+    # Un rango dinámico de ~2.0 es perfectamente normal en producción electrónica
+    # bien comprimida. Solo alertamos cuando es extremadamente bajo (<1.5).
+    # Recalibrado: track de productor profesional con rango 1.99 generaba falso positivo.
     score, razones = 0, []
     if senales["tiene_desarrollo"] and senales["duracion_seg"] > 120:
-        if senales["rango_dinamico"] < 1.8:
-            score += 3; razones.append(f"Rango dinámico muy bajo ({senales['rango_dinamico']:.1f}) — la subida y el drop suenan a un volumen muy similar")
-        elif senales["rango_dinamico"] < 2.3:
-            score += 2; razones.append(f"Rango dinámico reducido ({senales['rango_dinamico']:.1f}) — poca diferencia de energía entre la subida y el drop")
-        # Cruce: loudness alto + rango dinámico bajo = over-compression aplasta la dinámica
+        if senales["rango_dinamico"] < 1.4:
+            score += 3; razones.append(f"Rango dinámico extremadamente bajo ({senales['rango_dinamico']:.1f}) — el track suena completamente plano, sin diferencia entre partes")
+        elif senales["rango_dinamico"] < 1.6:
+            score += 1; razones.append(f"Rango dinámico bastante bajo ({senales['rango_dinamico']:.1f}) — poca diferencia de volumen entre secciones")
+        # Cruce: loudness alto + rango dinámico MUY bajo = over-compression clara
         loudness = senales.get("loudness", {})
-        if senales["rango_dinamico"] < 2.3 and loudness.get("nivel") in ["alto", "muy_alto"]:
-            score += 1; razones.append("Loudness alto combinado con poco rango dinámico — posible over-compression que aplasta las diferencias de volumen")
-        # Si el contraste energético es alto pero el rango dinámico es bajo, la estructura está pero falta dinámica
-        if senales["contraste_energetico"] == "alto" and senales["rango_dinamico"] < 2.3:
-            score += 1; razones.append("Hay variación estructural pero el volumen se mantiene plano — la estructura no se traduce en impacto")
+        if senales["rango_dinamico"] < 1.6 and loudness.get("nivel") in ["alto", "muy_alto"]:
+            score += 1; razones.append("Loudness alto combinado con rango dinámico muy bajo — posible over-compression")
     # Track corto o sin desarrollo: no aplica
     if senales["duracion_seg"] < 120:
         score -= 2; razones.append("(−) Track corto — el impacto del drop no es relevante aún")
@@ -316,7 +315,7 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
         # Géneros melódicos: la falta de armonía pesa más
         genero = contexto.get("genero", "")
         generos_melodicos = ["trance", "progressive_trance", "progressive_house", "melodic_techno", "deep_house"]
-        generos_percusivos = ["techno", "techno_acido", "minimal"]
+        generos_percusivos = ["techno", "techno_acido", "minimal", "tech_house"]
         if genero in generos_melodicos and armonia.get("contenido_tonal", 0) < 0.35:
             score += 2; razones.append(
                 f"En {genero}, el contenido melódico es parte esencial del género — "
