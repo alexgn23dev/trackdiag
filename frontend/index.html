@@ -8,22 +8,69 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Arimo:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; background: #0a0a0a; color: #e5e5e5; }
-        .drop-zone { border: 2px dashed #333; transition: all 0.2s; }
-        .drop-zone.active { border-color: #8b5cf6; background: rgba(139, 92, 246, 0.05); }
-        .drop-zone:hover { border-color: #6d28d9; }
+        @font-face {
+            font-family: 'Termina';
+            src: url('Termina-Demi.woff2') format('woff2'),
+                 url('Termina-Demi.woff') format('woff');
+            font-weight: 600;
+            font-style: normal;
+            font-display: swap;
+        }
+        :root {
+            --po-dark: #2C2C2C;
+            --po-medium: #4C4C4C;
+            --po-light: #BCBCBC;
+            --po-white: #FFFFFF;
+            --po-green: #25F464;
+            --po-purple: #6D10FF;
+            --po-bg: #1a1a1a;
+            --po-card: #242424;
+            --po-border: #3a3a3a;
+        }
+        body { font-family: 'Arimo', sans-serif; background: var(--po-bg); color: var(--po-light); }
+        h1, h2, h3, .font-heading { font-family: 'Termina', sans-serif; letter-spacing: -0.01em; }
+        .drop-zone { border: 2px dashed var(--po-border); transition: all 0.3s ease; }
+        .drop-zone.active { border-color: var(--po-green); background: rgba(37, 244, 100, 0.04); }
+        .drop-zone:hover { border-color: var(--po-purple); background: rgba(109, 16, 255, 0.03); }
         .fade-in { animation: fadeIn 0.4s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         .pulse-dot { animation: pulse 1.5s ease-in-out infinite; }
         @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
-        input[type="range"] { -webkit-appearance: none; background: #222; height: 4px; border-radius: 2px; }
-        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; background: #8b5cf6; border-radius: 50%; cursor: pointer; }
-        .card { background: #141414; border: 1px solid #222; border-radius: 12px; }
-        .badge-verde { background: #7f1d1d; color: #f87171; }
-        .badge-desarrollo { background: #713f12; color: #facc15; }
-        .badge-avanzado { background: #1e3a5f; color: #60a5fa; }
+        input[type="range"] { -webkit-appearance: none; background: var(--po-medium); height: 4px; border-radius: 2px; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; background: var(--po-purple); border-radius: 50%; cursor: pointer; }
+        .card { background: var(--po-card); border: 1px solid var(--po-border); border-radius: 12px; }
+        .badge-verde { background: rgba(248,113,113,0.1); color: #f87171; }
+        .badge-desarrollo { background: rgba(250,204,21,0.1); color: #facc15; }
+        .badge-avanzado { background: rgba(96,165,250,0.1); color: #60a5fa; }
+        .btn-primary { background: var(--po-purple); color: var(--po-white); transition: all 0.2s; }
+        .btn-primary:hover { background: #5a0dd6; }
+        .btn-primary:disabled { background: var(--po-medium); color: #777; cursor: not-allowed; }
+        .btn-secondary { background: var(--po-dark); color: var(--po-light); border: 1px solid var(--po-border); transition: all 0.2s; }
+        .btn-secondary:hover { background: var(--po-medium); }
+        .input-field { background: var(--po-dark); border: 1px solid var(--po-border); color: var(--po-white); }
+        .input-field:focus { outline: none; border-color: var(--po-purple); }
+        .input-field::placeholder { color: #666; }
+        .accent-green { color: var(--po-green); }
+        .accent-purple { color: var(--po-purple); }
+        /* Wave decoration */
+        .wave-bg { position: relative; overflow: hidden; }
+        .wave-bg::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: -10%;
+            width: 120%;
+            height: 200px;
+            background: radial-gradient(ellipse at center, rgba(109,16,255,0.06) 0%, transparent 70%);
+            transform: translateY(-50%);
+            pointer-events: none;
+        }
+        /* Selected option style */
+        .opt-selected { background: var(--po-purple) !important; color: var(--po-white) !important; border-color: var(--po-purple) !important; }
+        .opt-default { background: var(--po-dark); color: var(--po-light); border: 1px solid var(--po-border); }
+        .opt-default:hover { border-color: var(--po-medium); }
     </style>
 </head>
 <body>
@@ -45,7 +92,7 @@
     function SelectField({ label, options, value, onChange, name }) {
         return (
             <div className="mb-5">
-                <label className="block text-sm font-medium text-gray-300 mb-2">{label}</label>
+                <label className="block text-sm font-medium mb-2" style={{color: 'var(--po-light)'}}>{label}</label>
                 <div className="grid grid-cols-2 gap-2">
                     {options.map(opt => (
                         <button
@@ -53,9 +100,7 @@
                             type="button"
                             onClick={() => onChange(name, opt.value)}
                             className={`px-3 py-2.5 rounded-lg text-sm text-left transition-all ${
-                                value === opt.value
-                                    ? 'bg-purple-600 text-white border border-purple-500'
-                                    : 'bg-gray-800 text-gray-300 border border-gray-700 hover:border-gray-500'
+                                value === opt.value ? 'opt-selected' : 'opt-default'
                             }`}
                         >
                             {opt.label}
@@ -69,14 +114,14 @@
     function TextInput({ label, value, onChange, name, placeholder, maxLength }) {
         return (
             <div className="mb-5">
-                <label className="block text-sm font-medium text-gray-300 mb-2">{label}</label>
+                <label className="block text-sm font-medium mb-2" style={{color: 'var(--po-light)'}}>{label}</label>
                 <input
                     type="text"
                     value={value}
                     onChange={(e) => onChange(name, e.target.value)}
                     placeholder={placeholder}
                     maxLength={maxLength || 200}
-                    className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 text-sm"
+                    className="w-full px-4 py-3 rounded-lg text-sm input-field"
                 />
             </div>
         );
@@ -151,11 +196,11 @@
 
                     {entradas.length === 0 ? (
                         <div className="text-center py-16">
-                            <div className="text-3xl mb-3">📭</div>
+                            <div className="text-3xl mb-3" style={{color: 'var(--po-medium)'}}>—</div>
                             <p className="text-gray-500 mb-4">Aún no has analizado ningún track.</p>
                             <button
                                 onClick={onAnalizar}
-                                className="px-6 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-xl transition-colors"
+                                className="px-6 py-3 btn-primary rounded-xl transition-colors"
                             >
                                 Analizar mi primer track
                             </button>
@@ -199,92 +244,117 @@
     // Pantallas
     // =========================================================================
 
-    function LandingScreen({ onStart, onHistorial, historialCount }) {
+    // Mentotrack Logo SVG component
+    function MentotrackLogo({ size = 48 }) {
         return (
-            <div className="min-h-screen flex flex-col items-center justify-center px-4 fade-in">
-                <div className="max-w-lg text-center">
-                    <div className="text-4xl mb-3">🎛️</div>
-                    <h1 className="text-3xl font-bold text-white mb-4">Mentotrack</h1>
-                    <p className="text-gray-400 text-lg mb-2">
-                        Detecta qué debería corregirse antes, qué no conviene tocar todavía
-                        y cuál es el siguiente paso para avanzar con tu track.
-                    </p>
-                    <p className="text-gray-500 text-sm mb-8">
-                        No te damos más información. Te damos dirección.
-                    </p>
-                    <button
-                        onClick={onStart}
-                        className="px-8 py-4 bg-purple-600 hover:bg-purple-500 text-white font-semibold rounded-xl text-lg transition-colors"
-                    >
-                        Analizar mi track
-                    </button>
-                    {historialCount > 0 && (
-                        <button
-                            onClick={onHistorial}
-                            className="block mx-auto mt-4 text-gray-500 hover:text-gray-300 text-sm transition-colors"
-                        >
-                            Ver historial ({historialCount})
-                        </button>
-                    )}
-                </div>
-            </div>
+            <svg width={size} height={size} viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M4 38V10h6l8 14 8-14h6v28h-6V20.5L19.5 33h-3L10 20.5V38H4z" fill="currentColor"/>
+                <path d="M2 26c3-3 5-5 8-2s5 5 8 2 5-5 8-2 5 5 8 2 5-5 8-2 3 1 4 2" stroke="#25F464" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
+            </svg>
         );
     }
 
-    function UploadScreen({ onFileSelected, file }) {
+    function LandingScreen({ onFileSelected, onHistorial, historialCount }) {
         const [isDragging, setIsDragging] = useState(false);
+        const [file, setFile] = useState(null);
         const inputRef = useRef(null);
 
         const handleDrop = (e) => {
             e.preventDefault();
             setIsDragging(false);
             const f = e.dataTransfer.files[0];
-            if (f) onFileSelected(f);
+            if (f) { setFile(f); onFileSelected(f); }
         };
 
         const handleChange = (e) => {
             const f = e.target.files[0];
-            if (f) onFileSelected(f);
+            if (f) { setFile(f); onFileSelected(f); }
         };
 
         return (
-            <div className="min-h-screen flex flex-col items-center justify-center px-4 fade-in">
-                <div className="max-w-lg w-full">
-                    <h2 className="text-2xl font-bold text-white mb-2 text-center">Sube tu track</h2>
-                    <p className="text-gray-400 text-sm mb-6 text-center">
-                        WAV, MP3, FLAC o AIFF · Máximo 10 minutos
-                    </p>
-
-                    <div
-                        className={`drop-zone rounded-xl p-12 text-center cursor-pointer ${isDragging ? 'active' : ''}`}
-                        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-                        onDragLeave={() => setIsDragging(false)}
-                        onDrop={handleDrop}
-                        onClick={() => inputRef.current?.click()}
-                    >
-                        <input
-                            ref={inputRef}
-                            type="file"
-                            accept=".mp3,.wav,.flac,.aiff,.aif,.ogg"
-                            onChange={handleChange}
-                            className="hidden"
-                        />
-                        {file ? (
-                            <div>
-                                <div className="text-2xl mb-2">✅</div>
-                                <p className="text-white font-medium">{file.name}</p>
-                                <p className="text-gray-500 text-sm mt-1">
-                                    {(file.size / 1024 / 1024).toFixed(1)} MB
-                                </p>
-                            </div>
-                        ) : (
-                            <div>
-                                <div className="text-3xl mb-3 text-gray-500">📂</div>
-                                <p className="text-gray-400">
-                                    Arrastra tu archivo aquí o haz clic para seleccionar
-                                </p>
-                            </div>
+            <div className="min-h-screen flex items-center justify-center px-4 sm:px-8 fade-in wave-bg">
+                <div className="max-w-5xl w-full grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-16 items-center">
+                    {/* Left column — branding + text */}
+                    <div>
+                        <div className="flex items-center gap-3 mb-6">
+                            <span style={{color: 'var(--po-white)'}}>
+                                <MentotrackLogo size={44} />
+                            </span>
+                            <h1 className="text-3xl font-bold" style={{color: 'var(--po-white)', fontFamily: 'Termina, sans-serif', letterSpacing: '-0.02em'}}>MENTOTRACK</h1>
+                        </div>
+                        <p className="text-lg mb-3" style={{color: 'var(--po-white)', lineHeight: '1.5'}}>
+                            Detecta qué debería corregirse antes, qué no conviene tocar todavía
+                            y cuál es el siguiente paso para avanzar con tu track.
+                        </p>
+                        <p className="text-sm mb-6" style={{color: 'var(--po-light)'}}>
+                            No te damos más información. Te damos dirección.
+                        </p>
+                        <div className="flex items-center gap-4">
+                            <span className="text-xs px-3 py-1.5 rounded-full" style={{background: 'rgba(37,244,100,0.1)', color: 'var(--po-green)', border: '1px solid rgba(37,244,100,0.2)'}}>WAV</span>
+                            <span className="text-xs px-3 py-1.5 rounded-full" style={{background: 'rgba(37,244,100,0.1)', color: 'var(--po-green)', border: '1px solid rgba(37,244,100,0.2)'}}>MP3</span>
+                            <span className="text-xs px-3 py-1.5 rounded-full" style={{background: 'rgba(37,244,100,0.1)', color: 'var(--po-green)', border: '1px solid rgba(37,244,100,0.2)'}}>FLAC</span>
+                            <span className="text-xs px-3 py-1.5 rounded-full" style={{background: 'rgba(37,244,100,0.1)', color: 'var(--po-green)', border: '1px solid rgba(37,244,100,0.2)'}}>AIFF</span>
+                        </div>
+                        {historialCount > 0 && (
+                            <button
+                                onClick={onHistorial}
+                                className="mt-6 text-sm transition-colors"
+                                style={{color: 'var(--po-light)'}}
+                                onMouseOver={(e) => e.target.style.color = 'var(--po-white)'}
+                                onMouseOut={(e) => e.target.style.color = 'var(--po-light)'}
+                            >
+                                Ver historial ({historialCount})
+                            </button>
                         )}
+                    </div>
+
+                    {/* Right column — drop zone */}
+                    <div>
+                        <div
+                            className={`drop-zone rounded-xl p-12 text-center cursor-pointer ${isDragging ? 'active' : ''}`}
+                            style={{minHeight: '280px', display: 'flex', alignItems: 'center', justifyContent: 'center'}}
+                            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                            onDragLeave={() => setIsDragging(false)}
+                            onDrop={handleDrop}
+                            onClick={() => inputRef.current?.click()}
+                        >
+                            <input
+                                ref={inputRef}
+                                type="file"
+                                accept=".mp3,.wav,.flac,.aiff,.aif,.ogg"
+                                onChange={handleChange}
+                                className="hidden"
+                            />
+                            {file ? (
+                                <div>
+                                    <div className="mb-3">
+                                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#25F464" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{margin: '0 auto'}}>
+                                            <path d="M20 6L9 17l-5-5"/>
+                                        </svg>
+                                    </div>
+                                    <p className="font-medium" style={{color: 'var(--po-white)'}}>{file.name}</p>
+                                    <p className="text-sm mt-1" style={{color: 'var(--po-light)'}}>
+                                        {(file.size / 1024 / 1024).toFixed(1)} MB
+                                    </p>
+                                </div>
+                            ) : (
+                                <div>
+                                    <div className="mb-4" style={{color: 'var(--po-medium)'}}>
+                                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{margin: '0 auto'}}>
+                                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                                            <polyline points="17 8 12 3 7 8"/>
+                                            <line x1="12" y1="3" x2="12" y2="15"/>
+                                        </svg>
+                                    </div>
+                                    <p style={{color: 'var(--po-light)'}}>
+                                        Arrastra tu archivo aquí
+                                    </p>
+                                    <p className="text-sm mt-2" style={{color: 'var(--po-medium)'}}>
+                                        o haz clic para seleccionar
+                                    </p>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -295,19 +365,19 @@
         return (
             <div className="min-h-screen flex flex-col items-center py-12 px-4 fade-in">
                 <div className="max-w-lg w-full">
-                    <h2 className="text-2xl font-bold text-white mb-1">Cuéntanos sobre tu track</h2>
-                    <p className="text-gray-400 text-sm mb-8">
+                    <h2 className="text-2xl font-bold mb-1" style={{color: 'var(--po-white)'}}>Cuéntanos sobre tu track</h2>
+                    <p className="text-sm mb-8" style={{color: 'var(--po-light)'}}>
                         Esto nos ayuda a no interpretar el audio a ciegas.
                     </p>
 
                     <div className="mb-5">
-                        <label className="block text-sm font-medium text-gray-300 mb-2">Nombre del proyecto</label>
+                        <label className="block text-sm font-medium mb-2" style={{color: 'var(--po-light)'}}>Nombre del proyecto</label>
                         <input
                             type="text"
                             value={nombreProyecto}
                             onChange={(e) => onNombreChange(e.target.value)}
                             placeholder="Ej.: El nombre de tu track v1"
-                            className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 text-sm"
+                            className="w-full px-4 py-3 rounded-lg text-sm input-field"
                         />
                     </div>
 
@@ -362,11 +432,8 @@
                     <button
                         onClick={onSubmit}
                         disabled={!isValid}
-                        className={`w-full mt-6 px-6 py-4 rounded-xl font-semibold text-lg transition-all ${
-                            isValid
-                                ? 'bg-purple-600 hover:bg-purple-500 text-white'
-                                : 'bg-gray-800 text-gray-500 cursor-not-allowed'
-                        }`}
+                        className={`w-full mt-6 px-6 py-4 rounded-xl font-semibold text-lg transition-all btn-primary`}
+                        style={!isValid ? {background: 'var(--po-medium)', color: '#777', cursor: 'not-allowed'} : {}}
                     >
                         Analizar track
                     </button>
@@ -397,9 +464,9 @@
             <div className="min-h-screen flex flex-col items-center justify-center px-4 fade-in">
                 <div className="max-w-md w-full text-center">
                     <div className="flex items-center justify-center gap-2 mb-8">
-                        <div className="w-2 h-2 rounded-full bg-purple-500 pulse-dot"></div>
-                        <div className="w-2 h-2 rounded-full bg-purple-500 pulse-dot" style={{animationDelay: '0.3s'}}></div>
-                        <div className="w-2 h-2 rounded-full bg-purple-500 pulse-dot" style={{animationDelay: '0.6s'}}></div>
+                        <div className="w-2 h-2 rounded-full pulse-dot" style={{background: 'var(--po-green)'}}></div>
+                        <div className="w-2 h-2 rounded-full pulse-dot" style={{background: 'var(--po-green)', animationDelay: '0.3s'}}></div>
+                        <div className="w-2 h-2 rounded-full pulse-dot" style={{background: 'var(--po-green)', animationDelay: '0.6s'}}></div>
                     </div>
                     <div className="space-y-3">
                         {steps.map((step, i) => (
@@ -454,7 +521,7 @@
                         <div className="text-left space-y-3 max-w-md mx-auto">
                             {r.prioridades.slice(0, 3).map((p, i) => (
                                 <div key={i} className="flex gap-3 items-start">
-                                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-green-900 text-green-400 flex items-center justify-center text-xs font-bold">{i + 1}</span>
+                                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-green-900 accent-green flex items-center justify-center text-xs font-bold">{i + 1}</span>
                                     <p className="text-gray-300 text-sm">{p}</p>
                                 </div>
                             ))}
@@ -464,14 +531,14 @@
                     {/* Diagnóstico principal — detalles expandibles */}
                     <details className="card p-6 mb-4">
                         <summary className="cursor-pointer">
-                            <span className="text-xs text-purple-400 font-medium uppercase tracking-wider">Diagnóstico principal — por qué</span>
+                            <span className="text-xs accent-purple font-medium uppercase tracking-wider">Diagnóstico principal — por qué</span>
                         </summary>
                         <div className="mt-4 text-gray-400 text-sm whitespace-pre-line">{r.diagnostico_principal.explicacion}</div>
                     </details>
 
                     {/* Nota contextual personalizada */}
                     {r.nota_contextual && (
-                        <div className="card p-6 mb-4" style={{borderLeft: '3px solid #8b5cf6'}}>
+                        <div className="card p-6 mb-4" style={{borderLeft: '3px solid var(--po-purple)'}}>
                             {r.nota_motivacional && (
                                 <p className="text-purple-300 text-sm font-medium mb-2">{r.nota_motivacional}</p>
                             )}
@@ -501,11 +568,11 @@
                     {/* Prioridades extra (si hay más de 3) */}
                     {r.prioridades.length > 3 && (
                         <div className="card p-6 mb-4">
-                            <p className="text-xs text-green-400 font-medium uppercase tracking-wider mb-3">Prioridades adicionales</p>
+                            <p className="text-xs accent-green font-medium uppercase tracking-wider mb-3">Prioridades adicionales</p>
                             <div className="space-y-3">
                                 {r.prioridades.slice(3).map((p, i) => (
                                     <div key={i} className="flex gap-3">
-                                        <span className="flex-shrink-0 w-6 h-6 rounded-full bg-green-900 text-green-400 flex items-center justify-center text-xs font-bold">{i + 4}</span>
+                                        <span className="flex-shrink-0 w-6 h-6 rounded-full bg-green-900 accent-green flex items-center justify-center text-xs font-bold">{i + 4}</span>
                                         <p className="text-gray-300 text-sm">{p}</p>
                                     </div>
                                 ))}
@@ -547,7 +614,7 @@
 
                     {/* Siguiente sesión */}
                     <div className="card p-6 mb-4 border-purple-800">
-                        <p className="text-xs text-purple-400 font-medium uppercase tracking-wider mb-2">Tu próxima sesión</p>
+                        <p className="text-xs accent-purple font-medium uppercase tracking-wider mb-2">Tu próxima sesión</p>
                         <p className="text-white text-sm leading-relaxed">{r.siguiente_sesion}</p>
                     </div>
 
@@ -570,7 +637,7 @@
                                 <div className="flex justify-between items-baseline">
                                     <span className="text-gray-400">Balance grave</span>
                                     <span className={
-                                        d.balance_grave === 'normal' ? 'text-green-400' :
+                                        d.balance_grave === 'normal' ? 'accent-green' :
                                         d.balance_grave === 'elevado' ? 'text-yellow-400' :
                                         'text-red-400'
                                     }>{d.balance_grave}</span>
@@ -589,7 +656,7 @@
                                 <div className="flex justify-between items-baseline">
                                     <span className="text-gray-400">Densidad</span>
                                     <span className={
-                                        d.densidad === 'baja' || d.densidad === 'media' ? 'text-green-400' :
+                                        d.densidad === 'baja' || d.densidad === 'media' ? 'accent-green' :
                                         d.densidad === 'alta' ? 'text-yellow-400' :
                                         'text-red-400'
                                     }>{d.densidad}</span>
@@ -613,7 +680,7 @@
                                 let loudnessColor;
                                 let loudnessTip = '';
                                 if (esSesion) {
-                                    loudnessColor = d.loudness.lufs_integrado > -8 ? 'text-green-400' :
+                                    loudnessColor = d.loudness.lufs_integrado > -8 ? 'accent-green' :
                                                     d.loudness.lufs_integrado > -12 ? 'text-yellow-400' :
                                                     'text-blue-400';
                                     if (d.loudness.lufs_integrado <= -12) {
@@ -622,7 +689,7 @@
                                         loudnessTip = 'Cuidado: muy comprimido. Aunque suena fuerte, has perdido dinámica. En un sistema grande puede sonar plano y fatigante.';
                                     }
                                 } else if (esSellos) {
-                                    loudnessColor = d.loudness.lufs_integrado >= -10 && d.loudness.lufs_integrado <= -6 ? 'text-green-400' :
+                                    loudnessColor = d.loudness.lufs_integrado >= -10 && d.loudness.lufs_integrado <= -6 ? 'accent-green' :
                                                     d.loudness.lufs_integrado > -6 ? 'text-yellow-400' :
                                                     d.loudness.lufs_integrado >= -14 ? 'text-yellow-400' :
                                                     'text-blue-400';
@@ -634,7 +701,7 @@
                                         loudnessTip = 'Buen nivel para un demo a sellos. Recuerda: envía siempre tu mejor versión masterizada. Si te firman y quieren re-masterizar, les mandas la versión sin mastering. Asegúrate de que tu mezcla suene bien por sí sola sin la cadena de mastering.';
                                     }
                                 } else {
-                                    loudnessColor = d.loudness.nivel === 'moderado' ? 'text-green-400' :
+                                    loudnessColor = d.loudness.nivel === 'moderado' ? 'accent-green' :
                                                     d.loudness.nivel === 'bajo' ? 'text-blue-400' :
                                                     d.loudness.nivel === 'alto' ? 'text-yellow-400' :
                                                     d.loudness.nivel === 'muy_alto' ? 'text-red-400' :
@@ -681,7 +748,7 @@
                                         <div className="flex justify-between items-baseline">
                                             <span className="text-gray-400">Compatibilidad mono</span>
                                             <span className={
-                                                d.mono_compat.nivel_compatibilidad === 'excelente' ? 'text-green-400' :
+                                                d.mono_compat.nivel_compatibilidad === 'excelente' ? 'accent-green' :
                                                 d.mono_compat.nivel_compatibilidad === 'buena' ? 'text-blue-400' :
                                                 d.mono_compat.nivel_compatibilidad === 'problematica' ? 'text-yellow-400' :
                                                 'text-red-400'
@@ -716,7 +783,7 @@
                                             <div key={banda} className="text-center p-2 rounded-lg bg-gray-800/50">
                                                 <span className="text-gray-500 text-xs block capitalize">{banda}</span>
                                                 <span className={
-                                                    d.mono_compat.bandas[banda].estado === 'ok' ? 'text-green-400 text-sm' :
+                                                    d.mono_compat.bandas[banda].estado === 'ok' ? 'accent-green text-sm' :
                                                     d.mono_compat.bandas[banda].estado === 'revisar' ? 'text-yellow-400 text-sm' :
                                                     'text-red-400 text-sm'
                                                 }>
@@ -771,7 +838,7 @@
                                             d.harshness.tiene_harshness && d.harshness.nivel === 'severo' ? 'text-red-400' :
                                             d.harshness.tiene_harshness && d.harshness.nivel === 'notable' ? 'text-yellow-400' :
                                             d.harshness.tiene_harshness && d.harshness.nivel === 'leve' ? 'text-yellow-300' :
-                                            'text-green-400'
+                                            'accent-green'
                                         }>
                                             {d.harshness.tiene_harshness
                                                 ? d.harshness.nivel === 'severo' ? 'Chirriante'
@@ -813,7 +880,7 @@
                             <div className="flex flex-col sm:flex-row gap-3 justify-center">
                                 <button
                                     onClick={() => { setFeedbackCoincide('si'); setFeedbackStep(1); }}
-                                    className="px-5 py-2.5 bg-green-900/40 hover:bg-green-900/60 text-green-400 rounded-lg transition-colors text-sm"
+                                    className="px-5 py-2.5 bg-green-900/40 hover:bg-green-900/60 accent-green rounded-lg transition-colors text-sm"
                                 >
                                     Sí, dio en el clavo
                                 </button>
@@ -837,14 +904,14 @@
                         <div className="card p-6 mb-6 fade-in">
                             {feedbackCoincide === 'si' ? (
                                 <div>
-                                    <p className="text-green-400 text-sm mb-3">¡Genial! ¿Algo que quieras comentar?</p>
+                                    <p className="accent-green text-sm mb-3">¡Genial! ¿Algo que quieras comentar?</p>
                                     <textarea
                                         value={feedbackComentario}
                                         onChange={(e) => setFeedbackComentario(e.target.value)}
                                         placeholder="Opcional: ¿qué te ha parecido más útil?"
                                         maxLength={500}
                                         rows={2}
-                                        className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 text-sm resize-none"
+                                        className="w-full px-4 py-3 rounded-lg text-sm input-field resize-none"
                                     />
                                 </div>
                             ) : (
@@ -862,7 +929,7 @@
                                             placeholder="Ej.: Creo que el problema es la estructura, no el balance..."
                                             maxLength={500}
                                             rows={2}
-                                            className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 text-sm resize-none"
+                                            className="w-full px-4 py-3 rounded-lg text-sm input-field resize-none"
                                         />
                                     </div>
                                     <div>
@@ -873,7 +940,7 @@
                                             placeholder="Ej.: No detectó que tengo un clap muy alto, o que el bajo se pierde..."
                                             maxLength={500}
                                             rows={2}
-                                            className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 text-sm resize-none"
+                                            className="w-full px-4 py-3 rounded-lg text-sm input-field resize-none"
                                         />
                                     </div>
                                 </div>
@@ -922,7 +989,7 @@
                                         setFeedbackEnviado(true);
                                         setTimeout(() => setFeedbackStep(2), 1200);
                                     }}
-                                    className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors text-sm"
+                                    className="px-5 py-2 btn-primary rounded-lg transition-colors text-sm"
                                 >
                                     Enviar
                                 </button>
@@ -932,13 +999,13 @@
 
                     {feedbackStep === 1 && feedbackEnviado && (
                         <div className="card p-6 mb-6 text-center fade-in">
-                            <p className="text-green-400 text-sm">Gracias, tu feedback mejora el motor</p>
+                            <p className="accent-green text-sm">Gracias, tu feedback mejora el motor</p>
                         </div>
                     )}
 
                     {feedbackStep === 2 && (
-                        <div className="card p-6 mb-6 fade-in" style={{borderLeft: '3px solid #8b5cf6'}}>
-                            <p className="text-purple-400 text-sm font-medium mb-3">¿Quieres ayudar a mejorar esta app?</p>
+                        <div className="card p-6 mb-6 fade-in" style={{borderLeft: '3px solid var(--po-purple)'}}>
+                            <p className="accent-purple text-sm font-medium mb-3">¿Quieres ayudar a mejorar esta app?</p>
                             <p className="text-gray-300 text-sm leading-relaxed mb-4">
                                 Hasta ahora tu música no se ha almacenado, pero si me compartes un enlace la escucharé personalmente para mejorar el motor de análisis. Gracias a tu música, y nuestro feedback real y humano podremos hacer una mejor herramienta para nuestra comunidad. Gracias por formar parte de esto :) - Alex
                             </p>
@@ -950,7 +1017,7 @@
                                         value={feedbackEnlace}
                                         onChange={(e) => setFeedbackEnlace(e.target.value)}
                                         placeholder="Pega tu enlace de Soundcloud o Dropbox"
-                                        className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 text-sm mb-3"
+                                        className="w-full px-4 py-3 rounded-lg text-sm input-field mb-3"
                                     />
                                     <div className="flex gap-3 justify-end">
                                         <button
@@ -987,8 +1054,8 @@
                                             disabled={!feedbackEnlace.trim()}
                                             className={`px-5 py-2 rounded-lg transition-colors text-sm ${
                                                 feedbackEnlace.trim()
-                                                    ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                                                    : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                                                    ? 'btn-primary'
+                                                    : 'btn-primary'
                                             }`}
                                         >
                                             Quiero feedback
@@ -997,7 +1064,7 @@
                                 </div>
                             ) : (
                                 <div className="text-center py-2 fade-in">
-                                    <p className="text-green-400 text-sm mb-1">Recibido. Alex revisará tu track pronto.</p>
+                                    <p className="accent-green text-sm mb-1">Recibido. Alex revisará tu track pronto.</p>
                                     <p className="text-gray-500 text-xs">Te contactaremos por el medio que uses para compartir el enlace.</p>
                                 </div>
                             )}
@@ -1008,7 +1075,7 @@
                     <div className="text-center mt-4 mb-4">
                         <button
                             onClick={onReset}
-                            className="px-6 py-3 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl transition-colors"
+                            className="px-6 py-3 btn-secondary rounded-xl"
                         >
                             Analizar otro track
                         </button>
@@ -1428,11 +1495,11 @@
                         <button
                             onClick={handleOpenPanel}
                             className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs transition-colors"
-                            style={{ background: 'rgba(139,92,246,0.15)', border: '1px solid rgba(139,92,246,0.3)', color: '#a78bfa' }}
+                            style={{ background: 'rgba(109,16,255,0.15)', border: '1px solid rgba(109,16,255,0.3)', color: '#a78bfa' }}
                         >
                             {panelAuth ? (
                                 <React.Fragment>
-                                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#4ade80', display: 'inline-block' }}></span>
+                                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--po-green)', display: 'inline-block' }}></span>
                                     Mi panel
                                 </React.Fragment>
                             ) : 'Mi panel'}
@@ -1449,7 +1516,7 @@
 
                 {screen === 'landing' && (
                     <LandingScreen
-                        onStart={() => setScreen('upload')}
+                        onFileSelected={handleFileSelected}
                         onHistorial={() => setScreen('historial')}
                         historialCount={historialCount}
                     />
@@ -1457,10 +1524,9 @@
                 {screen === 'historial' && (
                     <HistorialScreen
                         onBack={() => setScreen('landing')}
-                        onAnalizar={() => setScreen('upload')}
+                        onAnalizar={() => setScreen('landing')}
                     />
                 )}
-                {screen === 'upload' && <UploadScreen onFileSelected={handleFileSelected} file={file} />}
                 {screen === 'questionnaire' && (
                     <QuestionnaireScreen
                         opciones={opciones}
@@ -1476,7 +1542,7 @@
                     <div className="min-h-screen flex items-center justify-center px-4 fade-in">
                         <div className="max-w-md w-full">
                             <div className="card p-8 text-center">
-                                <p className="text-purple-400 text-sm font-medium uppercase tracking-wider mb-2">Último paso</p>
+                                <p className="accent-purple text-sm font-medium uppercase tracking-wider mb-2">Último paso</p>
                                 <h2 className="text-xl font-bold text-white mb-2">Crea tu cuenta o inicia sesión</h2>
                                 <p className="text-gray-500 text-xs mb-6">Con tu cuenta guardaremos tu historial de análisis y podrás acceder a él cuando quieras.</p>
                                 <input
@@ -1484,14 +1550,14 @@
                                     value={userEmail}
                                     onChange={(e) => { setUserEmail(e.target.value); setEmailError(''); }}
                                     placeholder="tu@email.com"
-                                    className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 text-sm mb-3"
+                                    className="w-full px-4 py-3 rounded-lg text-sm input-field mb-3"
                                 />
                                 <input
                                     type="password"
                                     value={userPassword}
                                     onChange={(e) => { setUserPassword(e.target.value); setEmailError(''); }}
                                     placeholder="Contraseña"
-                                    className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 text-sm mb-3"
+                                    className="w-full px-4 py-3 rounded-lg text-sm input-field mb-3"
                                     onKeyDown={(e) => { if (e.key === 'Enter' && userEmail.includes('@') && userPassword.length >= 4) handleSubmit(); }}
                                 />
                                 {emailError && <p className="text-red-400 text-xs mb-3">{emailError}</p>}
@@ -1500,8 +1566,8 @@
                                     disabled={!userEmail.includes('@') || userPassword.length < 4}
                                     className={`w-full py-3 rounded-xl font-medium transition-colors text-sm ${
                                         userEmail.includes('@') && userPassword.length >= 4
-                                            ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                                            : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                                            ? 'btn-primary'
+                                            : 'btn-primary'
                                     }`}
                                 >
                                     Analizar mi track
@@ -1530,7 +1596,7 @@
                                 </button>
 
                                 <div className="fade-in">
-                                    <div className="text-3xl mb-3">👤</div>
+                                    <div className="text-3xl mb-3"><MentotrackLogo size={36} /></div>
                                     <h2 className="text-xl font-bold text-white mb-2">Accede a tu panel</h2>
                                     <p className="text-gray-500 text-xs mb-6">Introduce tu email y contraseña.</p>
                                     <input
@@ -1538,14 +1604,14 @@
                                         value={panelEmail}
                                         onChange={(e) => { setPanelEmail(e.target.value); setPanelError(''); }}
                                         placeholder="tu@email.com"
-                                        className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 text-sm mb-3"
+                                        className="w-full px-4 py-3 rounded-lg text-sm input-field mb-3"
                                     />
                                     <input
                                         type="password"
                                         value={panelPassword}
                                         onChange={(e) => { setPanelPassword(e.target.value); setPanelError(''); }}
                                         placeholder="Contraseña"
-                                        className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 text-sm mb-3"
+                                        className="w-full px-4 py-3 rounded-lg text-sm input-field mb-3"
                                         onKeyDown={(e) => { if (e.key === 'Enter' && panelEmail.includes('@') && panelPassword.length >= 4) handleAccederPanel(); }}
                                     />
                                     {panelError && <p className="text-red-400 text-xs mb-3">{panelError}</p>}
@@ -1554,8 +1620,8 @@
                                         disabled={!panelEmail.includes('@') || panelPassword.length < 4 || panelLoading}
                                         className={`w-full py-3 rounded-xl font-medium transition-colors text-sm ${
                                             panelEmail.includes('@') && panelPassword.length >= 4 && !panelLoading
-                                                ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                                                : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                                                ? 'btn-primary'
+                                                : 'btn-primary'
                                         }`}
                                     >
                                         {panelLoading ? 'Accediendo...' : 'Acceder'}
@@ -1579,7 +1645,7 @@
                                 <div className="flex gap-2">
                                     <button
                                         onClick={handleReset}
-                                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs transition-colors"
+                                        className="px-4 py-2 btn-primary rounded-lg text-xs transition-colors"
                                     >
                                         Nuevo análisis
                                     </button>
@@ -1598,11 +1664,11 @@
                                 </div>
                             ) : panelHistorial.length === 0 ? (
                                 <div className="text-center py-16">
-                                    <div className="text-3xl mb-3">📭</div>
+                                    <div className="text-3xl mb-3" style={{color: 'var(--po-medium)'}}>—</div>
                                     <p className="text-gray-500 mb-4">Aún no tienes análisis.</p>
                                     <button
                                         onClick={handleReset}
-                                        className="px-6 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-xl transition-colors"
+                                        className="px-6 py-3 btn-primary rounded-xl transition-colors"
                                     >
                                         Analizar mi primer track
                                     </button>
@@ -1678,11 +1744,11 @@
                                                         </div>
                                                         <div className="flex items-center gap-3">
                                                             {fueUtil && (
-                                                                <span className={fueUtil === 'Sí' ? 'text-green-400 text-xs' : 'text-red-400 text-xs'}>
+                                                                <span className={fueUtil === 'Sí' ? 'accent-green text-xs' : 'text-red-400 text-xs'}>
                                                                     {fueUtil === 'Sí' ? '👍' : '👎'}
                                                                 </span>
                                                             )}
-                                                            {enlace && <span className="text-purple-400 text-xs">🎧</span>}
+                                                            {enlace && <span className="accent-purple text-xs">🎧</span>}
                                                             <span className="text-gray-600 text-xs">
                                                                 {date ? date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
                                                             </span>
@@ -1719,7 +1785,7 @@
                                                                 <div className="space-y-1.5">
                                                                     {prioridades.map((p, i) => (
                                                                         <div key={i} className="flex items-start gap-2">
-                                                                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-purple-900/40 text-purple-400 text-xs flex items-center justify-center font-medium">{i+1}</span>
+                                                                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-purple-900/40 accent-purple text-xs flex items-center justify-center font-medium">{i+1}</span>
                                                                             <p className="text-gray-300 text-xs leading-relaxed pt-0.5">{p}</p>
                                                                         </div>
                                                                     ))}
@@ -1744,11 +1810,11 @@
                                                         {(fueUtil || comentario || enlace) && (
                                                             <div className="px-4 pb-4">
                                                                 <p className="text-gray-500 text-xs uppercase tracking-wide mb-2">Feedback</p>
-                                                                {fueUtil && <p className="text-gray-400 text-xs mb-1">¿Fue útil? <span className={fueUtil === 'Sí' ? 'text-green-400' : 'text-red-400'}>{fueUtil}</span></p>}
+                                                                {fueUtil && <p className="text-gray-400 text-xs mb-1">¿Fue útil? <span className={fueUtil === 'Sí' ? 'accent-green' : 'text-red-400'}>{fueUtil}</span></p>}
                                                                 {comentario && <p className="text-gray-400 text-xs italic mb-1">"{comentario}"</p>}
                                                                 {enlace && (
                                                                     <div className="mt-1">
-                                                                        <span className="text-purple-400 text-xs">🎧 Feedback real solicitado</span>
+                                                                        <span className="accent-purple text-xs">🎧 Feedback real solicitado</span>
                                                                     </div>
                                                                 )}
                                                             </div>

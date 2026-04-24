@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <!-- Mentotrack logo: geometric "M" with integrated audio waveform -->
+  <!-- Matches PO brand: bold, geometric, digital, contemporary -->
+  <path d="M4 38V10h6l8 14 8-14h6v28h-6V20.5L19.5 33h-3L10 20.5V38H4z" fill="currentColor"/>
+  <!-- Wave cutting through the M, like PO's wave element -->
+  <path d="M2 26c3-3 5-5 8-2s5 5 8 2 5-5 8-2 5 5 8 2 5-5 8-2 3 1 4 2" stroke="#25F464" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+</svg>
