@@ -18,17 +18,31 @@ from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
+from starlette.middleware.gzip import GZipMiddleware
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-from engine.extractor import extraer_senales
-from engine.diagnostico import generar_diagnostico
+# Engine imports diferidos (lazy) — librosa/numpy/scipy solo se cargan
+# cuando llega un diagnóstico, no al arrancar el servidor.
+# Esto reduce el cold-start de ~8-12s a ~2-3s.
+_extraer_senales = None
+_generar_diagnostico = None
+
+
+def _load_engine():
+    """Carga los módulos pesados de análisis de audio bajo demanda."""
+    global _extraer_senales, _generar_diagnostico
+    if _extraer_senales is None:
+        from engine.extractor import extraer_senales
+        from engine.diagnostico import generar_diagnostico
+        _extraer_senales = extraer_senales
+        _generar_diagnostico = generar_diagnostico
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.4.0")
+app = FastAPI(title="Mentotrack API", version="0.4.1")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -50,6 +64,9 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type", "Authorization"],
 )
+
+# GZip — comprime respuestas >500 bytes (~60-70% ahorro en JSON/HTML)
+app.add_middleware(GZipMiddleware, minimum_size=500)
 
 # =========================================================================
 # JWT Configuration
@@ -149,7 +166,8 @@ async def diagnosticar(
                 bpm_int = int(float(bpm_manual.strip()))
             except ValueError:
                 pass
-        senales = extraer_senales(tmp_path, bpm_manual=bpm_int)
+        _load_engine()
+        senales = _extraer_senales(tmp_path, bpm_manual=bpm_int)
 
         # Construir contexto
         contexto = {
@@ -164,7 +182,7 @@ async def diagnosticar(
         }
 
         # Generar diagnóstico
-        resultado = generar_diagnostico(senales, contexto)
+        resultado = _generar_diagnostico(senales, contexto)
 
         # Guardar sesión para análisis futuro
         sesion = {
@@ -589,6 +607,20 @@ def serve_frontend():
     return FileResponse(FRONTEND_DIR / "index.html")
 
 
+# Extensiones de assets inmutables → cache largo (7 días)
+_CACHEABLE_EXT = {".css", ".js", ".woff", ".woff2", ".ttf", ".otf", ".png", ".jpg", ".svg", ".ico", ".webp"}
+
+
+def _file_response_with_cache(file_path: Path) -> FileResponse:
+    """FileResponse con Cache-Control según extensión."""
+    ext = file_path.suffix.lower()
+    if ext in _CACHEABLE_EXT:
+        # Assets estáticos: 7 días de cache en navegador
+        return FileResponse(file_path, headers={"Cache-Control": "public, max-age=604800, immutable"})
+    # HTML y otros: no cachear (siempre fresco)
+    return FileResponse(file_path, headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/{full_path:path}")
 def serve_catch_all(full_path: str):
     """Catch-all para SPA: si no es /api, devuelve index.html."""
@@ -600,5 +632,5 @@ def serve_catch_all(full_path: str):
     if not str(file_path).startswith(str(FRONTEND_DIR.resolve())):
         return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
     if file_path.is_file():
-        return FileResponse(file_path)
-    return FileResponse(FRONTEND_DIR / "index.html")
+        return _file_response_with_cache(file_path)
+    return FileResponse(FRONTEND_DIR / "index.html", headers={"Cache-Control": "no-cache"})
