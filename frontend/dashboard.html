@@ -598,11 +598,9 @@
         const [tab, setTab] = useState('overview'); // overview | analisis | users | feedback
         const [calendarMonth, setCalendarMonth] = useState(() => new Date(2026, 3, 1)); // Abril 2026
 
-        // Get admin key from referrer URL (passed when dashboard was served)
-        const adminKey = new URLSearchParams(window.location.search).get('key') || '';
-
+        // Auth via HttpOnly cookie (set by /api/admin/login or /dashboard?key=)
         useEffect(() => {
-            fetch(`${API_URL}/api/sheets/datos?key=${encodeURIComponent(adminKey)}`)
+            fetch(`${API_URL}/api/sheets/datos`, { credentials: 'same-origin' })
                 .then(r => { if (!r.ok) throw new Error('Acceso denegado'); return r.json(); })
                 .then(data => {
                     setRawData(data);
@@ -735,7 +733,7 @@
                         <p className="text-gray-500 text-xs mt-1">{totalUsers} análisis · {uniqueEmails} usuarios únicos · Actualizado al abrir</p>
                     </div>
                     <button
-                        onClick={() => { setLoading(true); fetch(`${API_URL}/api/sheets/datos?key=${encodeURIComponent(adminKey)}`).then(r => r.json()).then(data => { setRawData(data); setLoading(false); }); }}
+                        onClick={() => { setLoading(true); fetch(`${API_URL}/api/sheets/datos`, { credentials: 'same-origin' }).then(r => r.json()).then(data => { setRawData(data); setLoading(false); }); }}
                         className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-xs transition-colors"
                     >
                         Actualizar

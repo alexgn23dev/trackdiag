@@ -6,6 +6,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
+# Crear usuario no-root (seguridad: no correr como root)
+RUN useradd -m -r appuser
+
 WORKDIR /app
 
 # Instalar dependencias Python
@@ -15,6 +18,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copiar código
 COPY backend/ ./backend/
 COPY frontend/ ./frontend/
+
+# Dar permisos al usuario para escribir archivos temporales y sesiones
+RUN chown -R appuser:appuser /app
+
+# Cambiar a usuario no-root
+USER appuser
 
 # Puerto (Railway asigna el suyo via $PORT)
 ENV PORT=8000

@@ -17,8 +17,10 @@ from pathlib import Path
 
 from fastapi import FastAPI, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
 from starlette.middleware.gzip import GZipMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -67,6 +69,34 @@ app.add_middleware(
 
 # GZip — comprime respuestas >500 bytes (~60-70% ahorro en JSON/HTML)
 app.add_middleware(GZipMiddleware, minimum_size=500)
+
+
+# Security headers — protección contra clickjacking, sniffing, XSS
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response: Response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        # CSP: permite CDNs usados por el frontend (React, Tailwind, fonts)
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com; "
+            "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com; "
+            "img-src 'self' data:; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none';"
+        )
+        # HSTS solo en producción (cuando hay HTTPS)
+        if request.url.scheme == "https":
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 # =========================================================================
 # JWT Configuration
@@ -149,13 +179,21 @@ async def diagnosticar(
             content={"error": f"Formato no soportado: {extension}. Usa MP3, WAV, FLAC o AIFF."}
         )
 
+    # Validar tamaño (máx 50 MB para prevenir DoS)
+    MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
+    content = await audio.read()
+    if len(content) > MAX_UPLOAD_BYTES:
+        return JSONResponse(
+            status_code=413,
+            content={"error": f"Archivo demasiado grande ({len(content) // (1024*1024)} MB). Máximo: 50 MB."}
+        )
+
     # Guardar archivo temporal
     session_id = str(uuid.uuid4())[:8]
     tmp_dir = tempfile.mkdtemp()
     tmp_path = os.path.join(tmp_dir, f"{session_id}{extension}")
 
     try:
-        content = await audio.read()
         with open(tmp_path, "wb") as f:
             f.write(content)
 
@@ -198,9 +236,11 @@ async def diagnosticar(
         return resultado
 
     except Exception as e:
+        # Log detallado para debug, mensaje genérico al cliente (no exponer internals)
+        print(f"[ERROR] diagnosticar: {type(e).__name__}: {e}")
         return JSONResponse(
             status_code=500,
-            content={"error": f"Error procesando el audio: {str(e)}"}
+            content={"error": "Error procesando el audio. Verifica que el archivo no esté corrupto e inténtalo de nuevo."}
         )
     finally:
         # Limpiar archivo temporal
@@ -383,17 +423,19 @@ async def proxy_sheets_feedback_real(request: Request, data: dict):
 
 @app.get("/api/sheets/datos")
 @limiter.limit("5/minute")
-async def proxy_sheets_datos(request: Request, key: str = ""):
-    """Proxy: obtiene todos los datos de Sheets para el dashboard admin."""
+async def proxy_sheets_datos(request: Request):
+    """Proxy: obtiene todos los datos de Sheets para el dashboard admin.
+    Solo acepta auth via cookie HttpOnly (no query params para evitar leaks)."""
     admin_cookie = request.cookies.get("admin_session", "")
-    if not _verify_admin_token(admin_cookie) and key != ADMIN_KEY:
+    if not _verify_admin_token(admin_cookie):
         return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
     try:
         async with httpx.AsyncClient(follow_redirects=True) as client:
             resp = await client.get(SHEETS_WEBHOOK, timeout=15)
             return resp.json()
     except Exception as e:
-        return JSONResponse(status_code=503, content={"error": str(e)})
+        print(f"[ERROR] sheets datos: {e}")
+        return JSONResponse(status_code=503, content={"error": "Error conectando con la base de datos"})
 
 
 # =========================================================================
@@ -514,7 +556,7 @@ async def obtener_historial(request: Request, data: dict):
 ADMIN_KEY = os.environ.get("ADMIN_KEY", "")
 if not ADMIN_KEY:
     ADMIN_KEY = secrets.token_hex(16)
-    print(f"[WARN] ADMIN_KEY no configurado — generando uno aleatorio: {ADMIN_KEY}")
+    print("[WARN] ADMIN_KEY no configurado — generando uno aleatorio (configura ADMIN_KEY en env vars)")
 
 ADMIN_SESSION_SECRET = os.environ.get("ADMIN_SESSION_SECRET", secrets.token_hex(16))
 
@@ -569,8 +611,10 @@ async def admin_logout():
 
 @app.get("/dashboard")
 def serve_dashboard(request: Request, key: str = ""):
-    """Dashboard admin protegido por cookie de sesión o clave inicial."""
-    # Check cookie first
+    """Dashboard admin protegido por cookie de sesión.
+    El parámetro ?key= solo se acepta para el primer login:
+    setea la cookie y redirige a /dashboard (sin key en URL)."""
+    # Check cookie first — acceso normal
     admin_cookie = request.cookies.get("admin_session", "")
     if _verify_admin_token(admin_cookie):
         dashboard_path = FRONTEND_DIR / "dashboard.html"
@@ -578,13 +622,10 @@ def serve_dashboard(request: Request, key: str = ""):
             return JSONResponse(status_code=404, content={"error": "Dashboard no encontrado"})
         return FileResponse(dashboard_path)
 
-    # Fallback: check key param (only for initial login, will set cookie)
-    if key == ADMIN_KEY:
+    # Primer login con key: setear cookie y REDIRIGIR para quitar key de la URL
+    if key and key == ADMIN_KEY:
         token = _create_admin_token()
-        dashboard_path = FRONTEND_DIR / "dashboard.html"
-        if not dashboard_path.is_file():
-            return JSONResponse(status_code=404, content={"error": "Dashboard no encontrado"})
-        response = FileResponse(dashboard_path)
+        response = RedirectResponse(url="/dashboard", status_code=303)
         response.set_cookie(
             key="admin_session",
             value=token,
