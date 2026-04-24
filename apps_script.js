@@ -1,6 +1,6 @@
 /**
- * Mentotrack — Google Apps Script
- * Gestiona: diagnósticos (lectura/escritura), feedback, y usuarios (registro/login).
+ * Mentotrack — Google Apps Script v2 (seguridad)
+ * Todo llega via POST con JSON body — ya no se usan query params.
  *
  * REQUISITOS:
  * - Pestaña principal (la primera) con los diagnósticos
@@ -10,41 +10,46 @@
 var SHEET_ID = '1kRn-h7efvND_ky4hM-WKUz96c6degPEFJMAu03ynHwQ';
 
 function doGet(e) {
-  var action = (e.parameter && e.parameter.action) || 'list';
-  var ss = SpreadsheetApp.openById(SHEET_ID);
+  return ContentService.createTextOutput(JSON.stringify({ error: 'Usa POST' }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
 
-  // --- Listar diagnósticos (comportamiento original) ---
-  if (action === 'list') {
-    var sheet = ss.getSheets()[0]; // primera pestaña
-    var data = sheet.getDataRange().getValues();
-    var headers = data[0];
+function doPost(e) {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheets()[0];
+  var data = JSON.parse(e.postData.contents);
+
+  // --- Obtener todos los datos (dashboard admin) ---
+  if (data.action === 'get_all') {
+    var allData = sheet.getDataRange().getValues();
+    var headers = allData[0];
     var rows = [];
-    for (var i = 1; i < data.length; i++) {
+    for (var i = 1; i < allData.length; i++) {
       var row = {};
       for (var j = 0; j < headers.length; j++) {
-        row[headers[j]] = data[i][j];
+        row[headers[j]] = allData[i][j];
       }
       rows.push(row);
     }
-    return ContentService.createTextOutput(JSON.stringify(rows))
+    return ContentService.createTextOutput(JSON.stringify({ ok: true, data: rows }))
       .setMimeType(ContentService.MimeType.JSON);
   }
 
   // --- Obtener usuario por email (para verificar contraseña) ---
-  if (action === 'get_user') {
-    var email = (e.parameter.email || '').trim().toLowerCase();
+  if (data.action === 'get_user') {
+    var email = (data.email || '').trim().toLowerCase();
     var usersSheet = ss.getSheetByName('usuarios');
     if (!usersSheet) {
       return ContentService.createTextOutput(JSON.stringify({ found: false, error: 'No existe la pestaña usuarios' }))
         .setMimeType(ContentService.MimeType.JSON);
     }
-    var data = usersSheet.getDataRange().getValues();
-    for (var i = 1; i < data.length; i++) {
-      if (String(data[i][0]).trim().toLowerCase() === email) {
+    var userData = usersSheet.getDataRange().getValues();
+    for (var i = 1; i < userData.length; i++) {
+      if (String(userData[i][0]).trim().toLowerCase() === email) {
         return ContentService.createTextOutput(JSON.stringify({
           found: true,
           email: email,
-          password_hash: String(data[i][1])
+          password_hash: String(userData[i][1])
         })).setMimeType(ContentService.MimeType.JSON);
       }
     }
@@ -53,18 +58,17 @@ function doGet(e) {
   }
 
   // --- Registrar usuario nuevo ---
-  if (action === 'register') {
-    var email = (e.parameter.email || '').trim().toLowerCase();
-    var hash = e.parameter.hash || '';
+  if (data.action === 'register') {
+    var email = (data.email || '').trim().toLowerCase();
+    var hash = data.hash || '';
     var usersSheet = ss.getSheetByName('usuarios');
     if (!usersSheet) {
       usersSheet = ss.insertSheet('usuarios');
       usersSheet.appendRow(['email', 'password_hash', 'fecha_registro']);
     }
-    // Verificar que no exista ya
-    var data = usersSheet.getDataRange().getValues();
-    for (var i = 1; i < data.length; i++) {
-      if (String(data[i][0]).trim().toLowerCase() === email) {
+    var userData = usersSheet.getDataRange().getValues();
+    for (var i = 1; i < userData.length; i++) {
+      if (String(userData[i][0]).trim().toLowerCase() === email) {
         return ContentService.createTextOutput(JSON.stringify({ ok: false, error: 'El usuario ya existe' }))
           .setMimeType(ContentService.MimeType.JSON);
       }
@@ -74,18 +78,8 @@ function doGet(e) {
       .setMimeType(ContentService.MimeType.JSON);
   }
 
-  // Fallback
-  return ContentService.createTextOutput(JSON.stringify({ error: 'Acción no reconocida' }))
-    .setMimeType(ContentService.MimeType.JSON);
-}
-
-function doPost(e) {
-  var ss = SpreadsheetApp.openById(SHEET_ID);
-  var sheet = ss.getSheets()[0];
-  var data = JSON.parse(e.postData.contents);
-
+  // --- Feedback: enlace de feedback real ---
   if (data.tipo === 'feedback_real') {
-    // Buscar fila por email y actualizar columna 9 (feedback_real)
     var rows = sheet.getDataRange().getValues();
     for (var i = rows.length - 1; i >= 1; i--) {
       if (String(rows[i][1]).trim().toLowerCase() === String(data.email).trim().toLowerCase()) {
@@ -93,8 +87,12 @@ function doPost(e) {
         break;
       }
     }
-  } else if (data.tipo === 'feedback_util') {
-    // Buscar fila por email y actualizar columnas 7 y 8 (fue_util, comentario)
+    return ContentService.createTextOutput(JSON.stringify({ ok: true }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // --- Feedback: utilidad ---
+  if (data.tipo === 'feedback_util') {
     var rows = sheet.getDataRange().getValues();
     for (var i = rows.length - 1; i >= 1; i--) {
       if (String(rows[i][1]).trim().toLowerCase() === String(data.email).trim().toLowerCase()) {
@@ -103,20 +101,27 @@ function doPost(e) {
         break;
       }
     }
-  } else {
-    // Nuevo diagnóstico: append row con 9 columnas
-    sheet.appendRow([
-      new Date().toISOString(),   // col 1: timestamp
-      data.email || '',            // col 2: email
-      data.nombre_proyecto || '',  // col 3: nombre del proyecto
-      data.formulario || '',       // col 4: formulario
-      data.diagnostico || '',      // col 5: diagnóstico
-      data.senales_json || '',     // col 6: señales crudas (JSON) para calibración
-      '',                          // col 7: fue_util (vacío)
-      '',                          // col 8: comentario (vacío)
-      ''                           // col 9: feedback_real (vacío)
-    ]);
+    return ContentService.createTextOutput(JSON.stringify({ ok: true }))
+      .setMimeType(ContentService.MimeType.JSON);
   }
 
-  return ContentService.createTextOutput('ok');
+  // --- Nuevo diagnóstico (registro) ---
+  if (data.tipo === 'registro' || (!data.action && !data.tipo)) {
+    sheet.appendRow([
+      new Date().toISOString(),
+      data.email || '',
+      data.nombre_proyecto || '',
+      data.formulario || '',
+      data.diagnostico || '',
+      data.senales_json || '',
+      '',
+      '',
+      ''
+    ]);
+    return ContentService.createTextOutput(JSON.stringify({ ok: true }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  return ContentService.createTextOutput(JSON.stringify({ error: 'Acción no reconocida' }))
+    .setMimeType(ContentService.MimeType.JSON);
 }

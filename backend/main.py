@@ -171,7 +171,7 @@ async def diagnosticar(
     Recibe un archivo de audio + contexto del cuestionario.
     Retorna un diagnóstico estructurado.
     """
-    # Validar formato
+    # Validar extensión
     extension = os.path.splitext(audio.filename or "")[1].lower()
     if extension not in [".mp3", ".wav", ".flac", ".aiff", ".aif", ".ogg"]:
         return JSONResponse(
@@ -179,13 +179,33 @@ async def diagnosticar(
             content={"error": f"Formato no soportado: {extension}. Usa MP3, WAV, FLAC o AIFF."}
         )
 
-    # Validar tamaño (máx 50 MB para prevenir DoS)
-    MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
+    # Leer contenido y validar tamaño (máx 80 MB para prevenir DoS)
+    MAX_UPLOAD_BYTES = 80 * 1024 * 1024  # 80 MB
     content = await audio.read()
     if len(content) > MAX_UPLOAD_BYTES:
         return JSONResponse(
             status_code=413,
-            content={"error": f"Archivo demasiado grande ({len(content) // (1024*1024)} MB). Máximo: 50 MB."}
+            content={"error": f"Archivo demasiado grande ({len(content) // (1024*1024)} MB). Máximo: 80 MB."}
+        )
+
+    # Validar magic bytes — confirmar que el archivo es audio real, no solo extensión
+    # Previene que alguien renombre un ejecutable a .mp3
+    _AUDIO_SIGNATURES = {
+        b"RIFF": "wav",       # WAV (RIFF header)
+        b"fLaC": "flac",      # FLAC
+        b"FORM": "aiff",      # AIFF
+        b"OggS": "ogg",       # OGG Vorbis
+        b"\xff\xfb": "mp3",   # MP3 (MPEG frame sync)
+        b"\xff\xf3": "mp3",   # MP3 (MPEG 2.5)
+        b"\xff\xf2": "mp3",   # MP3 (MPEG 2)
+        b"ID3": "mp3",        # MP3 con ID3 tag
+    }
+    header = content[:4]
+    is_valid_audio = any(header.startswith(sig) for sig in _AUDIO_SIGNATURES)
+    if not is_valid_audio:
+        return JSONResponse(
+            status_code=415,
+            content={"error": "El archivo no parece ser audio válido. Asegúrate de subir un MP3, WAV, FLAC o AIFF real."}
         )
 
     # Guardar archivo temporal
