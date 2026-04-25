@@ -520,9 +520,17 @@ async def acceder(request: Request, data: dict):
         return JSONResponse(status_code=400, content={"error": "La contraseña debe tener al menos 8 caracteres"})
 
     # Buscar si el usuario existe en el Sheet
+    if not SHEETS_WEBHOOK:
+        print("[ERROR] acceder: SHEETS_WEBHOOK no configurado")
+        return JSONResponse(status_code=503, content={
+            "error": "Servicio no configurado. Contacta al administrador."
+        })
+
     user_data = await _sheets_get({"action": "get_user", "email": email})
+    print(f"[DEBUG] acceder: _sheets_get response = {user_data}")
 
     if user_data.get("error"):
+        print(f"[ERROR] acceder: Sheets error = {user_data['error']}")
         return JSONResponse(status_code=503, content={
             "error": "No se pudo conectar con la base de datos. Verifica que el Apps Script esté actualizado."
         })
