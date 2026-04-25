@@ -149,7 +149,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.4.0"}
+    return {"status": "ok", "version": "0.4.1"}
 
 
 @app.post("/api/diagnostico")
@@ -180,12 +180,12 @@ async def diagnosticar(
         )
 
     # Leer contenido y validar tamaño (máx 80 MB para prevenir DoS)
-    MAX_UPLOAD_BYTES = 80 * 1024 * 1024  # 80 MB
+    MAX_UPLOAD_BYTES = 150 * 1024 * 1024  # 150 MB
     content = await audio.read()
     if len(content) > MAX_UPLOAD_BYTES:
         return JSONResponse(
             status_code=413,
-            content={"error": f"Archivo demasiado grande ({len(content) // (1024*1024)} MB). Máximo: 80 MB."}
+            content={"error": f"Archivo demasiado grande ({len(content) // (1024*1024)} MB). Máximo: 150 MB."}
         )
 
     # Validar magic bytes — confirmar que el archivo es audio real, no solo extensión
