@@ -450,9 +450,10 @@ async def proxy_sheets_datos(request: Request):
     if not _verify_admin_token(admin_cookie):
         return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
     try:
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            resp = await client.get(SHEETS_WEBHOOK, timeout=15)
-            return resp.json()
+        result = await _sheets_get({"action": "get_all"})
+        if result.get("_connection_error"):
+            return JSONResponse(status_code=503, content={"error": "Error conectando con la base de datos"})
+        return result
     except Exception as e:
         print(f"[ERROR] sheets datos: {e}")
         return JSONResponse(status_code=503, content={"error": "Error conectando con la base de datos"})
@@ -477,28 +478,34 @@ def _verify_password(password: str, hashed: str) -> bool:
 
 
 async def _sheets_get(params: dict) -> dict:
-    """Envía operaciones al Apps Script via POST (datos sensibles en body, no en URL)."""
+    """Envía operaciones al Apps Script via POST (datos sensibles en body, no en URL).
+    Devuelve la respuesta JSON del Apps Script.
+    Si hay error de conexión, devuelve {"_connection_error": "descripción"}
+    para distinguirlo de respuestas válidas del script que contengan "error"."""
     try:
         async with httpx.AsyncClient(follow_redirects=True) as client:
             resp = await client.post(SHEETS_WEBHOOK, json=params, timeout=15)
             data = resp.json()
-            # Si el Apps Script devuelve un array (no actualizado), tratarlo como error
+            # Si el Apps Script devuelve un array (no actualizado), es error de config
             if isinstance(data, list):
                 print(f"[SHEETS] Apps Script devolvió array en vez de objeto — ¿falta actualizar el script?")
-                return {"error": "Apps Script no actualizado"}
+                return {"_connection_error": "Apps Script no actualizado"}
             return data
     except Exception as e:
         print(f"[SHEETS] Error: {e}")
-        return {"error": str(e)}
+        return {"_connection_error": str(e)}
 
 
 async def _obtener_historial_sheets(email: str) -> list:
-    """Obtiene el historial del usuario desde Google Sheets."""
+    """Obtiene el historial del usuario desde Google Sheets via POST."""
     try:
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            resp = await client.get(SHEETS_WEBHOOK, timeout=15)
-            all_rows = resp.json()
-    except Exception:
+        result = await _sheets_get({"action": "get_all"})
+        if result.get("_connection_error"):
+            print(f"[HISTORIAL] Error de conexión: {result['_connection_error']}")
+            return []
+        all_rows = result.get("data", [])
+    except Exception as e:
+        print(f"[HISTORIAL] Error: {e}")
         all_rows = []
     return [r for r in all_rows if (r.get("email") or "").strip().lower() == email]
 
@@ -529,10 +536,13 @@ async def acceder(request: Request, data: dict):
     user_data = await _sheets_get({"action": "get_user", "email": email})
     print(f"[DEBUG] acceder: _sheets_get response = {user_data}")
 
-    if user_data.get("error"):
-        print(f"[ERROR] acceder: Sheets error = {user_data['error']}")
+    # Distinguir errores de conexión vs respuestas válidas del Apps Script
+    # El Apps Script puede devolver {"found": false, "error": "No existe la pestaña usuarios"}
+    # — eso no es un error de conexión, es que la pestaña aún no se ha creado
+    if user_data.get("_connection_error"):
+        print(f"[ERROR] acceder: Connection error = {user_data['_connection_error']}")
         return JSONResponse(status_code=503, content={
-            "error": "No se pudo conectar con la base de datos. Verifica que el Apps Script esté actualizado."
+            "error": "No se pudo conectar con la base de datos. Inténtalo de nuevo en unos segundos."
         })
 
     if user_data.get("found"):
