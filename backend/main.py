@@ -148,78 +148,8 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 
 @app.get("/api/health")
-async def health(debug: str = ""):
-    info = {"status": "ok", "version": "0.4.2"}
-    if debug == "sheets":
-        info["webhook_set"] = bool(SHEETS_WEBHOOK)
-        info["webhook_preview"] = SHEETS_WEBHOOK[:50] + "..." if SHEETS_WEBHOOK else "(vacío)"
-        try:
-            async with httpx.AsyncClient(follow_redirects=False) as client:
-                r = await client.post(SHEETS_WEBHOOK, json={"action": "get_user", "email": "test@debug.com"}, timeout=15)
-                info["step1_status"] = r.status_code
-                if r.status_code in (301, 302, 303, 307, 308):
-                    loc = r.headers.get("location", "")
-                    info["redirect_to"] = loc[:80]
-                    r2 = await client.post(loc, json={"action": "get_user", "email": "test@debug.com"}, timeout=15)
-                    info["step2_status"] = r2.status_code
-                    info["step2_body"] = r2.text[:200]
-                else:
-                    info["step1_body"] = r.text[:200]
-        except Exception as e:
-            info["error"] = f"{type(e).__name__}: {e}"
-    return info
-
-
-@app.get("/api/debug/sheets")
-async def debug_sheets():
-    """TEMPORAL — diagnóstico de conexión con Apps Script. BORRAR después de debug."""
-    import traceback
-    results = {
-        "webhook_configured": bool(SHEETS_WEBHOOK),
-        "webhook_url_preview": SHEETS_WEBHOOK[:40] + "..." if SHEETS_WEBHOOK else "(vacío)",
-    }
-
-    if not SHEETS_WEBHOOK:
-        results["error"] = "SHEETS_WEBHOOK no está configurado en las env vars de Railway"
-        return results
-
-    # Test 1: POST directo (como lo hace _sheets_get)
-    try:
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            resp = await client.post(SHEETS_WEBHOOK, json={"action": "get_user", "email": "test@debug.com"}, timeout=15)
-            results["post_status_code"] = resp.status_code
-            results["post_content_type"] = resp.headers.get("content-type", "")
-            results["post_response_preview"] = resp.text[:300]
-            try:
-                results["post_json"] = resp.json()
-            except Exception:
-                results["post_json_error"] = "No es JSON válido"
-    except Exception as e:
-        results["post_error"] = f"{type(e).__name__}: {e}"
-        results["post_traceback"] = traceback.format_exc()[-500:]
-
-    # Test 2: POST sin follow_redirects (para ver si hay redirect)
-    try:
-        async with httpx.AsyncClient(follow_redirects=False) as client:
-            resp2 = await client.post(SHEETS_WEBHOOK, json={"action": "get_user", "email": "test@debug.com"}, timeout=15)
-            results["no_redirect_status"] = resp2.status_code
-            if resp2.status_code in (301, 302, 303, 307, 308):
-                results["redirect_location"] = resp2.headers.get("location", "")[:100]
-                results["redirect_type"] = resp2.status_code
-                # Ahora seguir el redirect manualmente con POST
-                redirect_url = resp2.headers.get("location", "")
-                if redirect_url:
-                    resp3 = await client.post(redirect_url, json={"action": "get_user", "email": "test@debug.com"}, timeout=15)
-                    results["manual_post_status"] = resp3.status_code
-                    results["manual_post_preview"] = resp3.text[:300]
-                    try:
-                        results["manual_post_json"] = resp3.json()
-                    except Exception:
-                        results["manual_post_json_error"] = "No es JSON válido"
-    except Exception as e:
-        results["no_redirect_error"] = f"{type(e).__name__}: {e}"
-
-    return results
+def health():
+    return {"status": "ok", "version": "0.4.2"}
 
 
 @app.post("/api/diagnostico")
@@ -604,8 +534,6 @@ async def acceder(request: Request, data: dict):
         })
 
     user_data = await _sheets_get({"action": "get_user", "email": email})
-    print(f"[DEBUG] acceder: _sheets_get response = {user_data}")
-
     # Distinguir errores de conexión vs respuestas válidas del Apps Script
     # El Apps Script puede devolver {"found": false, "error": "No existe la pestaña usuarios"}
     # — eso no es un error de conexión, es que la pestaña aún no se ha creado
