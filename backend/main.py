@@ -148,8 +148,26 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 
 @app.get("/api/health")
-def health():
-    return {"status": "ok", "version": "0.4.1"}
+async def health(debug: str = ""):
+    info = {"status": "ok", "version": "0.4.2"}
+    if debug == "sheets":
+        info["webhook_set"] = bool(SHEETS_WEBHOOK)
+        info["webhook_preview"] = SHEETS_WEBHOOK[:50] + "..." if SHEETS_WEBHOOK else "(vacío)"
+        try:
+            async with httpx.AsyncClient(follow_redirects=False) as client:
+                r = await client.post(SHEETS_WEBHOOK, json={"action": "get_user", "email": "test@debug.com"}, timeout=15)
+                info["step1_status"] = r.status_code
+                if r.status_code in (301, 302, 303, 307, 308):
+                    loc = r.headers.get("location", "")
+                    info["redirect_to"] = loc[:80]
+                    r2 = await client.post(loc, json={"action": "get_user", "email": "test@debug.com"}, timeout=15)
+                    info["step2_status"] = r2.status_code
+                    info["step2_body"] = r2.text[:200]
+                else:
+                    info["step1_body"] = r.text[:200]
+        except Exception as e:
+            info["error"] = f"{type(e).__name__}: {e}"
+    return info
 
 
 @app.get("/api/debug/sheets")
