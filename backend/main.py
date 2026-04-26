@@ -152,6 +152,58 @@ def health():
     return {"status": "ok", "version": "0.4.1"}
 
 
+@app.get("/api/debug/sheets")
+async def debug_sheets():
+    """TEMPORAL — diagnóstico de conexión con Apps Script. BORRAR después de debug."""
+    import traceback
+    results = {
+        "webhook_configured": bool(SHEETS_WEBHOOK),
+        "webhook_url_preview": SHEETS_WEBHOOK[:40] + "..." if SHEETS_WEBHOOK else "(vacío)",
+    }
+
+    if not SHEETS_WEBHOOK:
+        results["error"] = "SHEETS_WEBHOOK no está configurado en las env vars de Railway"
+        return results
+
+    # Test 1: POST directo (como lo hace _sheets_get)
+    try:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            resp = await client.post(SHEETS_WEBHOOK, json={"action": "get_user", "email": "test@debug.com"}, timeout=15)
+            results["post_status_code"] = resp.status_code
+            results["post_content_type"] = resp.headers.get("content-type", "")
+            results["post_response_preview"] = resp.text[:300]
+            try:
+                results["post_json"] = resp.json()
+            except Exception:
+                results["post_json_error"] = "No es JSON válido"
+    except Exception as e:
+        results["post_error"] = f"{type(e).__name__}: {e}"
+        results["post_traceback"] = traceback.format_exc()[-500:]
+
+    # Test 2: POST sin follow_redirects (para ver si hay redirect)
+    try:
+        async with httpx.AsyncClient(follow_redirects=False) as client:
+            resp2 = await client.post(SHEETS_WEBHOOK, json={"action": "get_user", "email": "test@debug.com"}, timeout=15)
+            results["no_redirect_status"] = resp2.status_code
+            if resp2.status_code in (301, 302, 303, 307, 308):
+                results["redirect_location"] = resp2.headers.get("location", "")[:100]
+                results["redirect_type"] = resp2.status_code
+                # Ahora seguir el redirect manualmente con POST
+                redirect_url = resp2.headers.get("location", "")
+                if redirect_url:
+                    resp3 = await client.post(redirect_url, json={"action": "get_user", "email": "test@debug.com"}, timeout=15)
+                    results["manual_post_status"] = resp3.status_code
+                    results["manual_post_preview"] = resp3.text[:300]
+                    try:
+                        results["manual_post_json"] = resp3.json()
+                    except Exception:
+                        results["manual_post_json_error"] = "No es JSON válido"
+    except Exception as e:
+        results["no_redirect_error"] = f"{type(e).__name__}: {e}"
+
+    return results
+
+
 @app.post("/api/diagnostico")
 @limiter.limit("3/minute")
 async def diagnosticar(
