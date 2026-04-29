@@ -1,82 +1,73 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
   <defs>
-    <radialGradient id="vignette" cx="0.25" cy="0.4" r="0.7">
-      <stop offset="0%" stop-color="#1a1a1a" stop-opacity="0.6"/>
+    <radialGradient id="vg" cx="0.25" cy="0.45" r="0.7">
+      <stop offset="0%" stop-color="#1a1a1a" stop-opacity="0.55"/>
       <stop offset="100%" stop-color="#0a0a0a" stop-opacity="0"/>
-    </radialGradient>
-    <radialGradient id="purpleGlow" cx="0.7" cy="0.6" r="0.4">
-      <stop offset="0%" stop-color="#6D10FF" stop-opacity="0.10"/>
-      <stop offset="100%" stop-color="#6D10FF" stop-opacity="0"/>
     </radialGradient>
   </defs>
 
-  <!-- Fondo casi negro, fiel a la home -->
+  <!-- Fondo casi negro -->
   <rect width="1200" height="630" fill="#0a0a0a"/>
-  <rect width="1200" height="630" fill="url(#vignette)"/>
-  <rect width="1200" height="630" fill="url(#purpleGlow)"/>
+  <rect width="1200" height="630" fill="url(#vg)"/>
 
   <!-- =============== COLUMNA IZQUIERDA =============== -->
 
-  <!-- Wordmark: ment[knob]track -->
+  <!-- Wordmark con Termina Demi -->
   <g transform="translate(72, 175)">
-    <text x="0" y="0" font-family="Arial Black, Helvetica, Arial, sans-serif" font-weight="900" font-size="118" fill="#F2F2F2" letter-spacing="-7">ment</text>
-    <!-- Knob: círculo perimetral + tick diagonal verde -->
-    <g transform="translate(305, -78)">
-      <circle cx="42" cy="42" r="38" fill="none" stroke="#F2F2F2" stroke-width="7"/>
-      <line x1="22" y1="62" x2="62" y2="22" stroke="#25F464" stroke-width="7" stroke-linecap="round"/>
+    <text x="0" y="0" font-family="Termina, Arial Black, sans-serif" font-weight="600" font-size="118" fill="#F2F2F2" letter-spacing="-3">ment</text>
+    <!-- Knob = sustituye la 'o' (círculo verde + tick diagonal interior) -->
+    <g transform="translate(280, -82)">
+      <circle cx="46" cy="46" r="42" fill="none" stroke="#25F464" stroke-width="6.5"/>
+      <line x1="62" y1="30" x2="38" y2="54" stroke="#25F464" stroke-width="6.5" stroke-linecap="round"/>
     </g>
-    <text x="395" y="0" font-family="Arial Black, Helvetica, Arial, sans-serif" font-weight="900" font-size="118" fill="#F2F2F2" letter-spacing="-7">track</text>
+    <text x="378" y="0" font-family="Termina, Arial Black, sans-serif" font-weight="600" font-size="118" fill="#F2F2F2" letter-spacing="-3">track</text>
   </g>
 
-  <!-- Claim principal -->
-  <text font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="34" fill="#FFFFFF" letter-spacing="-0.5">
-    <tspan x="72" y="295">Detecta qué corregir antes, qué no</tspan>
-    <tspan x="72" y="345">tocar todavía y cuál es el siguiente paso.</tspan>
+  <!-- Claim principal (3 líneas, fiel al texto de la home) -->
+  <text font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="32" fill="#FFFFFF" letter-spacing="-0.4">
+    <tspan x="72" y="290">Detecta qué debería corregirse antes,</tspan>
+    <tspan x="72" y="332">qué no conviene tocar todavía y cuál</tspan>
+    <tspan x="72" y="374">es el siguiente paso.</tspan>
   </text>
 
   <!-- Subtítulo -->
-  <text x="72" y="400" font-family="Arial, Helvetica, sans-serif" font-weight="400" font-size="22" fill="#9CA3AF">No te damos más información. Te damos dirección.</text>
+  <text x="72" y="425" font-family="Arial, Helvetica, sans-serif" font-weight="400" font-size="20" fill="#9CA3AF">No te damos más información. Te damos dirección.</text>
 
   <!-- Pills WAV / MP3 / FLAC / AIFF -->
-  <g transform="translate(72, 458)">
-    <!-- WAV -->
+  <g transform="translate(72, 470)">
     <g>
-      <rect x="0" y="0" width="92" height="52" rx="26" fill="rgba(37,244,100,0.10)" stroke="#25F464" stroke-width="1.5"/>
-      <text x="46" y="34" text-anchor="middle" font-family="Arial, sans-serif" font-weight="700" font-size="22" fill="#25F464">WAV</text>
+      <rect x="0" y="0" width="86" height="48" rx="24" fill="rgba(37,244,100,0.10)" stroke="#25F464" stroke-width="1.5"/>
+      <text x="43" y="31" text-anchor="middle" font-family="Arial, sans-serif" font-weight="700" font-size="20" fill="#25F464">WAV</text>
     </g>
-    <!-- MP3 -->
-    <g transform="translate(108, 0)">
-      <rect x="0" y="0" width="86" height="52" rx="26" fill="rgba(37,244,100,0.10)" stroke="#25F464" stroke-width="1.5"/>
-      <text x="43" y="34" text-anchor="middle" font-family="Arial, sans-serif" font-weight="700" font-size="22" fill="#25F464">MP3</text>
+    <g transform="translate(102, 0)">
+      <rect x="0" y="0" width="80" height="48" rx="24" fill="rgba(37,244,100,0.10)" stroke="#25F464" stroke-width="1.5"/>
+      <text x="40" y="31" text-anchor="middle" font-family="Arial, sans-serif" font-weight="700" font-size="20" fill="#25F464">MP3</text>
     </g>
-    <!-- FLAC -->
-    <g transform="translate(210, 0)">
-      <rect x="0" y="0" width="98" height="52" rx="26" fill="rgba(37,244,100,0.10)" stroke="#25F464" stroke-width="1.5"/>
-      <text x="49" y="34" text-anchor="middle" font-family="Arial, sans-serif" font-weight="700" font-size="22" fill="#25F464">FLAC</text>
+    <g transform="translate(198, 0)">
+      <rect x="0" y="0" width="92" height="48" rx="24" fill="rgba(37,244,100,0.10)" stroke="#25F464" stroke-width="1.5"/>
+      <text x="46" y="31" text-anchor="middle" font-family="Arial, sans-serif" font-weight="700" font-size="20" fill="#25F464">FLAC</text>
     </g>
-    <!-- AIFF -->
-    <g transform="translate(324, 0)">
-      <rect x="0" y="0" width="92" height="52" rx="26" fill="rgba(37,244,100,0.10)" stroke="#25F464" stroke-width="1.5"/>
-      <text x="46" y="34" text-anchor="middle" font-family="Arial, sans-serif" font-weight="700" font-size="22" fill="#25F464">AIFF</text>
+    <g transform="translate(306, 0)">
+      <rect x="0" y="0" width="86" height="48" rx="24" fill="rgba(37,244,100,0.10)" stroke="#25F464" stroke-width="1.5"/>
+      <text x="43" y="31" text-anchor="middle" font-family="Arial, sans-serif" font-weight="700" font-size="20" fill="#25F464">AIFF</text>
     </g>
   </g>
 
-  <!-- =============== COLUMNA DERECHA: drop zone =============== -->
-  <g transform="translate(740, 130)">
-    <rect x="0" y="0" width="395" height="370" rx="16" fill="rgba(20,20,20,0.5)" stroke="#3a3a3a" stroke-width="2" stroke-dasharray="10,7"/>
+  <!-- Ver historial -->
+  <text x="72" y="568" font-family="Arial, Helvetica, sans-serif" font-weight="400" font-size="17" fill="#6B7280">www.mentotrack.com</text>
 
-    <!-- Icono upload -->
-    <g transform="translate(178, 110)" stroke="#9CA3AF" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <!-- =============== DROP ZONE (columna derecha) =============== -->
+  <g transform="translate(740, 130)">
+    <rect x="0" y="0" width="395" height="370" rx="18" fill="rgba(20,20,20,0.4)" stroke="#3a3a3a" stroke-width="2" stroke-dasharray="9,7"/>
+
+    <!-- Upload icon -->
+    <g transform="translate(178, 115)" stroke="#9CA3AF" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round">
       <path d="M20 5 L20 50"/>
       <path d="M5 20 L20 5 L35 20"/>
       <path d="M-2 60 L-2 75 L42 75 L42 60"/>
     </g>
 
-    <!-- Texto -->
     <text x="197" y="245" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="600" font-size="24" fill="#E5E5E5">Arrastra tu archivo aquí</text>
     <text x="197" y="278" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="400" font-size="17" fill="#6B7280">o haz clic para seleccionar</text>
   </g>
-
-  <!-- URL discreta abajo -->
-  <text x="72" y="585" font-family="Arial, Helvetica, sans-serif" font-weight="500" font-size="18" fill="#6B7280" letter-spacing="0.3">www.mentotrack.com</text>
 </svg>
