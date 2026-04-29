@@ -86,7 +86,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://www.googletagmanager.com; "
             "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com; "
-            "img-src 'self' data: https://www.googletagmanager.com https://img.youtube.com; "
+            "img-src 'self' data: https://www.googletagmanager.com https://img.youtube.com https://i.ytimg.com https://i3.ytimg.com; "
             "connect-src 'self' https://www.google-analytics.com https://analytics.google.com https://*.google-analytics.com https://*.analytics.google.com; "
             "frame-ancestors 'none';"
         )
