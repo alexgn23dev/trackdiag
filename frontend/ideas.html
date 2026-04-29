@@ -619,7 +619,8 @@
                 const response = await fetch(`${API_BASE}/ideas`);
                 if (!response.ok) throw new Error('Error fetching ideas');
 
-                const ideas = await response.json();
+                const data = await response.json();
+                const ideas = data.ideas || [];
                 loading.style.display = 'none';
 
                 if (!ideas || ideas.length === 0) {
@@ -628,7 +629,7 @@
                 }
 
                 // Sort by votes descending
-                ideas.sort((a, b) => (b.votes || 0) - (a.votes || 0));
+                ideas.sort((a, b) => (b.votos || 0) - (a.votos || 0));
 
                 // Render ideas
                 const votedIdeas = getVotedIdeas();
@@ -664,7 +665,7 @@
                         onclick="vote('${idea.id}', 'up')"
                         ${upVoted ? 'title="Ya votaste por esta idea"' : ''}
                     >▲</button>
-                    <div class="vote-count" id="vote-count-${idea.id}">${idea.votes || 0}</div>
+                    <div class="vote-count" id="vote-count-${idea.id}">${idea.votos || 0}</div>
                     <button
                         class="vote-arrow ${downVoted ? 'voted-down' : ''}"
                         onclick="vote('${idea.id}', 'down')"
@@ -723,7 +724,7 @@
 
                     // Animate vote count
                     const result = await response.json();
-                    countEl.textContent = result.votes || 0;
+                    countEl.textContent = result.votos || 0;
                     countEl.classList.add('animate');
                     setTimeout(() => countEl.classList.remove('animate'), 600);
 
