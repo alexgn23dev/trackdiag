@@ -2034,18 +2034,26 @@
                                 // Agrupar por proyecto (solo entradas que tengan scores y proyecto)
                                 const porProyecto = {};
                                 local.forEach(e => {
-                                    const key = (e.proyecto || '').trim().toLowerCase();
+                                    // Usar proyecto si existe, si no usar nombre de archivo como fallback
+                                    const key = (e.proyecto || e.archivo || '').trim().toLowerCase();
                                     if (!key) return;
                                     if (!porProyecto[key]) porProyecto[key] = [];
                                     porProyecto[key].push(e);
                                 });
-                                // Solo proyectos con 2+ análisis que tengan scores
+                                // Solo proyectos con 2+ análisis (con scores O con diagnóstico)
                                 const proyectosConProgreso = Object.entries(porProyecto)
                                     .filter(([, entries]) => {
-                                        const conScores = entries.filter(e => e.scores && Object.keys(e.scores).length > 0);
-                                        return conScores.length >= 2;
+                                        const validos = entries.filter(e =>
+                                            (e.scores && Object.keys(e.scores).length > 0) || e.diagnostico_id || e.score
+                                        );
+                                        return validos.length >= 2;
                                     })
-                                    .map(([nombre, entries]) => ({ nombre, entries: entries.filter(e => e.scores && Object.keys(e.scores).length > 0) }));
+                                    .map(([nombre, entries]) => ({
+                                        nombre,
+                                        entries: entries.filter(e =>
+                                            (e.scores && Object.keys(e.scores).length > 0) || e.diagnostico_id || e.score
+                                        )
+                                    }));
 
                                 if (proyectosConProgreso.length === 0) return null;
 
