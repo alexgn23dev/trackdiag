@@ -52,6 +52,7 @@
         @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         .pulse-dot { animation: pulse 1.5s ease-in-out infinite; }
         @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+        @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
         input[type="range"] { -webkit-appearance: none; background: var(--po-medium); height: 4px; border-radius: 2px; }
         input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; background: var(--po-purple); border-radius: 50%; cursor: pointer; }
         .card { background: var(--po-card); border: 1px solid var(--po-border); border-radius: 12px; }
@@ -534,6 +535,62 @@
         );
     }
 
+    // =========================================================================
+    // Mapa de tutoriales de YouTube por diagnóstico
+    // Cada diagnóstico tiene un array de vídeos: { titulo, url, descripcion }
+    // Canal: Producción Online (Alex)
+    // Para añadir/editar: cambia las URLs y títulos aquí directamente.
+    // =========================================================================
+    const TUTORIALES_MAP = {
+        problema_arreglo: [
+            { titulo: 'Cómo Estructurar TECHNO con Fluidez (Studio Session Real)', url: 'https://www.youtube.com/watch?v=xYnblZrPjq4', descripcion: 'Sesión real donde se construye un track techno con estructura completa: intro, build, drop, break y outro.' },
+            { titulo: '4 técnicas de transiciones para sonar más profesional', url: 'https://www.youtube.com/watch?v=zQeNv4t6nb4', descripcion: 'Cómo conectar secciones con transiciones que den cohesión y movimiento al arreglo.' },
+        ],
+        poco_contraste: [
+            { titulo: '7 Técnicas para Crear TENSIÓN en tus SUBIDONES', url: 'https://www.youtube.com/watch?v=Hb7JJwWTL0c', descripcion: 'Técnicas de build-up y tensión para crear contrastes de energía entre secciones.' },
+            { titulo: 'Técnica del DROP RETARDADO (para Hacer SUBIDONES Más Interesantes)', url: 'https://www.youtube.com/watch?v=jK_aYGg41ek', descripcion: 'Cómo jugar con las expectativas del oyente para crear impacto real en los drops.' },
+        ],
+        falta_impacto: [
+            { titulo: '6 Técnicas para MEZCLAR Kicks y Sonar POTENTE', url: 'https://www.youtube.com/watch?v=F1cY4JXW6DU', descripcion: 'Layering, procesado y técnicas para que tus kicks peguen fuerte en la mezcla.' },
+            { titulo: 'Haz Esto para que tus BREAKS suenen LLENOS', url: 'https://www.youtube.com/watch?v=HZRHXJ2iILU', descripcion: 'Cómo mantener interés y energía en los breaks sin que suenen vacíos.' },
+        ],
+        mezcla_prematura: [
+            { titulo: 'DEBES saber esto ANTES de empezar a MEZCLAR', url: 'https://www.youtube.com/watch?v=jywd2lDSao0', descripcion: 'Audio flow, clipping y conceptos clave que debes dominar antes de tocar un EQ.' },
+            { titulo: '¿Y si la mezcla no es tan difícil como te han hecho creer?', url: 'https://www.youtube.com/watch?v=bIBuLhMfbCQ', descripcion: 'Perspectiva práctica sobre mezcla: cuándo hacerla y cómo no complicarte la vida.' },
+        ],
+        exceso_lowend: [
+            { titulo: 'Por qué tus bajos suenan flacos? | Errores típicos', url: 'https://www.youtube.com/watch?v=h5B2x9LGHLE', descripcion: 'Errores comunes en el low end y cómo conseguir graves limpios y potentes.' },
+            { titulo: '¿Por qué tu KICK y BASS no suenan bien? | Técnica', url: 'https://www.youtube.com/watch?v=nRBfN7Enxs8', descripcion: 'Cómo hacer que kick y bass convivan sin competir por el mismo espacio.' },
+        ],
+        exceso_densidad: [
+            { titulo: '¿Cuantas Pistas debe tener Tu Canción?', url: 'https://www.youtube.com/watch?v=uK2ek1Z28PA', descripcion: 'Cuántos elementos son suficientes y cuándo estás saturando la mezcla.' },
+            { titulo: '6 Pasos para BALANCEAR tus MEZCLAS siempre BIEN', url: 'https://www.youtube.com/watch?v=B9JYjCBXRCg', descripcion: 'Método paso a paso para conseguir una mezcla equilibrada sin saturar el espectro.' },
+        ],
+        track_verde: [
+            { titulo: 'Cómo PRODUCIR Música con ABLETON LIVE | 10 Primeros Pasos', url: 'https://www.youtube.com/watch?v=N-vrz5xlyYU', descripcion: 'Guía completa para empezar a producir desde cero con Ableton Live.' },
+            { titulo: 'Produce tu Primera Canción desde Cero (masterclass paso a paso)', url: 'https://www.youtube.com/watch?v=UIBmRuoINa0', descripcion: 'Masterclass de más de 1 hora para ir de una idea a un track terminado.' },
+        ],
+        carencia_espectral: [
+            { titulo: 'Por qué tus MEZCLAS suenan Flacas | 5 puntos a revisar', url: 'https://www.youtube.com/watch?v=3P1BJZKpuxE', descripcion: 'Identifica qué le falta a tu mezcla y cómo rellenar huecos en el espectro.' },
+            { titulo: 'Cómo crear ATMÓSFERAS Fácil y Rápido | Ableton Rack', url: 'https://www.youtube.com/watch?v=D5sRcKk2ZWA', descripcion: 'Añade texturas y capas atmosféricas que llenen el espectro sin saturar.' },
+        ],
+        conflicto_armonico: [
+            { titulo: 'Cual es la Mejor TONALIDAD para tu BASSLINE según la IA', url: 'https://www.youtube.com/watch?v=4CuCYb_4vXk', descripcion: 'Entiende cómo elegir tonalidades que funcionen para tus líneas de bajo y melodías.' },
+            { titulo: 'Cómo DAFT PUNK me enseñó a Crear Progresiones de Acordes', url: 'https://www.youtube.com/watch?v=4AEq0I5h7dk', descripcion: 'Aprende a crear progresiones armónicas que funcionan en música electrónica.' },
+        ],
+        pobreza_armonica: [
+            { titulo: 'Cómo Hacer MELODÍAS que FUNCIONAN (súper fácil)', url: 'https://www.youtube.com/watch?v=LYOGQplQi-Q', descripcion: 'Técnicas simples para crear melodías efectivas aunque no sepas teoría musical.' },
+            { titulo: 'LA FÓRMULA para Crear MELODÍAS Pegadizas', url: 'https://www.youtube.com/watch?v=rPf3z-GTVD4', descripcion: 'Método paso a paso para escribir melodías que se quedan en la cabeza.' },
+        ],
+        harshness_mezcla: [
+            { titulo: '5 ERRORES de Ecualización que debes EVITAR', url: 'https://www.youtube.com/watch?v=xaJ1KkuBxIw', descripcion: 'Errores de EQ que causan dureza y fatiga auditiva en tus mezclas.' },
+            { titulo: 'Cambios simples que mejorarán tus mezclas ahora', url: 'https://www.youtube.com/watch?v=bIBuLhMfbCQ', descripcion: 'Ajustes rápidos para suavizar mezclas agresivas sin perder definición.' },
+        ],
+        sin_diagnostico: [
+            { titulo: '¿Estás preparado para lanzar música? (cómo saberlo)', url: 'https://www.youtube.com/watch?v=tVxW8nBeS_Q', descripcion: 'Evalúa si tu producción está lista para enviar a sellos o publicar.' },
+        ],
+    };
+
     function DiagnosticoScreen({ resultado, onReset, contexto, userEmail }) {
         const r = resultado;
         const d = r.datos_audio;
@@ -545,6 +602,21 @@
         const [feedbackEnlace, setFeedbackEnlace] = useState('');
         const [feedbackEnviado, setFeedbackEnviado] = useState(false);
         const [feedbackRealEnviado, setFeedbackRealEnviado] = useState(false);
+        const [showTutoriales, setShowTutoriales] = useState(false);
+
+        // Tutoriales para este diagnóstico
+        const diagId = r.diagnostico_principal?.id || 'sin_diagnostico';
+        const tutoriales = TUTORIALES_MAP[diagId] || TUTORIALES_MAP['sin_diagnostico'] || [];
+        // También añadir tutoriales del diagnóstico secundario si existe
+        const secId = r.diagnostico_secundario?.id;
+        const tutorialesSecundario = secId && TUTORIALES_MAP[secId] ? TUTORIALES_MAP[secId] : [];
+        // Combinar sin duplicados (por URL)
+        const allTutoriales = [...tutoriales];
+        tutorialesSecundario.forEach(t => {
+            if (!allTutoriales.some(existing => existing.url === t.url)) {
+                allTutoriales.push(t);
+            }
+        });
 
         const semaforoConfig = r.estado_track === 'verde'
             ? { color: '#f87171', bg: 'rgba(248,113,113,0.10)', border: '#7f1d1d', label: 'Fase temprana', icon: '🔴' }
@@ -1123,7 +1195,26 @@
                     )}
 
                     {/* Acciones */}
-                    <div className="text-center mt-4 mb-4">
+                    <div className="text-center mt-4 mb-4 flex flex-col items-center gap-3">
+                        {allTutoriales.length > 0 && (
+                            <button
+                                onClick={() => {
+                                    setShowTutoriales(true);
+                                    trackEvent('tutoriales_panel_opened', {
+                                        diagnostico: diagId,
+                                        n_tutoriales: allTutoriales.length,
+                                    });
+                                }}
+                                className="px-6 py-3 rounded-xl font-medium text-sm transition-all"
+                                style={{
+                                    background: 'linear-gradient(135deg, #7c3aed 0%, #6366f1 100%)',
+                                    color: 'white',
+                                    boxShadow: '0 2px 12px rgba(99,102,241,0.3)',
+                                }}
+                            >
+                                ▶ Ver tutoriales recomendados
+                            </button>
+                        )}
                         <button
                             onClick={onReset}
                             className="px-6 py-3 btn-secondary rounded-xl"
@@ -1131,6 +1222,161 @@
                             Analizar otro track
                         </button>
                     </div>
+
+                    {/* ===== PANEL MODAL TUTORIALES ===== */}
+                    {showTutoriales && (
+                        <div
+                            className="fixed inset-0 z-50 flex justify-end"
+                            style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+                            onClick={(e) => { if (e.target === e.currentTarget) setShowTutoriales(false); }}
+                        >
+                            <div
+                                className="w-full max-w-md h-full overflow-y-auto fade-in"
+                                style={{
+                                    background: 'var(--bg-card, #1a1a2e)',
+                                    borderLeft: '1px solid rgba(255,255,255,0.08)',
+                                    animation: 'slideInRight 0.3s ease-out',
+                                }}
+                            >
+                                {/* Header del panel */}
+                                <div className="sticky top-0 z-10 p-5 flex items-center justify-between"
+                                     style={{ background: 'var(--bg-card, #1a1a2e)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                                    <div>
+                                        <h3 className="text-white font-bold text-base">Tutoriales recomendados</h3>
+                                        <p className="text-gray-500 text-xs mt-1">Según tu diagnóstico · Producción Online</p>
+                                    </div>
+                                    <button
+                                        onClick={() => setShowTutoriales(false)}
+                                        className="text-gray-500 hover:text-white transition-colors text-xl leading-none p-1"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+
+                                {/* Lista de tutoriales */}
+                                <div className="p-5 space-y-4">
+                                    {/* Tutoriales del diagnóstico principal */}
+                                    <p className="text-xs text-purple-400 font-medium uppercase tracking-wider">
+                                        {r.diagnostico_principal.titulo.length > 60
+                                            ? r.diagnostico_principal.titulo.substring(0, 60) + '…'
+                                            : r.diagnostico_principal.titulo}
+                                    </p>
+                                    {tutoriales.map((tut, i) => {
+                                        // Extraer video ID para thumbnail
+                                        const vidMatch = tut.url.match(/[?&]v=([^&]+)/);
+                                        const vidId = vidMatch ? vidMatch[1] : null;
+                                        return (
+                                            <a
+                                                key={`main-${i}`}
+                                                href={tut.url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="block rounded-xl overflow-hidden transition-all hover:scale-[1.02]"
+                                                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}
+                                                onClick={() => {
+                                                    trackEvent('tutorial_clicked', {
+                                                        diagnostico: diagId,
+                                                        tutorial_titulo: tut.titulo,
+                                                        tutorial_index: i,
+                                                    });
+                                                }}
+                                            >
+                                                {vidId && (
+                                                    <div className="w-full aspect-video bg-gray-900 relative">
+                                                        <img
+                                                            src={`https://img.youtube.com/vi/${vidId}/mqdefault.jpg`}
+                                                            alt={tut.titulo}
+                                                            className="w-full h-full object-cover"
+                                                            loading="lazy"
+                                                        />
+                                                        <div className="absolute inset-0 flex items-center justify-center">
+                                                            <div className="w-12 h-12 rounded-full flex items-center justify-center"
+                                                                 style={{ background: 'rgba(0,0,0,0.7)' }}>
+                                                                <span className="text-white text-lg ml-0.5">▶</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                <div className="p-4">
+                                                    <h4 className="text-white text-sm font-medium leading-snug mb-1">{tut.titulo}</h4>
+                                                    <p className="text-gray-500 text-xs leading-relaxed">{tut.descripcion}</p>
+                                                </div>
+                                            </a>
+                                        );
+                                    })}
+
+                                    {/* Tutoriales del diagnóstico secundario */}
+                                    {tutorialesSecundario.length > 0 && (
+                                        <>
+                                            <div className="border-t border-gray-800 pt-4 mt-4">
+                                                <p className="text-xs text-indigo-400 font-medium uppercase tracking-wider mb-3">
+                                                    También útil: {r.diagnostico_secundario.titulo.length > 50
+                                                        ? r.diagnostico_secundario.titulo.substring(0, 50) + '…'
+                                                        : r.diagnostico_secundario.titulo}
+                                                </p>
+                                            </div>
+                                            {tutorialesSecundario.map((tut, i) => {
+                                                const vidMatch = tut.url.match(/[?&]v=([^&]+)/);
+                                                const vidId = vidMatch ? vidMatch[1] : null;
+                                                return (
+                                                    <a
+                                                        key={`sec-${i}`}
+                                                        href={tut.url}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="block rounded-xl overflow-hidden transition-all hover:scale-[1.02]"
+                                                        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}
+                                                        onClick={() => {
+                                                            trackEvent('tutorial_clicked', {
+                                                                diagnostico: secId,
+                                                                tutorial_titulo: tut.titulo,
+                                                                tutorial_index: i,
+                                                                es_secundario: true,
+                                                            });
+                                                        }}
+                                                    >
+                                                        {vidId && (
+                                                            <div className="w-full aspect-video bg-gray-900 relative">
+                                                                <img
+                                                                    src={`https://img.youtube.com/vi/${vidId}/mqdefault.jpg`}
+                                                                    alt={tut.titulo}
+                                                                    className="w-full h-full object-cover"
+                                                                    loading="lazy"
+                                                                />
+                                                                <div className="absolute inset-0 flex items-center justify-center">
+                                                                    <div className="w-12 h-12 rounded-full flex items-center justify-center"
+                                                                         style={{ background: 'rgba(0,0,0,0.7)' }}>
+                                                                        <span className="text-white text-lg ml-0.5">▶</span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                        <div className="p-4">
+                                                            <h4 className="text-white text-sm font-medium leading-snug mb-1">{tut.titulo}</h4>
+                                                            <p className="text-gray-500 text-xs leading-relaxed">{tut.descripcion}</p>
+                                                        </div>
+                                                    </a>
+                                                );
+                                            })}
+                                        </>
+                                    )}
+
+                                    {/* CTA canal */}
+                                    <div className="text-center pt-4 pb-2">
+                                        <a
+                                            href="https://www.youtube.com/@ProduccionOnline"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-purple-400 hover:text-purple-300 text-xs transition-colors"
+                                            onClick={() => trackEvent('tutorial_canal_clicked', { diagnostico: diagId })}
+                                        >
+                                            Ver más en Producción Online →
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Footer privacidad */}
                     <div className="text-center mb-8">
