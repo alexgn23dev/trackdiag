@@ -4,6 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mentotrack — Diagnóstico para productores</title>
+    <!-- Google Analytics 4 -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-W2FMW2T70F"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-W2FMW2T70F');
+      function trackEvent(name, params) {
+        try { gtag('event', name, params || {}); } catch(e) {}
+      }
+    </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
@@ -1023,6 +1034,10 @@
                                             }),
                                         }).catch(() => {});
                                         setFeedbackEnviado(true);
+                                        trackEvent('funnel_feedback_given', {
+                                            coincide: feedbackCoincide,
+                                            tiene_comentario: !!(feedbackComentario || feedbackProblemaReal || feedbackNoDetectado),
+                                        });
                                         setTimeout(() => setFeedbackStep(2), 1200);
                                     }}
                                     className="px-5 py-2 btn-primary rounded-lg transition-colors text-sm"
@@ -1230,6 +1245,10 @@
         const handleFileSelected = (f) => {
             setFile(f);
             setScreen('questionnaire');
+            trackEvent('funnel_file_uploaded', {
+                file_type: f.name.split('.').pop().toLowerCase(),
+                file_size_mb: Math.round(f.size / 1024 / 1024),
+            });
         };
 
         const handleContextoChange = (name, value) => {
@@ -1240,6 +1259,11 @@
 
         const handleGoToEmail = () => {
             setScreen('email');
+            trackEvent('funnel_questionnaire_completed', {
+                genero: contexto.genero,
+                fase: contexto.fase,
+                experiencia: contexto.experiencia,
+            });
         };
 
         const handleSubmit = async () => {
@@ -1248,6 +1272,10 @@
             // Ir directo a la pantalla de procesamiento para que el usuario vea actividad
             setScreen('processing');
             setError(null);
+            trackEvent('funnel_analysis_started', {
+                genero: contexto.genero,
+                experiencia: contexto.experiencia,
+            });
 
             // Lanzar auth y audio en paralelo
             const authPromise = fetch(`${API_URL}/api/auth/acceder`, {
@@ -1455,6 +1483,11 @@
                     }),
                 }).catch(() => {});
                 setScreen('diagnostico');
+                trackEvent('funnel_result_viewed', {
+                    diagnostico_principal: data.diagnostico_principal?.id || '',
+                    estado: data.estado_track || '',
+                    genero: contexto.genero,
+                });
             } catch (err) {
                 const msg = err.message || 'Error inesperado';
                 // Si es error de auth, volver a la pantalla de email

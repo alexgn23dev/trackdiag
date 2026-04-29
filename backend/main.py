@@ -83,11 +83,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # CSP: permite CDNs usados por el frontend (React, Tailwind, fonts)
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://www.googletagmanager.com; "
             "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com; "
-            "img-src 'self' data:; "
-            "connect-src 'self'; "
+            "img-src 'self' data: https://www.googletagmanager.com; "
+            "connect-src 'self' https://www.google-analytics.com https://analytics.google.com https://*.google-analytics.com https://*.analytics.google.com; "
             "frame-ancestors 'none';"
         )
         # HSTS solo en producción (cuando hay HTTPS)
