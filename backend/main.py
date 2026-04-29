@@ -586,6 +586,78 @@ async def obtener_historial(request: Request, data: dict):
 
 
 # =========================================================================
+# Ideas — sistema de votación de ideas de usuarios
+# =========================================================================
+
+@app.get("/api/ideas")
+@limiter.limit("30/minute")
+async def get_ideas(request: Request):
+    """Obtiene todas las ideas ordenadas por votos."""
+    result = await _sheets_get({"action": "get_ideas"})
+    if result.get("_connection_error"):
+        return JSONResponse(status_code=503, content={"error": "Error de conexión"})
+    ideas = result.get("ideas", [])
+    # Ordenar por votos descendente
+    ideas.sort(key=lambda x: x.get("votos", 0), reverse=True)
+    return {"ideas": ideas}
+
+
+@app.post("/api/ideas")
+@limiter.limit("5/minute")
+async def create_idea(request: Request, data: dict):
+    """Crea una nueva idea."""
+    nombre = (data.get("nombre") or "").strip()
+    titulo = (data.get("titulo") or "").strip()
+    descripcion = (data.get("descripcion") or "").strip()
+
+    if not nombre or not titulo or not descripcion:
+        return JSONResponse(status_code=400, content={"error": "Todos los campos son obligatorios"})
+    if len(titulo) > 100:
+        return JSONResponse(status_code=400, content={"error": "El título no puede superar 100 caracteres"})
+    if len(descripcion) > 500:
+        return JSONResponse(status_code=400, content={"error": "La descripción no puede superar 500 caracteres"})
+
+    idea_id = str(uuid.uuid4())[:8]
+    payload = {
+        "action": "create_idea",
+        "id": idea_id,
+        "nombre": nombre,
+        "titulo": titulo,
+        "descripcion": descripcion,
+        "fecha": datetime.now(timezone.utc).strftime("%d %b %Y"),
+        "votos": 0,
+    }
+    result = await _sheets_get(payload)
+    if result.get("_connection_error"):
+        return JSONResponse(status_code=503, content={"error": "Error de conexión"})
+    return {"ok": True, "id": idea_id}
+
+
+@app.post("/api/ideas/{idea_id}/vote")
+@limiter.limit("20/minute")
+async def vote_idea(request: Request, idea_id: str, data: dict):
+    """Vota una idea (up o down)."""
+    voto = data.get("voto", "")
+    if voto not in ("up", "down"):
+        return JSONResponse(status_code=400, content={"error": "Voto debe ser 'up' o 'down'"})
+
+    delta = 1 if voto == "up" else -1
+    result = await _sheets_get({"action": "vote_idea", "id": idea_id, "delta": delta})
+    if result.get("_connection_error"):
+        return JSONResponse(status_code=503, content={"error": "Error de conexión"})
+    return {"ok": True, "votos": result.get("votos", 0)}
+
+
+# Ruta para servir la página de ideas
+@app.get("/ideas")
+def serve_ideas():
+    ideas_path = FRONTEND_DIR / "ideas.html"
+    if not ideas_path.is_file():
+        return JSONResponse(status_code=404, content={"error": "Página no encontrada"})
+    return FileResponse(ideas_path, headers={"Cache-Control": "no-cache"})
+
+
+# =========================================================================
 # Dashboard admin — ruta protegida con clave
 # =========================================================================
 

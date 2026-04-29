@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Propón ideas - Mentotrack</title>
+    <style>
+        :root {
+            --bg-dark: #0a0a0a;
+            --card-bg: rgba(255, 255, 255, 0.03);
+            --card-border: rgba(255, 255, 255, 0.06);
+            --purple-primary: #7c3aed;
+            --purple-secondary: #6366f1;
+            --text-primary: #ffffff;
+            --text-gray-400: #9ca3af;
+            --text-gray-500: #6b7280;
+            --hover-border: rgba(255, 255, 255, 0.1);
+            --green: #10b981;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-primary);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+        }
+
+        /* Header */
+        header {
+            background: rgba(10, 10, 10, 0.8);
+            border-bottom: 1px solid var(--card-border);
+            padding: 1.5rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+        }
+
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 2rem;
+        }
+
+        .logo-section {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .logo {
+            font-size: 1.25rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+        }
+
+        .logo-knob {
+            display: inline-block;
+            color: var(--purple-primary);
+            font-weight: bold;
+        }
+
+        .back-link {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-gray-400);
+            text-decoration: none;
+            font-size: 0.875rem;
+            transition: color 0.2s;
+        }
+
+        .back-link:hover {
+            color: var(--text-primary);
+        }
+
+        .page-title {
+            font-size: 1.75rem;
+            font-style: italic;
+            font-weight: 300;
+            margin-left: auto;
+        }
+
+        /* Main container */
+        main {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .ideas-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            gap: 1rem;
+        }
+
+        .ideas-header h2 {
+            font-size: 1.5rem;
+            font-weight: 500;
+        }
+
+        .btn-new-idea {
+            background: linear-gradient(135deg, var(--purple-primary) 0%, var(--purple-secondary) 100%);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.875rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+            white-space: nowrap;
+        }
+
+        .btn-new-idea:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(124, 58, 237, 0.3);
+        }
+
+        .btn-new-idea:active {
+            transform: translateY(0);
+        }
+
+        /* Ideas grid */
+        .ideas-container {
+            display: grid;
+            gap: 1.5rem;
+        }
+
+        .idea-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            display: flex;
+            gap: 1.5rem;
+            transition: border-color 0.2s, background-color 0.2s;
+        }
+
+        .idea-card:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: var(--hover-border);
+        }
+
+        .vote-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+            min-width: 50px;
+        }
+
+        .vote-arrow {
+            background: none;
+            border: none;
+            color: var(--text-gray-500);
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: color 0.2s, transform 0.1s;
+            padding: 0.25rem;
+            line-height: 1;
+        }
+
+        .vote-arrow:hover {
+            color: var(--text-primary);
+        }
+
+        .vote-arrow:active {
+            transform: scale(0.9);
+        }
+
+        .vote-arrow.voted {
+            color: var(--purple-primary);
+        }
+
+        .vote-arrow.voted-down {
+            color: var(--purple-primary);
+        }
+
+        .vote-count {
+            font-weight: 700;
+            font-size: 1.125rem;
+            color: var(--text-primary);
+            min-width: 2rem;
+            text-align: center;
+        }
+
+        .idea-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .idea-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .idea-description {
+            color: var(--text-gray-400);
+            font-size: 0.9375rem;
+            line-height: 1.6;
+        }
+
+        .idea-meta {
+            font-size: 0.75rem;
+            color: var(--text-gray-500);
+            margin-top: auto;
+        }
+
+        .idea-meta strong {
+            color: var(--text-gray-400);
+        }
+
+        /* Loading state */
+        .loading {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-gray-400);
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--card-border);
+            border-top: 3px solid var(--purple-primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-bottom: 1rem;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-gray-500);
+        }
+
+        .empty-state p {
+            margin-bottom: 1.5rem;
+            font-size: 1rem;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.2s;
+        }
+
+        .modal-overlay.open {
+            display: flex;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .modal-content {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 0.75rem;
+            padding: 2rem;
+            max-width: 500px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            animation: slideUp 0.3s;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .modal-header h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-gray-400);
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0;
+            transition: color 0.2s;
+        }
+
+        .modal-close:hover {
+            color: var(--text-primary);
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+            color: var(--text-gray-400);
+            font-weight: 500;
+        }
+
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--card-border);
+            border-radius: 0.375rem;
+            padding: 0.75rem;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 0.9375rem;
+            transition: border-color 0.2s, background-color 0.2s;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: var(--purple-primary);
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .form-group.required label::after {
+            content: ' *';
+            color: #ef4444;
+        }
+
+        .char-counter {
+            font-size: 0.75rem;
+            color: var(--text-gray-500);
+            margin-top: 0.25rem;
+            text-align: right;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+
+        .btn-submit {
+            flex: 1;
+            background: linear-gradient(135deg, var(--purple-primary) 0%, var(--purple-secondary) 100%);
+            color: white;
+            border: none;
+            padding: 0.75rem;
+            border-radius: 0.375rem;
+            font-weight: 600;
+            font-size: 0.9375rem;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn-submit:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(124, 58, 237, 0.3);
+        }
+
+        .btn-submit:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-cancel {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-gray-400);
+            border: 1px solid var(--card-border);
+            padding: 0.75rem;
+            border-radius: 0.375rem;
+            font-weight: 600;
+            font-size: 0.9375rem;
+            cursor: pointer;
+            transition: border-color 0.2s, color 0.2s;
+        }
+
+        .btn-cancel:hover {
+            border-color: var(--hover-border);
+            color: var(--text-primary);
+        }
+
+        .error-message {
+            background: rgba(239, 68, 68, 0.1);
+            color: #fca5a5;
+            padding: 0.75rem;
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
+            margin-bottom: 1rem;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .success-message {
+            background: rgba(16, 185, 129, 0.1);
+            color: #86efac;
+            padding: 0.75rem;
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
+            margin-bottom: 1rem;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        /* Vote animation */
+        @keyframes voteFlash {
+            0%, 100% { color: var(--purple-primary); }
+            50% { color: var(--green); }
+        }
+
+        .vote-count.animate {
+            animation: voteFlash 0.6s;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            header {
+                padding: 1rem;
+            }
+
+            .header-content {
+                flex-direction: column;
+                gap: 1rem;
+            }
+
+            .page-title {
+                margin-left: 0;
+                font-size: 1.5rem;
+            }
+
+            main {
+                padding: 1rem;
+            }
+
+            .ideas-header {
+                flex-direction: column;
+                margin-bottom: 1.5rem;
+            }
+
+            .ideas-header h2 {
+                font-size: 1.25rem;
+            }
+
+            .btn-new-idea {
+                width: 100%;
+            }
+
+            .idea-card {
+                flex-direction: column;
+                gap: 1rem;
+            }
+
+            .vote-section {
+                flex-direction: row;
+                min-width: auto;
+                gap: 1rem;
+                width: 100%;
+                justify-content: flex-start;
+            }
+
+            .modal-content {
+                width: 95%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <div class="logo-section">
+                <a href="/" class="back-link">← Volver a Mentotrack</a>
+            </div>
+            <div style="flex: 1; text-align: center;">
+                <div class="logo">mento<span class="logo-knob">⊙</span>track</div>
+            </div>
+            <div class="page-title">Propón ideas</div>
+        </div>
+    </header>
+
+    <main>
+        <div class="ideas-header">
+            <h2>Sugerencias de la comunidad</h2>
+            <button class="btn-new-idea" onclick="openModal()">+ Nueva idea</button>
+        </div>
+
+        <div id="loading" class="loading" style="display: none;">
+            <div class="spinner"></div>
+            <p>Cargando ideas...</p>
+        </div>
+
+        <div id="empty" class="empty-state" style="display: none;">
+            <p>Aún no hay ideas. Sé el primero en proponer una.</p>
+        </div>
+
+        <div id="ideas-container" class="ideas-container"></div>
+    </main>
+
+    <!-- Modal -->
+    <div id="modal" class="modal-overlay" onclick="closeModalOnBackdrop(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3>Nueva idea</h3>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+
+            <div id="modal-error" class="error-message" style="display: none;"></div>
+            <div id="modal-success" class="success-message" style="display: none;"></div>
+
+            <form id="ideaForm" onsubmit="submitIdea(event)">
+                <div class="form-group required">
+                    <label for="nombre">Nombre</label>
+                    <input
+                        type="text"
+                        id="nombre"
+                        placeholder="Tu nombre"
+                        maxlength="100"
+                        required
+                    />
+                </div>
+
+                <div class="form-group required">
+                    <label for="titulo">Título</label>
+                    <input
+                        type="text"
+                        id="titulo"
+                        placeholder="Título de la idea"
+                        maxlength="100"
+                        required
+                    />
+                </div>
+
+                <div class="form-group required">
+                    <label for="descripcion">Descripción</label>
+                    <textarea
+                        id="descripcion"
+                        placeholder="Cuéntanos tu idea con detalle"
+                        maxlength="500"
+                        required
+                        oninput="updateCharCounter()"
+                    ></textarea>
+                    <div class="char-counter"><span id="charCount">0</span>/500</div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn-cancel" onclick="closeModal()">Cancelar</button>
+                    <button type="submit" class="btn-submit">Publicar idea</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api';
+        const VOTED_IDEAS_KEY = 'mentotrack_voted_ideas';
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchIdeas();
+        });
+
+        // Fetch ideas from API
+        async function fetchIdeas() {
+            const container = document.getElementById('ideas-container');
+            const loading = document.getElementById('loading');
+            const empty = document.getElementById('empty');
+
+            loading.style.display = 'block';
+            container.innerHTML = '';
+            empty.style.display = 'none';
+
+            try {
+                const response = await fetch(`${API_BASE}/ideas`);
+                if (!response.ok) throw new Error('Error fetching ideas');
+
+                const ideas = await response.json();
+                loading.style.display = 'none';
+
+                if (!ideas || ideas.length === 0) {
+                    empty.style.display = 'block';
+                    return;
+                }
+
+                // Sort by votes descending
+                ideas.sort((a, b) => (b.votes || 0) - (a.votes || 0));
+
+                // Render ideas
+                const votedIdeas = getVotedIdeas();
+                ideas.forEach(idea => {
+                    container.appendChild(createIdeaCard(idea, votedIdeas));
+                });
+            } catch (error) {
+                console.error('Error:', error);
+                loading.innerHTML = '<p style="color: #ef4444;">Error al cargar las ideas. Intenta de nuevo.</p>';
+            }
+        }
+
+        // Create idea card element
+        function createIdeaCard(idea, votedIdeas) {
+            const card = document.createElement('div');
+            card.className = 'idea-card';
+            card.id = `idea-${idea.id}`;
+
+            const userVote = votedIdeas[idea.id] || null;
+            const upVoted = userVote === 'up';
+            const downVoted = userVote === 'down';
+
+            const createdDate = new Date(idea.created_at).toLocaleDateString('es-ES', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+            });
+
+            card.innerHTML = `
+                <div class="vote-section">
+                    <button
+                        class="vote-arrow ${upVoted ? 'voted' : ''}"
+                        onclick="vote('${idea.id}', 'up')"
+                        ${upVoted ? 'title="Ya votaste por esta idea"' : ''}
+                    >▲</button>
+                    <div class="vote-count" id="vote-count-${idea.id}">${idea.votes || 0}</div>
+                    <button
+                        class="vote-arrow ${downVoted ? 'voted-down' : ''}"
+                        onclick="vote('${idea.id}', 'down')"
+                        ${downVoted ? 'title="Ya votaste por esta idea"' : ''}
+                    >▼</button>
+                </div>
+                <div class="idea-content">
+                    <div class="idea-title">${escapeHtml(idea.titulo)}</div>
+                    <div class="idea-description">${escapeHtml(idea.descripcion)}</div>
+                    <div class="idea-meta">
+                        Propuesto por: <strong>${escapeHtml(idea.nombre)}</strong> · ${createdDate}
+                    </div>
+                </div>
+            `;
+
+            return card;
+        }
+
+        // Vote on idea
+        async function vote(ideaId, voteType) {
+            const votedIdeas = getVotedIdeas();
+
+            // Check if already voted
+            if (votedIdeas[ideaId]) {
+                console.log('Ya has votado en esta idea');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/ideas/${ideaId}/vote`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ voto: voteType })
+                });
+
+                if (!response.ok) throw new Error('Error voting');
+
+                // Save vote to localStorage
+                votedIdeas[ideaId] = voteType;
+                localStorage.setItem(VOTED_IDEAS_KEY, JSON.stringify(votedIdeas));
+
+                // Update UI
+                const card = document.getElementById(`idea-${ideaId}`);
+                if (card) {
+                    const upBtn = card.querySelector('.vote-arrow:first-child');
+                    const downBtn = card.querySelector('.vote-arrow:last-child');
+                    const countEl = card.querySelector('.vote-count');
+
+                    if (voteType === 'up') {
+                        upBtn.classList.add('voted');
+                        downBtn.classList.remove('voted-down');
+                    } else {
+                        downBtn.classList.add('voted-down');
+                        upBtn.classList.remove('voted');
+                    }
+
+                    // Animate vote count
+                    const result = await response.json();
+                    countEl.textContent = result.votes || 0;
+                    countEl.classList.add('animate');
+                    setTimeout(() => countEl.classList.remove('animate'), 600);
+
+                    // Disable voting
+                    upBtn.disabled = true;
+                    downBtn.disabled = true;
+                }
+
+                // Re-sort ideas
+                setTimeout(fetchIdeas, 100);
+            } catch (error) {
+                console.error('Error voting:', error);
+            }
+        }
+
+        // Modal functions
+        function openModal() {
+            document.getElementById('modal').classList.add('open');
+            document.getElementById('ideaForm').reset();
+            document.getElementById('modal-error').style.display = 'none';
+            document.getElementById('modal-success').style.display = 'none';
+            document.getElementById('charCount').textContent = '0';
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.remove('open');
+        }
+
+        function closeModalOnBackdrop(event) {
+            if (event.target === document.getElementById('modal')) {
+                closeModal();
+            }
+        }
+
+        function updateCharCounter() {
+            const desc = document.getElementById('descripcion').value;
+            document.getElementById('charCount').textContent = desc.length;
+        }
+
+        // Submit new idea
+        async function submitIdea(event) {
+            event.preventDefault();
+
+            const nombre = document.getElementById('nombre').value.trim();
+            const titulo = document.getElementById('titulo').value.trim();
+            const descripcion = document.getElementById('descripcion').value.trim();
+
+            // Validate
+            if (!nombre || !titulo || !descripcion) {
+                showModalError('Por favor completa todos los campos');
+                return;
+            }
+
+            const submitBtn = document.querySelector('.btn-submit');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Publicando...';
+
+            try {
+                const response = await fetch(`${API_BASE}/ideas`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nombre, titulo, descripcion })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.message || 'Error al crear la idea');
+                }
+
+                // Success
+                showModalSuccess('¡Idea publicada exitosamente!');
+                setTimeout(() => {
+                    closeModal();
+                    fetchIdeas();
+                }, 1500);
+            } catch (error) {
+                console.error('Error:', error);
+                showModalError(error.message || 'Error al publicar la idea');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Publicar idea';
+            }
+        }
+
+        function showModalError(message) {
+            const errorEl = document.getElementById('modal-error');
+            errorEl.textContent = message;
+            errorEl.style.display = 'block';
+        }
+
+        function showModalSuccess(message) {
+            const successEl = document.getElementById('modal-success');
+            successEl.textContent = message;
+            successEl.style.display = 'block';
+        }
+
+        // Helper functions
+        function getVotedIdeas() {
+            const stored = localStorage.getItem(VOTED_IDEAS_KEY);
+            return stored ? JSON.parse(stored) : {};
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Close modal on Escape
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeModal();
+            }
+        });
+    </script>
+</body>
+</html>
