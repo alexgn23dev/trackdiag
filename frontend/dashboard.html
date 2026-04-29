@@ -603,7 +603,7 @@
             fetch(`${API_URL}/api/sheets/datos`, { credentials: 'same-origin' })
                 .then(r => { if (!r.ok) throw new Error('Acceso denegado'); return r.json(); })
                 .then(data => {
-                    setRawData(data);
+                    setRawData(data.data || data);
                     setLoading(false);
                 })
                 .catch(err => {
