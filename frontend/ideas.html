@@ -652,11 +652,7 @@
             const upVoted = userVote === 'up';
             const downVoted = userVote === 'down';
 
-            const createdDate = new Date(idea.created_at).toLocaleDateString('es-ES', {
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric'
-            });
+            const createdDate = idea.fecha || '';
 
             card.innerHTML = `
                 <div class="vote-section">
@@ -685,59 +681,46 @@
         }
 
         // Vote on idea
-        async function vote(ideaId, voteType) {
+        function vote(ideaId, voteType) {
             const votedIdeas = getVotedIdeas();
 
             // Check if already voted
             if (votedIdeas[ideaId]) {
-                console.log('Ya has votado en esta idea');
                 return;
             }
 
-            try {
-                const response = await fetch(`${API_BASE}/ideas/${ideaId}/vote`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ voto: voteType })
-                });
+            // 1. Update UI instantly (optimistic)
+            const card = document.getElementById(`idea-${ideaId}`);
+            if (!card) return;
 
-                if (!response.ok) throw new Error('Error voting');
+            const upBtn = card.querySelector('.vote-arrow:first-child');
+            const downBtn = card.querySelector('.vote-arrow:last-child');
+            const countEl = card.querySelector('.vote-count');
+            const currentCount = parseInt(countEl.textContent) || 0;
+            const delta = voteType === 'up' ? 1 : -1;
 
-                // Save vote to localStorage
-                votedIdeas[ideaId] = voteType;
-                localStorage.setItem(VOTED_IDEAS_KEY, JSON.stringify(votedIdeas));
+            countEl.textContent = currentCount + delta;
+            countEl.classList.add('animate');
+            setTimeout(() => countEl.classList.remove('animate'), 600);
 
-                // Update UI
-                const card = document.getElementById(`idea-${ideaId}`);
-                if (card) {
-                    const upBtn = card.querySelector('.vote-arrow:first-child');
-                    const downBtn = card.querySelector('.vote-arrow:last-child');
-                    const countEl = card.querySelector('.vote-count');
-
-                    if (voteType === 'up') {
-                        upBtn.classList.add('voted');
-                        downBtn.classList.remove('voted-down');
-                    } else {
-                        downBtn.classList.add('voted-down');
-                        upBtn.classList.remove('voted');
-                    }
-
-                    // Animate vote count
-                    const result = await response.json();
-                    countEl.textContent = result.votos || 0;
-                    countEl.classList.add('animate');
-                    setTimeout(() => countEl.classList.remove('animate'), 600);
-
-                    // Disable voting
-                    upBtn.disabled = true;
-                    downBtn.disabled = true;
-                }
-
-                // Re-sort ideas
-                setTimeout(fetchIdeas, 100);
-            } catch (error) {
-                console.error('Error voting:', error);
+            if (voteType === 'up') {
+                upBtn.classList.add('voted');
+            } else {
+                downBtn.classList.add('voted-down');
             }
+            upBtn.disabled = true;
+            downBtn.disabled = true;
+
+            // 2. Save to localStorage immediately
+            votedIdeas[ideaId] = voteType;
+            localStorage.setItem(VOTED_IDEAS_KEY, JSON.stringify(votedIdeas));
+
+            // 3. Send to server in background (no await, no reload)
+            fetch(`${API_BASE}/ideas/${ideaId}/vote`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ voto: voteType })
+            }).catch(err => console.error('Error enviando voto:', err));
         }
 
         // Modal functions
