@@ -681,15 +681,13 @@
         }
 
         // Vote on idea
+        // States: null (no vote), 'up' (+1), 'down' (-1)
+        // Clicking same direction again = toggle off (back to 0)
+        // Clicking opposite = swing (e.g. +1 → -1 = delta -2)
         function vote(ideaId, voteType) {
             const votedIdeas = getVotedIdeas();
+            const currentVote = votedIdeas[ideaId] || null;
 
-            // Check if already voted
-            if (votedIdeas[ideaId]) {
-                return;
-            }
-
-            // 1. Update UI instantly (optimistic)
             const card = document.getElementById(`idea-${ideaId}`);
             if (!card) return;
 
@@ -697,29 +695,45 @@
             const downBtn = card.querySelector('.vote-arrow:last-child');
             const countEl = card.querySelector('.vote-count');
             const currentCount = parseInt(countEl.textContent) || 0;
-            const delta = voteType === 'up' ? 1 : -1;
 
+            let delta = 0;
+            let newVote = null;
+
+            if (currentVote === voteType) {
+                // Same button again → undo vote
+                delta = voteType === 'up' ? -1 : 1;
+                newVote = null;
+            } else if (currentVote === null) {
+                // No previous vote → apply
+                delta = voteType === 'up' ? 1 : -1;
+                newVote = voteType;
+            } else {
+                // Opposite vote → swing (undo old + apply new)
+                delta = voteType === 'up' ? 2 : -2;
+                newVote = voteType;
+            }
+
+            // 1. Update UI instantly
             countEl.textContent = currentCount + delta;
             countEl.classList.add('animate');
             setTimeout(() => countEl.classList.remove('animate'), 600);
 
-            if (voteType === 'up') {
-                upBtn.classList.add('voted');
-            } else {
-                downBtn.classList.add('voted-down');
-            }
-            upBtn.disabled = true;
-            downBtn.disabled = true;
+            upBtn.classList.toggle('voted', newVote === 'up');
+            downBtn.classList.toggle('voted-down', newVote === 'down');
 
-            // 2. Save to localStorage immediately
-            votedIdeas[ideaId] = voteType;
+            // 2. Save to localStorage
+            if (newVote) {
+                votedIdeas[ideaId] = newVote;
+            } else {
+                delete votedIdeas[ideaId];
+            }
             localStorage.setItem(VOTED_IDEAS_KEY, JSON.stringify(votedIdeas));
 
-            // 3. Send to server in background (no await, no reload)
+            // 3. Send to server in background
             fetch(`${API_BASE}/ideas/${ideaId}/vote`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ voto: voteType })
+                body: JSON.stringify({ voto: voteType, delta: delta })
             }).catch(err => console.error('Error enviando voto:', err));
         }
 

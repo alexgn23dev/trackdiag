@@ -637,11 +637,13 @@ async def create_idea(request: Request, data: dict):
 @limiter.limit("20/minute")
 async def vote_idea(request: Request, idea_id: str, data: dict):
     """Vota una idea (up o down)."""
-    voto = data.get("voto", "")
-    if voto not in ("up", "down"):
-        return JSONResponse(status_code=400, content={"error": "Voto debe ser 'up' o 'down'"})
-
-    delta = 1 if voto == "up" else -1
+    delta = data.get("delta")
+    if delta is None:
+        voto = data.get("voto", "")
+        if voto not in ("up", "down"):
+            return JSONResponse(status_code=400, content={"error": "Voto debe ser 'up' o 'down'"})
+        delta = 1 if voto == "up" else -1
+    delta = max(-2, min(2, int(delta)))  # Limitar a [-2, 2]
     result = await _sheets_get({"action": "vote_idea", "id": idea_id, "delta": delta})
     if result.get("_connection_error"):
         return JSONResponse(status_code=503, content={"error": "Error de conexión"})
