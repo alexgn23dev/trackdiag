@@ -3,7 +3,56 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mentotrack — Diagnóstico para productores</title>
+    <title>Mentotrack — Diagnóstico inteligente para tus tracks</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+
+    <!-- ==================== SEO ==================== -->
+    <meta name="description" content="Sube tu bounce y recibe un diagnóstico priorizado de tu track: qué corregir primero, qué dejar para después. Pensado para productores de house, techno y trance.">
+    <meta name="keywords" content="diagnóstico track, mezcla música electrónica, productor house, productor techno, productor trance, mastering, mezcla, LUFS, análisis de audio, Producción Online, Mentotrack">
+    <meta name="author" content="Producción Online">
+    <meta name="robots" content="index, follow, max-image-preview:large">
+    <meta name="theme-color" content="#1a1a1a">
+    <link rel="canonical" href="https://www.mentotrack.com/">
+    <meta http-equiv="content-language" content="es">
+
+    <!-- ==================== Open Graph ==================== -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Mentotrack">
+    <meta property="og:title" content="Mentotrack — Diagnóstico inteligente para tus tracks">
+    <meta property="og:description" content="Sube tu bounce y recibe un diagnóstico priorizado: qué corregir primero, qué dejar para después. Para productores de house, techno y trance.">
+    <meta property="og:url" content="https://www.mentotrack.com/">
+    <meta property="og:locale" content="es_ES">
+    <meta property="og:image" content="https://www.mentotrack.com/og-image.png">
+    <meta property="og:image:secure_url" content="https://www.mentotrack.com/og-image.png">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Mentotrack — Diagnóstico inteligente para tus tracks">
+
+    <!-- ==================== Twitter / X Card ==================== -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Mentotrack — Diagnóstico inteligente para tus tracks">
+    <meta name="twitter:description" content="Sube tu bounce y recibe un diagnóstico priorizado de tu track. Para productores de electrónica.">
+    <meta name="twitter:image" content="https://www.mentotrack.com/og-image.png">
+    <meta name="twitter:image:alt" content="Mentotrack — Diagnóstico inteligente para tus tracks">
+
+    <!-- ==================== JSON-LD WebApplication ==================== -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Mentotrack",
+      "url": "https://www.mentotrack.com/",
+      "description": "Diagnóstico priorizado para productores de música electrónica. Sube tu bounce y recibe orientación accionable.",
+      "applicationCategory": "MultimediaApplication",
+      "operatingSystem": "Any",
+      "inLanguage": "es",
+      "image": "https://www.mentotrack.com/og-image.png",
+      "creator": { "@type": "Organization", "name": "Producción Online", "url": "https://www.mentotrack.com/" },
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" }
+    }
+    </script>
+
     <!-- Google Analytics 4 -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-W2FMW2T70F"></script>
     <script>
@@ -2012,13 +2061,22 @@
                                     <h2 className="text-xl font-bold text-white">Mi panel</h2>
                                     <p className="text-gray-500 text-xs mt-1">{panelAuth} · {panelHistorial.length} {panelHistorial.length === 1 ? 'análisis' : 'análisis'}</p>
                                 </div>
-                                <div className="flex gap-2">
+                                <div className="flex flex-wrap gap-2 justify-end">
                                     <button
                                         onClick={handleReset}
                                         className="px-4 py-2 btn-primary rounded-lg text-xs transition-colors"
                                     >
                                         Nuevo análisis
                                     </button>
+                                    <a
+                                        href="/ideas"
+                                        onClick={() => trackEvent('panel_ideas_clicked', { from: 'user_panel' })}
+                                        className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-xs transition-colors inline-flex items-center gap-1.5"
+                                        title="Propón mejoras y vota ideas de la comunidad"
+                                    >
+                                        <span>💡</span>
+                                        <span>Propón ideas</span>
+                                    </a>
                                     <button
                                         onClick={handlePanelLogout}
                                         className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-400 rounded-lg text-xs transition-colors"
@@ -2220,5 +2278,61 @@
 
     ReactDOM.render(<App />, document.getElementById('root'));
     </script>
+
+    <!-- ==================== Footer global (estático, fuera del SPA) ==================== -->
+    <style>
+        .mt-site-footer {
+            border-top: 1px solid var(--po-border);
+            padding: 1.75rem 1.25rem;
+            background: rgba(0, 0, 0, 0.25);
+            margin-top: 2rem;
+        }
+        .mt-site-footer .mt-footer-inner {
+            max-width: 900px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            align-items: center;
+            text-align: center;
+        }
+        .mt-site-footer nav {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem 1.25rem;
+            justify-content: center;
+        }
+        .mt-site-footer nav a {
+            color: var(--po-light);
+            opacity: 0.7;
+            font-size: 0.8125rem;
+            text-decoration: none;
+            transition: opacity 0.2s, color 0.2s;
+        }
+        .mt-site-footer nav a:hover {
+            opacity: 1;
+            color: var(--po-white);
+        }
+        .mt-site-footer .mt-footer-meta {
+            color: #6b6b6b;
+            font-size: 0.75rem;
+        }
+        @media (max-width: 480px) {
+            .mt-site-footer { padding: 1.25rem 1rem; }
+            .mt-site-footer nav { gap: 0.4rem 0.9rem; }
+        }
+    </style>
+    <footer class="mt-site-footer" role="contentinfo">
+        <div class="mt-footer-inner">
+            <nav aria-label="Enlaces legales">
+                <a href="/ideas">Ideas</a>
+                <a href="/aviso-legal">Aviso legal</a>
+                <a href="/privacidad">Privacidad</a>
+                <a href="/cookies">Cookies</a>
+                <a href="/terminos">Términos</a>
+            </nav>
+            <p class="mt-footer-meta">© 2026 Mentotrack · Producción Online — www.mentotrack.com</p>
+        </div>
+    </footer>
 </body>
 </html>

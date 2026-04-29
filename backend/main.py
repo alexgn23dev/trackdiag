@@ -660,6 +660,51 @@ def serve_ideas():
 
 
 # =========================================================================
+# Páginas legales (servidas en URLs sin extensión)
+# =========================================================================
+
+# Mapeo URL pública → archivo HTML en frontend
+_LEGAL_PAGES = {
+    "aviso-legal": "aviso-legal.html",
+    "privacidad": "privacidad.html",
+    "cookies": "cookies.html",
+    "terminos": "terminos.html",
+}
+
+
+def _serve_legal(slug: str):
+    """Sirve una página legal estática con cache moderado."""
+    filename = _LEGAL_PAGES.get(slug)
+    if not filename:
+        return JSONResponse(status_code=404, content={"error": "Página no encontrada"})
+    page_path = FRONTEND_DIR / filename
+    if not page_path.is_file():
+        return JSONResponse(status_code=404, content={"error": "Página no encontrada"})
+    # Cache 1h en navegador (textos legales cambian poco pero deben poder actualizarse)
+    return FileResponse(page_path, headers={"Cache-Control": "public, max-age=3600"})
+
+
+@app.get("/aviso-legal")
+def serve_aviso_legal():
+    return _serve_legal("aviso-legal")
+
+
+@app.get("/privacidad")
+def serve_privacidad():
+    return _serve_legal("privacidad")
+
+
+@app.get("/cookies")
+def serve_cookies():
+    return _serve_legal("cookies")
+
+
+@app.get("/terminos")
+def serve_terminos():
+    return _serve_legal("terminos")
+
+
+# =========================================================================
 # Dashboard admin — ruta protegida con clave
 # =========================================================================
 

@@ -1,0 +1,252 @@
+/* ========================================================================
+   Mentotrack — estilos compartidos para páginas legales
+   Coherente con estética ideas.html (oscuro, minimal)
+   ======================================================================== */
+
+:root {
+  --bg-dark: #0a0a0a;
+  --card-bg: rgba(255, 255, 255, 0.03);
+  --card-border: rgba(255, 255, 255, 0.06);
+  --purple-primary: #7c3aed;
+  --purple-secondary: #6366f1;
+  --text-primary: #ffffff;
+  --text-gray-300: #d1d5db;
+  --text-gray-400: #9ca3af;
+  --text-gray-500: #6b7280;
+  --hover-border: rgba(255, 255, 255, 0.1);
+  --green: #10b981;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background-color: var(--bg-dark);
+  color: var(--text-gray-300);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  line-height: 1.7;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ============== HEADER ============== */
+header {
+  background: rgba(10, 10, 10, 0.8);
+  border-bottom: 1px solid var(--card-border);
+  padding: 1.25rem 1.5rem;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.header-content {
+  max-width: 900px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.logo-link {
+  text-decoration: none;
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.logo-knob { color: var(--green); }
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--text-gray-400);
+  text-decoration: none;
+  font-size: 0.875rem;
+  transition: color 0.2s;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+}
+
+.back-link:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* ============== MAIN ============== */
+main {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 4rem;
+  width: 100%;
+  flex: 1;
+}
+
+h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+  letter-spacing: -0.02em;
+}
+
+.last-updated {
+  color: var(--text-gray-500);
+  font-size: 0.875rem;
+  margin-bottom: 2.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--card-border);
+}
+
+h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-top: 2.5rem;
+  margin-bottom: 0.75rem;
+  letter-spacing: -0.01em;
+}
+
+h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+p, li {
+  font-size: 0.9375rem;
+  color: var(--text-gray-300);
+  margin-bottom: 0.75rem;
+}
+
+ul, ol {
+  padding-left: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+li { margin-bottom: 0.4rem; }
+
+a {
+  color: var(--purple-primary);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+a:hover {
+  color: #a78bfa;
+  text-decoration: underline;
+}
+
+strong { color: var(--text-primary); font-weight: 600; }
+
+code {
+  background: rgba(124, 58, 237, 0.1);
+  border: 1px solid rgba(124, 58, 237, 0.2);
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.25rem;
+  font-size: 0.875em;
+  color: #c4b5fd;
+}
+
+.callout {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-left: 3px solid var(--purple-primary);
+  padding: 1rem 1.25rem;
+  border-radius: 0.5rem;
+  margin: 1.5rem 0;
+}
+
+.callout p:last-child { margin-bottom: 0; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0 1.5rem;
+  font-size: 0.875rem;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+th, td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--card-border);
+  vertical-align: top;
+}
+
+th {
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+tr:last-child td { border-bottom: none; }
+
+/* ============== FOOTER (compartido) ============== */
+.site-footer {
+  border-top: 1px solid var(--card-border);
+  padding: 2rem 1.5rem;
+  margin-top: auto;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.footer-content {
+  max-width: 900px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  align-items: center;
+  text-align: center;
+}
+
+.footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  justify-content: center;
+}
+
+.footer-links a {
+  color: var(--text-gray-400);
+  font-size: 0.8125rem;
+}
+
+.footer-links a:hover {
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.footer-meta {
+  color: var(--text-gray-500);
+  font-size: 0.75rem;
+}
+
+/* ============== RESPONSIVE ============== */
+@media (max-width: 640px) {
+  header { padding: 1rem; }
+  .header-content { gap: 0.75rem; }
+  .logo-link { font-size: 1rem; }
+  main { padding: 2rem 1rem 3rem; }
+  h1 { font-size: 1.5rem; }
+  h2 { font-size: 1.125rem; margin-top: 2rem; }
+  p, li { font-size: 0.9rem; }
+  .footer-links { gap: 0.75rem 1rem; }
+  table { font-size: 0.8125rem; }
+  th, td { padding: 0.5rem 0.6rem; }
+}
