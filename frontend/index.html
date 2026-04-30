@@ -1500,6 +1500,8 @@
         const [panelUsername, setPanelUsername] = useState('');
         const [panelLoading, setPanelLoading] = useState(false);
         const [panelSelectedEntry, setPanelSelectedEntry] = useState(null);
+        // Acción pendiente tras un auth exitoso (p.ej. arrancar análisis tras login)
+        const [pendingAfterAuth, setPendingAfterAuth] = useState(null); // null | 'analyze'
         const [nombreProyecto, setNombreProyecto] = useState('');
         const [contexto, setContexto] = useState({
             genero: '', fase: '', objetivo: '',
@@ -1572,19 +1574,26 @@
 
         const isQuestionnaireValid = contexto.genero && contexto.fase && contexto.objetivo && contexto.experiencia && contexto.dificultad_habitual;
 
+        // ---- Cuestionario completo: si hay sesión analiza ya, si no abre modal de auth ----
         const handleGoToEmail = () => {
-            setScreen('email');
             trackEvent('funnel_questionnaire_completed', {
                 genero: contexto.genero,
                 fase: contexto.fase,
                 experiencia: contexto.experiencia,
             });
+            const saved = getAuth();
+            if (panelAuth || saved.token) {
+                runAnalysis();
+            } else {
+                // Sin sesión: abrir modal y memorizar que hay que analizar tras auth
+                setPendingAfterAuth('analyze');
+                openAuthModal('login');
+            }
         };
 
-        const handleSubmit = async () => {
+        // ---- Lanzar el análisis del track (asume que hay sesión) ----
+        const runAnalysis = async () => {
             setEmailError('');
-
-            // Ir directo a la pantalla de procesamiento para que el usuario vea actividad
             setScreen('processing');
             setError(null);
             trackEvent('funnel_analysis_started', {
@@ -1592,41 +1601,25 @@
                 experiencia: contexto.experiencia,
             });
 
-            // Lanzar auth y audio en paralelo
-            const authPromise = fetch(`${API_URL}/api/auth/acceder`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ email: userEmail.trim().toLowerCase(), password: userPassword }),
-            }).then(async (resp) => {
-                const data = await resp.json();
-                if (!resp.ok) throw new Error(data.error || 'Error de autenticación');
-                return data;
-            });
-
             const formData = new FormData();
             formData.append('audio', file);
             Object.entries(contexto).forEach(([k, v]) => formData.append(k, v));
-            const audioPromise = fetch(`${API_URL}/api/diagnostico`, {
-                method: 'POST',
-                body: formData,
-            }).then(async (resp) => {
+
+            try {
+                const resp = await fetch(`${API_URL}/api/diagnostico`, {
+                    method: 'POST',
+                    body: formData,
+                });
                 if (!resp.ok) {
                     const err = await resp.json();
                     throw new Error(err.error || 'Error procesando el track');
                 }
-                return resp.json();
-            });
+                const data = await resp.json();
 
-            try {
-                // Esperar ambos en paralelo
-                const [authData, data] = await Promise.all([authPromise, audioPromise]);
-
-                // Auth OK — save JWT token
-                if (authData.token) {
-                    saveAuth(authData.email, authData.token);
-                }
-                setPanelAuth(authData.email);
-                setPanelHistorial(authData.historial || []);
+                // El email para guardar en Sheets viene de la sesión activa
+                const savedAuth = getAuth();
+                const sessionEmail = panelAuth || savedAuth.email || '';
+                if (sessionEmail) setUserEmail(sessionEmail);
 
                 setResultado(data);
                 // Guardar en historial
@@ -1790,7 +1783,7 @@
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
                         timestamp: new Date().toISOString(),
-                        email: userEmail,
+                        email: sessionEmail,
                         nombre_proyecto: nombreProyecto,
                         formulario: formularioTexto,
                         diagnostico: informe,
@@ -1805,16 +1798,13 @@
                 });
             } catch (err) {
                 const msg = err.message || 'Error inesperado';
-                // Si es error de auth, volver a la pantalla de email
-                if (msg.includes('autenticación') || msg.includes('Contraseña') || msg.includes('conectar') || msg.includes('base de datos') || msg.includes('8 caracteres')) {
-                    setEmailError(msg);
-                    setScreen('email');
-                } else {
-                    setError(msg);
-                    setScreen('questionnaire');
-                }
+                setError(msg);
+                setScreen('questionnaire');
             }
         };
+
+        // Compat: handleSubmit antigua redirige a runAnalysis (por si algún botón sigue llamándola)
+        const handleSubmit = () => runAnalysis();
 
         const handleReset = () => {
             setFile(null);
@@ -1853,6 +1843,8 @@
         const closeAuthModal = () => {
             setAuthOpen(false);
             setAuthError(''); setAuthInfo('');
+            // Si había una acción pendiente y el usuario cierra sin completar, descartar
+            if (pendingAfterAuth) setPendingAfterAuth(null);
         };
 
         // ---- Login (email O username + password) ----
@@ -1881,7 +1873,12 @@
                 } else {
                     setAuthOpen(false);
                     setAuthLoading(false);
-                    setScreen('panel');
+                    if (pendingAfterAuth === 'analyze') {
+                        setPendingAfterAuth(null);
+                        runAnalysis();
+                    } else {
+                        setScreen('panel');
+                    }
                 }
             } catch (e) { setAuthError('No se pudo conectar. Inténtalo de nuevo.'); setAuthLoading(false); }
         };
@@ -1907,7 +1904,12 @@
                 trackEvent('auth_register_success');
                 setAuthOpen(false);
                 setAuthLoading(false);
-                setScreen('panel');
+                if (pendingAfterAuth === 'analyze') {
+                    setPendingAfterAuth(null);
+                    runAnalysis();
+                } else {
+                    setScreen('panel');
+                }
             } catch (e) { setAuthError('No se pudo conectar. Inténtalo de nuevo.'); setAuthLoading(false); }
         };
 
@@ -1927,7 +1929,12 @@
                 trackEvent('auth_set_username_success');
                 setAuthOpen(false);
                 setAuthLoading(false);
-                setScreen('panel');
+                if (pendingAfterAuth === 'analyze') {
+                    setPendingAfterAuth(null);
+                    runAnalysis();
+                } else {
+                    setScreen('panel');
+                }
             } catch (e) { setAuthError('No se pudo conectar.'); setAuthLoading(false); }
         };
 
@@ -2038,45 +2045,7 @@
                         onNombreChange={setNombreProyecto}
                     />
                 )}
-                {screen === 'email' && (
-                    <div className="min-h-screen flex items-center justify-center px-6 fade-in">
-                        <div className="max-w-md w-full">
-                            <div className="card p-8 text-center">
-                                <p className="accent-purple text-sm font-medium uppercase tracking-wider mb-2">Último paso</p>
-                                <h2 className="text-xl font-bold text-white mb-2">Crea tu cuenta o inicia sesión</h2>
-                                <p className="text-gray-500 text-xs mb-6">Con tu cuenta guardaremos tu historial de análisis y podrás acceder a él cuando quieras.</p>
-                                <input
-                                    type="email"
-                                    value={userEmail}
-                                    onChange={(e) => { setUserEmail(e.target.value); setEmailError(''); }}
-                                    placeholder="tu@email.com"
-                                    className="w-full px-4 py-3 rounded-lg text-sm input-field mb-3"
-                                />
-                                <input
-                                    type="password"
-                                    value={userPassword}
-                                    onChange={(e) => { setUserPassword(e.target.value); setEmailError(''); }}
-                                    placeholder="Contraseña"
-                                    className="w-full px-4 py-3 rounded-lg text-sm input-field mb-3"
-                                    onKeyDown={(e) => { if (e.key === 'Enter' && userEmail.includes('@') && userPassword.length >= 8) handleSubmit(); }}
-                                />
-                                {emailError && <p className="text-red-400 text-xs mb-3">{emailError}</p>}
-                                <button
-                                    onClick={handleSubmit}
-                                    disabled={!userEmail.includes('@') || userPassword.length < 8}
-                                    className={`w-full py-3 rounded-xl font-medium transition-colors text-sm ${
-                                        userEmail.includes('@') && userPassword.length >= 8
-                                            ? 'btn-primary'
-                                            : 'btn-primary'
-                                    }`}
-                                >
-                                    Analizar mi track
-                                </button>
-                                <p className="text-gray-600 text-xs mt-4">Si es tu primera vez, se creará tu cuenta automáticamente.</p>
-                            </div>
-                        </div>
-                    </div>
-                )}
+                {/* (screen 'email' eliminada — la auth ahora pasa por el AuthModal) */}
                 {screen === 'processing' && <ProcessingScreen datos={resultado?.datos_audio} />}
                 {screen === 'diagnostico' && resultado && (
                     <DiagnosticoScreen resultado={resultado} onReset={handleReset} contexto={contexto} userEmail={userEmail} />

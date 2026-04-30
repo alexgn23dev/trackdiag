@@ -2,18 +2,14 @@
  * Mentotrack — Google Apps Script
  * Gestiona: diagnósticos (lectura/escritura), feedback, y usuarios (registro/login).
  *
- * REQUISITOS:
- * - Pestaña principal (la primera) con los diagnósticos
- * - Pestaña llamada "usuarios" con columnas: email | password_hash | fecha_registro | username
- *   (la columna username se crea automáticamente si no existe)
+ * Pestaña 'usuarios': email | password_hash | fecha_registro | username
+ * (la columna username se crea sola si no existe)
  *
- * ACCIONES SOPORTADAS (vía e.parameter.action):
- *   - list                         → lista todos los diagnósticos (compat)
- *   - get_user                     → busca usuario por email (compat)
- *   - get_user_by_identifier       → busca por email O username (nuevo)
- *   - register                     → crea usuario (acepta username opcional, ahora obligatorio para nuevos)
- *   - set_username                 → asigna username a un usuario existente (migración)
- *   - check_username               → comprueba si un username ya está cogido
+ * Acciones (vía e.parameter.action en GET, o body.action en POST):
+ *   list, get_user, get_user_by_identifier, register, set_username,
+ *   check_username, get_all
+ *
+ * doPost también acepta el flow original sin "action" (tipo=feedback_*, o append diagnóstico).
  */
 
 var SHEET_ID = '1kRn-h7efvND_ky4hM-WKUz96c6degPEFJMAu03ynHwQ';
@@ -30,8 +26,9 @@ function _getUsersSheet(ss, createIfMissing) {
 }
 
 function _getColumnIndexes(sheet) {
-  // Lee la fila 1 y devuelve un mapa nombre→índice (1-based para getRange)
-  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var lastCol = sheet.getLastColumn();
+  if (lastCol < 1) return {};  // pestaña vacía sin headers
+  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
   var map = {};
   for (var i = 0; i < headers.length; i++) {
     map[String(headers[i]).trim().toLowerCase()] = i + 1;
@@ -40,8 +37,12 @@ function _getColumnIndexes(sheet) {
 }
 
 function _ensureUsernameColumn(sheet) {
-  // Si la pestaña 'usuarios' es antigua (3 columnas), añade 'username' como 4ª columna
   var idx = _getColumnIndexes(sheet);
+  // Self-healing: si la pestaña está completamente vacía, crear todos los headers
+  if (!idx.email) {
+    sheet.getRange(1, 1, 1, 4).setValues([['email', 'password_hash', 'fecha_registro', 'username']]);
+    return 4;
+  }
   if (!idx.username) {
     var newCol = sheet.getLastColumn() + 1;
     sheet.getRange(1, newCol).setValue('username');
@@ -51,14 +52,13 @@ function _ensureUsernameColumn(sheet) {
 }
 
 function _findUserRow(sheet, opts) {
-  // opts: { email?, username? } — devuelve {rowIndex, row} 1-based o null
   var emailQ = (opts.email || '').trim().toLowerCase();
   var usernameQ = (opts.username || '').trim().toLowerCase();
   if (!emailQ && !usernameQ) return null;
 
   var idx = _getColumnIndexes(sheet);
   var emailCol = idx.email;
-  var unameCol = idx.username; // puede ser undefined en sheet antiguos
+  var unameCol = idx.username;
   var data = sheet.getDataRange().getValues();
 
   for (var i = 1; i < data.length; i++) {
@@ -88,35 +88,30 @@ function _json(obj) {
 }
 
 function _validUsername(u) {
-  // 3-20 chars, letras (a-z), números, guion bajo y guion. Sensible solo en formato; unicidad es case-insensitive.
   return typeof u === 'string' && /^[a-zA-Z0-9_-]{3,20}$/.test(u);
 }
 
-// ----------------------- doGet -----------------------
+// ----------------------- Router de acciones -----------------------
 
-function doGet(e) {
-  var action = (e.parameter && e.parameter.action) || 'list';
+function _handleAction(action, params) {
   var ss = SpreadsheetApp.openById(SHEET_ID);
 
-  // --- Listar diagnósticos (compat) ---
-  if (action === 'list') {
+  if (action === 'list' || action === 'get_all') {
     var sheet = ss.getSheets()[0];
     var data = sheet.getDataRange().getValues();
     var headers = data[0];
     var rows = [];
     for (var i = 1; i < data.length; i++) {
       var row = {};
-      for (var j = 0; j < headers.length; j++) {
-        row[headers[j]] = data[i][j];
-      }
+      for (var j = 0; j < headers.length; j++) row[headers[j]] = data[i][j];
       rows.push(row);
     }
+    if (action === 'get_all') return _json({ ok: true, data: rows });
     return _json(rows);
   }
 
-  // --- Compat: get_user por email (sigue funcionando para /api/auth/acceder antiguo) ---
   if (action === 'get_user') {
-    var email = (e.parameter.email || '').trim().toLowerCase();
+    var email = (params.email || '').trim().toLowerCase();
     var usersSheet = _getUsersSheet(ss, false);
     if (!usersSheet) return _json({ found: false, error: 'No existe la pestaña usuarios' });
     _ensureUsernameColumn(usersSheet);
@@ -124,10 +119,9 @@ function doGet(e) {
     return found ? _json(_userPayload(found)) : _json({ found: false });
   }
 
-  // --- Buscar por email O username ---
   if (action === 'get_user_by_identifier') {
-    var ident = (e.parameter.identifier || '').trim();
-    if (!ident) return _json({ found: false, error: 'identifier vacío' });
+    var ident = (params.identifier || '').trim();
+    if (!ident) return _json({ found: false, error: 'identifier vacio' });
     var usersSheet = _getUsersSheet(ss, false);
     if (!usersSheet) return _json({ found: false, error: 'No existe la pestaña usuarios' });
     _ensureUsernameColumn(usersSheet);
@@ -136,10 +130,9 @@ function doGet(e) {
     return found ? _json(_userPayload(found)) : _json({ found: false });
   }
 
-  // --- Comprobar si un username ya está cogido ---
   if (action === 'check_username') {
-    var u = (e.parameter.username || '').trim();
-    if (!_validUsername(u)) return _json({ ok: false, error: 'Formato inválido' });
+    var u = (params.username || '').trim();
+    if (!_validUsername(u)) return _json({ ok: false, error: 'Formato invalido' });
     var usersSheet = _getUsersSheet(ss, false);
     if (!usersSheet) return _json({ ok: true, available: true });
     _ensureUsernameColumn(usersSheet);
@@ -147,30 +140,26 @@ function doGet(e) {
     return _json({ ok: true, available: !taken });
   }
 
-  // --- Registrar usuario nuevo (con username opcional para compat) ---
   if (action === 'register') {
-    var email = (e.parameter.email || '').trim().toLowerCase();
-    var hash = e.parameter.hash || '';
-    var username = (e.parameter.username || '').trim();
+    var email = (params.email || '').trim().toLowerCase();
+    var hash = params.hash || '';
+    var username = (params.username || '').trim();
     if (!email || !hash) return _json({ ok: false, error: 'email/hash requeridos' });
 
     var usersSheet = _getUsersSheet(ss, true);
     var unameCol = _ensureUsernameColumn(usersSheet);
     var idx = _getColumnIndexes(usersSheet);
 
-    // Email duplicado
     if (_findUserRow(usersSheet, { email: email })) {
       return _json({ ok: false, error: 'El usuario ya existe' });
     }
-    // Username duplicado (si se aporta)
     if (username) {
-      if (!_validUsername(username)) return _json({ ok: false, error: 'Username inválido' });
+      if (!_validUsername(username)) return _json({ ok: false, error: 'Username invalido' });
       if (_findUserRow(usersSheet, { username: username })) {
         return _json({ ok: false, error: 'Username no disponible' });
       }
     }
 
-    // Construir la fila respetando el orden de columnas existente
     var lastCol = usersSheet.getLastColumn();
     var rowVals = new Array(lastCol);
     rowVals[idx.email - 1] = email;
@@ -182,18 +171,16 @@ function doGet(e) {
     return _json({ ok: true });
   }
 
-  // --- Asignar username a un usuario existente (migración) ---
   if (action === 'set_username') {
-    var email = (e.parameter.email || '').trim().toLowerCase();
-    var username = (e.parameter.username || '').trim();
+    var email = (params.email || '').trim().toLowerCase();
+    var username = (params.username || '').trim();
     if (!email) return _json({ ok: false, error: 'email requerido' });
-    if (!_validUsername(username)) return _json({ ok: false, error: 'Username inválido' });
+    if (!_validUsername(username)) return _json({ ok: false, error: 'Username invalido' });
 
     var usersSheet = _getUsersSheet(ss, false);
     if (!usersSheet) return _json({ ok: false, error: 'No existe la pestaña usuarios' });
     var unameCol = _ensureUsernameColumn(usersSheet);
 
-    // Username único
     var taken = _findUserRow(usersSheet, { username: username });
     if (taken && String(taken.row[_getColumnIndexes(usersSheet).email - 1] || '').trim().toLowerCase() !== email) {
       return _json({ ok: false, error: 'Username no disponible' });
@@ -206,15 +193,42 @@ function doGet(e) {
     return _json({ ok: true, username: username });
   }
 
-  return _json({ error: 'Acción no reconocida' });
+  return null; // acción no reconocida → null para que el caller decida qué hacer
 }
 
-// ----------------------- doPost (sin cambios funcionales) -----------------------
+// ----------------------- doGet -----------------------
+
+function doGet(e) {
+  var params = (e && e.parameter) || {};
+  var action = params.action || 'list';
+  var resp = _handleAction(action, params);
+  return resp || _json({ error: 'Accion no reconocida' });
+}
+
+// ----------------------- doPost -----------------------
 
 function doPost(e) {
+  // 1) Parsear el body como JSON si lo hay
+  var body = {};
+  try {
+    if (e && e.postData && e.postData.contents) {
+      body = JSON.parse(e.postData.contents);
+    }
+  } catch (err) {
+    body = {};
+  }
+
+  // 2) Si hay 'action', tratarlo como una acción (mismo router que doGet)
+  if (body.action) {
+    var resp = _handleAction(body.action, body);
+    if (resp) return resp;
+    return _json({ error: 'Accion no reconocida' });
+  }
+
+  // 3) Flow legacy: feedback / append diagnóstico (sin 'action')
   var ss = SpreadsheetApp.openById(SHEET_ID);
   var sheet = ss.getSheets()[0];
-  var data = JSON.parse(e.postData.contents);
+  var data = body;
 
   if (data.tipo === 'feedback_real') {
     var rows = sheet.getDataRange().getValues();
