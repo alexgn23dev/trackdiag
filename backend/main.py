@@ -4,6 +4,7 @@ Endpoint principal: POST /api/diagnostico
 """
 
 import os
+import re
 import uuid
 import json
 import secrets
@@ -510,11 +511,199 @@ async def _obtener_historial_sheets(email: str) -> list:
     return [r for r in all_rows if (r.get("email") or "").strip().lower() == email]
 
 
+_USERNAME_REGEX = re.compile(r"^[a-zA-Z0-9_-]{3,20}$")
+
+
+def _valid_username(u: str) -> bool:
+    """Valida formato de username (3-20 chars, letras/números/_/-)."""
+    return bool(u and _USERNAME_REGEX.match(u))
+
+
+def _looks_like_email(s: str) -> bool:
+    return "@" in s and "." in s.split("@")[-1]
+
+
+# -------------------------------------------------------------------------
+# /api/auth/login — login con email O username + password
+# -------------------------------------------------------------------------
+@app.post("/api/auth/login")
+@limiter.limit("5/minute")
+async def auth_login(request: Request, data: dict):
+    identifier = (data.get("identifier") or data.get("email") or "").strip()
+    password = (data.get("password") or "").strip()
+
+    if not identifier:
+        return JSONResponse(status_code=400, content={"error": "Email o nombre de usuario requerido"})
+    if len(password) < 8:
+        return JSONResponse(status_code=400, content={"error": "La contraseña debe tener al menos 8 caracteres"})
+
+    if not SHEETS_WEBHOOK:
+        return JSONResponse(status_code=503, content={"error": "Servicio no configurado."})
+
+    # Normalizar identifier: si es email, lowercase; si es username, validar formato
+    is_email = _looks_like_email(identifier)
+    if is_email:
+        identifier = identifier.lower()
+    else:
+        identifier = identifier.lstrip("@")
+        if not _valid_username(identifier):
+            return JSONResponse(status_code=400, content={"error": "Nombre de usuario inválido"})
+
+    user_data = await _sheets_get({"action": "get_user_by_identifier", "identifier": identifier})
+    if user_data.get("_connection_error"):
+        return JSONResponse(status_code=503, content={"error": "No se pudo conectar con la base de datos."})
+
+    if not user_data.get("found"):
+        # Mensaje genérico para no revelar si existe o no
+        return JSONResponse(status_code=401, content={"error": "Credenciales incorrectas"})
+
+    if not _verify_password(password, user_data.get("password_hash", "")):
+        return JSONResponse(status_code=401, content={"error": "Credenciales incorrectas"})
+
+    email = user_data.get("email", "").strip().lower()
+    username = (user_data.get("username") or "").strip()
+    historial = await _obtener_historial_sheets(email)
+    token = _create_token(email)
+    return {
+        "ok": True,
+        "email": email,
+        "username": username,
+        "token": token,
+        "historial": historial,
+        "needs_username": not bool(username),  # migración: usuario sin username
+    }
+
+
+# -------------------------------------------------------------------------
+# /api/auth/register — registro con email + username + password
+# -------------------------------------------------------------------------
+@app.post("/api/auth/register")
+@limiter.limit("3/minute")
+async def auth_register(request: Request, data: dict):
+    email = (data.get("email") or "").strip().lower()
+    username = (data.get("username") or "").strip().lstrip("@")
+    password = (data.get("password") or "").strip()
+
+    if not email or "@" not in email:
+        return JSONResponse(status_code=400, content={"error": "Email inválido"})
+    if not _valid_username(username):
+        return JSONResponse(status_code=400, content={
+            "error": "Nombre de usuario inválido. Usa 3-20 caracteres: letras, números, guion bajo o guion."
+        })
+    if len(password) < 8:
+        return JSONResponse(status_code=400, content={"error": "La contraseña debe tener al menos 8 caracteres"})
+
+    if not SHEETS_WEBHOOK:
+        return JSONResponse(status_code=503, content={"error": "Servicio no configurado."})
+
+    hashed = _hash_password(password)
+    result = await _sheets_get({
+        "action": "register",
+        "email": email,
+        "username": username,
+        "hash": hashed,
+    })
+
+    if result.get("_connection_error"):
+        return JSONResponse(status_code=503, content={"error": "No se pudo conectar con la base de datos."})
+
+    if not result.get("ok"):
+        err = result.get("error", "")
+        if err == "El usuario ya existe":
+            return JSONResponse(status_code=409, content={"error": "Ese email ya está registrado."})
+        if err == "Username no disponible":
+            return JSONResponse(status_code=409, content={"error": "Ese nombre de usuario ya está cogido."})
+        return JSONResponse(status_code=400, content={"error": err or "No se pudo registrar"})
+
+    token = _create_token(email)
+    return {
+        "ok": True,
+        "email": email,
+        "username": username,
+        "token": token,
+        "historial": [],
+        "nuevo": True,
+    }
+
+
+# -------------------------------------------------------------------------
+# /api/auth/check_username — comprueba disponibilidad
+# -------------------------------------------------------------------------
+@app.post("/api/auth/check_username")
+@limiter.limit("20/minute")
+async def auth_check_username(request: Request, data: dict):
+    username = (data.get("username") or "").strip().lstrip("@")
+    if not _valid_username(username):
+        return {"ok": False, "available": False, "error": "Formato inválido"}
+    if not SHEETS_WEBHOOK:
+        return {"ok": False, "available": False, "error": "Servicio no configurado"}
+    result = await _sheets_get({"action": "check_username", "username": username})
+    if result.get("_connection_error"):
+        return {"ok": False, "available": False, "error": "Error de conexión"}
+    return {"ok": True, "available": bool(result.get("available"))}
+
+
+# -------------------------------------------------------------------------
+# /api/auth/set_username — JWT required (migración de usuarios viejos)
+# -------------------------------------------------------------------------
+@app.post("/api/auth/set_username")
+@limiter.limit("5/minute")
+async def auth_set_username(request: Request, data: dict):
+    token = _get_token_from_request(request)
+    if not token:
+        return JSONResponse(status_code=401, content={"error": "Token requerido"})
+    email = _verify_token(token)
+    if not email:
+        return JSONResponse(status_code=401, content={"error": "Token inválido o expirado"})
+
+    username = (data.get("username") or "").strip().lstrip("@")
+    if not _valid_username(username):
+        return JSONResponse(status_code=400, content={
+            "error": "Nombre de usuario inválido. Usa 3-20 caracteres: letras, números, guion bajo o guion."
+        })
+
+    result = await _sheets_get({
+        "action": "set_username",
+        "email": email,
+        "username": username,
+    })
+    if result.get("_connection_error"):
+        return JSONResponse(status_code=503, content={"error": "No se pudo conectar con la base de datos."})
+    if not result.get("ok"):
+        err = result.get("error", "")
+        if err == "Username no disponible":
+            return JSONResponse(status_code=409, content={"error": "Ese nombre de usuario ya está cogido."})
+        return JSONResponse(status_code=400, content={"error": err or "No se pudo asignar"})
+
+    return {"ok": True, "username": username}
+
+
+# -------------------------------------------------------------------------
+# /api/auth/forgot — placeholder (recuperación manual por email)
+# -------------------------------------------------------------------------
+@app.post("/api/auth/forgot")
+@limiter.limit("3/minute")
+async def auth_forgot(request: Request, data: dict):
+    """Placeholder: dirige al usuario a contactar por email para reset manual.
+    Iteración futura: token único + email transaccional."""
+    return {
+        "ok": True,
+        "message": (
+            "Para recuperar el acceso, escríbenos a soporte@producciononline.com "
+            "indicando el email con el que te registraste. Te ayudaremos manualmente."
+        ),
+        "contact_email": "soporte@producciononline.com",
+    }
+
+
 @app.post("/api/auth/acceder")
 @limiter.limit("5/minute")
 async def acceder(request: Request, data: dict):
     """
-    Login/Registro unificado:
+    DEPRECATED: endpoint unificado login/registro original.
+    Mantenido para compatibilidad con frontend antiguo. Nuevos clientes deben usar
+    /api/auth/login y /api/auth/register.
+
     - Si el email existe → verifica contraseña → devuelve historial
     - Si el email no existe → registra con la contraseña → devuelve historial vacío
     """
