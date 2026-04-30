@@ -171,6 +171,72 @@ function _handleAction(action, params) {
     return _json({ ok: true });
   }
 
+  // ----------- IDEAS -----------
+
+  if (action === 'get_ideas') {
+    var ideasSheet = ss.getSheetByName('ideas');
+    if (!ideasSheet) return _json({ ok: true, ideas: [] });
+    var idata = ideasSheet.getDataRange().getValues();
+    if (idata.length < 2) return _json({ ok: true, ideas: [] });
+    var iheaders = idata[0].map(function(h){ return String(h).trim().toLowerCase(); });
+    var ideas = [];
+    for (var ii = 1; ii < idata.length; ii++) {
+      var row = idata[ii];
+      var obj = {};
+      for (var jj = 0; jj < iheaders.length; jj++) obj[iheaders[jj]] = row[jj];
+      // Normalizar votos a número
+      obj.votos = Number(obj.votos || 0);
+      ideas.push(obj);
+    }
+    return _json({ ok: true, ideas: ideas });
+  }
+
+  if (action === 'create_idea') {
+    var id = (params.id || '').toString();
+    var titulo = (params.titulo || '').toString().slice(0, 200);
+    var descripcion = (params.descripcion || '').toString().slice(0, 1000);
+    var nombre = (params.nombre || '').toString().slice(0, 100);
+    var fecha = (params.fecha || new Date().toISOString()).toString();
+    var votos = Number(params.votos || 0);
+    if (!id || !titulo) return _json({ ok: false, error: 'id/titulo requeridos' });
+
+    var ideasSheet = ss.getSheetByName('ideas');
+    if (!ideasSheet) {
+      ideasSheet = ss.insertSheet('ideas');
+      ideasSheet.appendRow(['id', 'titulo', 'descripcion', 'nombre', 'fecha', 'votos']);
+    }
+    // Self-healing: si la pestaña existe pero no tiene headers
+    if (ideasSheet.getLastColumn() < 1) {
+      ideasSheet.getRange(1, 1, 1, 6).setValues([['id', 'titulo', 'descripcion', 'nombre', 'fecha', 'votos']]);
+    }
+    ideasSheet.appendRow([id, titulo, descripcion, nombre, fecha, votos]);
+    return _json({ ok: true, id: id });
+  }
+
+  if (action === 'vote_idea') {
+    var id = (params.id || '').toString();
+    var delta = Number(params.delta || 0);
+    if (!id) return _json({ ok: false, error: 'id requerido' });
+    var ideasSheet = ss.getSheetByName('ideas');
+    if (!ideasSheet) return _json({ ok: false, error: 'No existe la pestaña ideas' });
+
+    var idata = ideasSheet.getDataRange().getValues();
+    var iheaders = idata[0].map(function(h){ return String(h).trim().toLowerCase(); });
+    var idCol = iheaders.indexOf('id') + 1;
+    var votosCol = iheaders.indexOf('votos') + 1;
+    if (idCol < 1 || votosCol < 1) return _json({ ok: false, error: 'Pestaña ideas mal formada' });
+
+    for (var k = 1; k < idata.length; k++) {
+      if (String(idata[k][idCol - 1]) === id) {
+        var actual = Number(idata[k][votosCol - 1] || 0);
+        var nuevo = actual + delta;
+        ideasSheet.getRange(k + 1, votosCol).setValue(nuevo);
+        return _json({ ok: true, votos: nuevo });
+      }
+    }
+    return _json({ ok: false, error: 'Idea no encontrada' });
+  }
+
   if (action === 'set_username') {
     var email = (params.email || '').trim().toLowerCase();
     var username = (params.username || '').trim();
