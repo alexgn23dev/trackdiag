@@ -5,6 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mentotrack — Dashboard Admin</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <!-- PWA -->
+    <link rel="manifest" href="/manifest-admin.json">
+    <link rel="apple-touch-icon" href="/pwa-admin-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="MT Admin">
+    <meta name="mobile-web-app-capable" content="yes">
     <!-- Dashboard interno: NO indexar -->
     <meta name="robots" content="noindex, nofollow">
     <meta name="theme-color" content="#09090b">
@@ -1085,6 +1092,17 @@
     }
 
     ReactDOM.createRoot(document.getElementById('root')).render(<Dashboard />);
+    </script>
+
+    <script>
+    // Registrar Service Worker para PWA
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw-admin.js', { scope: '/dashboard' })
+                .then(reg => console.log('[PWA] SW registrado:', reg.scope))
+                .catch(err => console.warn('[PWA] SW falló:', err));
+        });
+    }
     </script>
 </body>
 </html>

@@ -1013,6 +1013,40 @@ def serve_dashboard(request: Request, key: str = ""):
     return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
 
 
+# ---- PWA assets para dashboard admin ----
+
+@app.get("/manifest-admin.json")
+def serve_admin_manifest():
+    return FileResponse(
+        FRONTEND_DIR / "manifest-admin.json",
+        media_type="application/manifest+json",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+@app.get("/sw-admin.js")
+def serve_admin_sw():
+    """Service Worker — necesita Service-Worker-Allowed para scope /dashboard."""
+    return FileResponse(
+        FRONTEND_DIR / "sw-admin.js",
+        media_type="application/javascript",
+        headers={
+            "Cache-Control": "no-cache",
+            "Service-Worker-Allowed": "/dashboard",
+        },
+    )
+
+
+@app.get("/pwa-admin-192.png")
+def serve_pwa_icon_192():
+    return FileResponse(FRONTEND_DIR / "pwa-admin-192.png", headers={"Cache-Control": "public, max-age=604800, immutable"})
+
+
+@app.get("/pwa-admin-512.png")
+def serve_pwa_icon_512():
+    return FileResponse(FRONTEND_DIR / "pwa-admin-512.png", headers={"Cache-Control": "public, max-age=604800, immutable"})
+
+
 # =========================================================================
 # Frontend — servir el SPA
 # =========================================================================
