@@ -681,6 +681,29 @@
             return users.sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
         }, [userMap, userSort]);
 
+        // Engagement: repetición y stickiness
+        const engagementData = useMemo(() => {
+            const users = Object.values(userMap);
+            const total = users.length;
+            if (total === 0) return { avgAnalyses: 0, repeatRate: 0, dist1: 0, dist2_3: 0, dist4plus: 0, totalUsers: 0, maxAnalyses: 0, topUser: null };
+            const counts = users.map(u => u.analyses.length);
+            const avg = counts.reduce((a, b) => a + b, 0) / total;
+            const repeaters = counts.filter(c => c >= 2).length;
+            const dist1 = counts.filter(c => c === 1).length;
+            const dist2_3 = counts.filter(c => c >= 2 && c <= 3).length;
+            const dist4plus = counts.filter(c => c >= 4).length;
+            const maxVal = Math.max(...counts);
+            const topUser = users.find(u => u.analyses.length === maxVal);
+            return {
+                avgAnalyses: Math.round(avg * 10) / 10,
+                repeatRate: Math.round((repeaters / total) * 100),
+                dist1, dist2_3, dist4plus,
+                totalUsers: total,
+                maxAnalyses: maxVal,
+                topUser: topUser ? topUser.email : null
+            };
+        }, [userMap]);
+
         const generos = [...new Set(entries.map(e => e.genero).filter(Boolean))];
         const generoCounts = countBy(entries.filter(e => e.genero), 'genero');
         const experienciaCounts = countBy(entries.filter(e => e.experiencia), 'experiencia');
@@ -784,6 +807,60 @@
                             <StatCard label="Usuarios únicos" value={uniqueEmails} color="#60a5fa" icon="👤" />
                             <StatCard label="Feedback real" value={feedbackReal} sub={`de ${totalUsers} análisis`} color="#a78bfa" icon="🎧" />
                             <StatCard label="Satisfacción" value={`${utilRate}%`} sub={`${utilSi} sí / ${utilParcial} parcial / ${utilNo} no`} color={utilRate >= 70 ? '#4ade80' : utilRate >= 40 ? '#facc15' : '#f87171'} icon="💬" />
+                        </div>
+
+                        {/* Engagement Card */}
+                        <div className="card p-5 mb-8">
+                            <h3 className="text-sm font-medium text-gray-300 mb-4">🔁 Engagement — ¿Vuelven los usuarios?</h3>
+                            <div className="grid grid-cols-3 gap-4 mb-5">
+                                <div className="text-center">
+                                    <p className="text-2xl font-bold" style={{ color: engagementData.repeatRate >= 40 ? '#4ade80' : engagementData.repeatRate >= 20 ? '#facc15' : '#f87171' }}>
+                                        {engagementData.repeatRate}%
+                                    </p>
+                                    <p className="text-gray-500 text-xs mt-1">Repiten (2+ análisis)</p>
+                                </div>
+                                <div className="text-center">
+                                    <p className="text-2xl font-bold text-purple-400">{engagementData.avgAnalyses}</p>
+                                    <p className="text-gray-500 text-xs mt-1">Media análisis/usuario</p>
+                                </div>
+                                <div className="text-center">
+                                    <p className="text-2xl font-bold text-blue-400">{engagementData.maxAnalyses}</p>
+                                    <p className="text-gray-500 text-xs mt-1">Máx. de un usuario</p>
+                                </div>
+                            </div>
+
+                            {/* Distribución visual */}
+                            <p className="text-gray-500 text-xs mb-2">Distribución de uso</p>
+                            {(() => {
+                                const { dist1, dist2_3, dist4plus, totalUsers } = engagementData;
+                                if (totalUsers === 0) return null;
+                                const pct1 = Math.round((dist1 / totalUsers) * 100);
+                                const pct2 = Math.round((dist2_3 / totalUsers) * 100);
+                                const pct4 = Math.round((dist4plus / totalUsers) * 100);
+                                return (
+                                    <div>
+                                        <div className="flex h-5 rounded-full overflow-hidden bg-gray-800 mb-3">
+                                            {pct1 > 0 && <div style={{ width: `${pct1}%`, background: '#f87171' }} className="transition-all"></div>}
+                                            {pct2 > 0 && <div style={{ width: `${pct2}%`, background: '#facc15' }} className="transition-all"></div>}
+                                            {pct4 > 0 && <div style={{ width: `${pct4}%`, background: '#4ade80' }} className="transition-all"></div>}
+                                        </div>
+                                        <div className="flex justify-between text-xs">
+                                            <span className="flex items-center gap-1.5">
+                                                <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: '#f87171' }}></span>
+                                                <span className="text-gray-400">1 análisis: {dist1} ({pct1}%)</span>
+                                            </span>
+                                            <span className="flex items-center gap-1.5">
+                                                <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: '#facc15' }}></span>
+                                                <span className="text-gray-400">2-3: {dist2_3} ({pct2}%)</span>
+                                            </span>
+                                            <span className="flex items-center gap-1.5">
+                                                <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: '#4ade80' }}></span>
+                                                <span className="text-gray-400">4+: {dist4plus} ({pct4}%)</span>
+                                            </span>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
                         </div>
 
                         {/* Semáforo + Charts Grid */}
