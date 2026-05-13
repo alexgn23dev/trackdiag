@@ -1103,25 +1103,14 @@
                                             ? 'Entendido. Cuéntanos más para que podamos mejorar:'
                                             : 'Gracias. Cuéntanos qué faltó o qué sobró:'}
                                     </p>
-                                    <div className="mb-3">
-                                        <label className="block text-xs text-gray-500 mb-1">¿Cuál crees que es tu problema real con este track?</label>
+                                    <div>
+                                        <label className="block text-xs text-gray-500 mb-1">¿Cuál crees que es el problema real de tu track que Mentotrack no haya identificado?</label>
                                         <textarea
                                             value={feedbackProblemaReal}
                                             onChange={(e) => setFeedbackProblemaReal(e.target.value)}
-                                            placeholder="Ej.: Creo que el problema es la estructura, no el balance..."
+                                            placeholder="Ej.: Creo que el problema es la estructura, no el balance. No detectó que el clap está muy alto..."
                                             maxLength={500}
-                                            rows={2}
-                                            className="w-full px-4 py-3 rounded-lg text-sm input-field resize-none"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs text-gray-500 mb-1">¿Hay algo que el diagnóstico no mencionó y debería haber detectado?</label>
-                                        <textarea
-                                            value={feedbackNoDetectado}
-                                            onChange={(e) => setFeedbackNoDetectado(e.target.value)}
-                                            placeholder="Ej.: No detectó que tengo un clap muy alto, o que el bajo se pierde..."
-                                            maxLength={500}
-                                            rows={2}
+                                            rows={3}
                                             className="w-full px-4 py-3 rounded-lg text-sm input-field resize-none"
                                         />
                                     </div>
