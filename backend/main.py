@@ -5,9 +5,12 @@ Endpoint principal: POST /api/diagnostico
 
 import os
 import re
+import asyncio
+import signal
 import uuid
 import json
 import secrets
+import shutil
 import tempfile
 import httpx
 import bcrypt
@@ -218,15 +221,39 @@ async def diagnosticar(
         with open(tmp_path, "wb") as f:
             f.write(content)
 
-        # Extraer señales (con BPM manual si se proporcionó)
+        # Validar duración mínima (8 seg) — audios más cortos dan diagnósticos sin sentido
+        _load_engine()
+        import librosa as _lr
+        try:
+            duracion_check = _lr.get_duration(path=tmp_path)
+        except Exception:
+            duracion_check = 0
+        if duracion_check < 8:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "El audio es demasiado corto (mínimo 8 segundos). Sube un fragmento más largo de tu track."}
+            )
+
+        # Extraer señales con timeout de 90s (previene que archivos corruptos cuelguen el worker)
         bpm_int = None
         if bpm_manual and bpm_manual.strip():
             try:
                 bpm_int = int(float(bpm_manual.strip()))
             except ValueError:
                 pass
-        _load_engine()
-        senales = _extraer_senales(tmp_path, bpm_manual=bpm_int)
+
+        loop = asyncio.get_event_loop()
+        try:
+            senales = await asyncio.wait_for(
+                loop.run_in_executor(None, lambda: _extraer_senales(tmp_path, bpm_manual=bpm_int)),
+                timeout=90
+            )
+        except asyncio.TimeoutError:
+            print(f"[ERROR] diagnosticar: Timeout procesando audio ({session_id})")
+            return JSONResponse(
+                status_code=504,
+                content={"error": "El análisis tardó demasiado. El archivo puede estar corrupto. Inténtalo con otro archivo."}
+            )
 
         # Construir contexto
         contexto = {
@@ -256,6 +283,12 @@ async def diagnosticar(
 
         return resultado
 
+    except asyncio.TimeoutError:
+        # Ya manejado arriba, pero por si acaso
+        return JSONResponse(
+            status_code=504,
+            content={"error": "El análisis tardó demasiado. Inténtalo de nuevo."}
+        )
     except Exception as e:
         # Log detallado para debug, mensaje genérico al cliente (no exponer internals)
         print(f"[ERROR] diagnosticar: {type(e).__name__}: {e}")
@@ -264,11 +297,8 @@ async def diagnosticar(
             content={"error": "Error procesando el audio. Verifica que el archivo no esté corrupto e inténtalo de nuevo."}
         )
     finally:
-        # Limpiar archivo temporal
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
-        if os.path.exists(tmp_dir):
-            os.rmdir(tmp_dir)
+        # Limpiar archivos temporales (rmtree maneja dir no vacío)
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 @app.get("/api/opciones")
