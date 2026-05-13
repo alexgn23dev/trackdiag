@@ -21,7 +21,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
+from fastapi.responses import JSONResponse, FileResponse, RedirectResponse, HTMLResponse
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
@@ -1010,7 +1010,43 @@ def serve_dashboard(request: Request, key: str = ""):
         )
         return response
 
-    return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
+    # Sin cookie ni key válida → mostrar formulario de login inline
+    login_html = """<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MentoTrack Admin — Login</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="manifest" href="/manifest-admin.json">
+<meta name="theme-color" content="#09090b">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif; background: #09090b; color: #e5e5e5; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+  .login-box { width: 100%; max-width: 360px; padding: 24px; }
+  .logo { text-align: center; margin-bottom: 32px; font-size: 18px; font-weight: 600; letter-spacing: -0.02em; color: #fff; }
+  .logo .dot { color: #8b5cf6; }
+  h1 { font-size: 14px; font-weight: 500; color: #9ca3af; text-align: center; margin-bottom: 24px; }
+  form { display: flex; flex-direction: column; gap: 12px; }
+  input { background: #141414; border: 1px solid #333; border-radius: 10px; padding: 14px 16px; color: #e5e5e5; font-size: 15px; outline: none; transition: border-color 0.15s; -webkit-appearance: none; }
+  input:focus { border-color: #8b5cf6; }
+  button { background: #8b5cf6; color: #fff; border: none; border-radius: 10px; padding: 14px; font-size: 15px; font-weight: 600; cursor: pointer; transition: background 0.15s; -webkit-appearance: none; }
+  button:active { background: #7c3aed; }
+  .error { color: #f87171; font-size: 13px; text-align: center; display: none; }
+</style>
+</head>
+<body>
+<div class="login-box">
+  <div class="logo">mentotrack<span class="dot">●</span></div>
+  <h1>Panel de administración</h1>
+  <form method="GET" action="/dashboard">
+    <input type="password" name="key" placeholder="Admin key" required autocomplete="off" autofocus>
+    <button type="submit">Entrar</button>
+  </form>
+</div>
+</body>
+</html>"""
+    return HTMLResponse(content=login_html, status_code=200)
 
 
 # ---- PWA assets para dashboard admin ----
