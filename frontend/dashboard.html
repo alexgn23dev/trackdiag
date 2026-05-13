@@ -195,6 +195,7 @@
                 <td className="py-3 px-4 text-xs text-gray-400 max-w-xs truncate">{entry.diagPrincipal || '—'}</td>
                 <td className="py-3 px-4 text-xs">
                     {entry.fueUtil === 'Sí' ? <span className="text-green-400">Sí</span>
+                     : entry.fueUtil === 'Parcial' ? <span className="text-yellow-400">Parcial</span>
                      : entry.fueUtil === 'No' ? <span className="text-red-400">No</span>
                      : <span className="text-gray-600">—</span>}
                 </td>
@@ -572,7 +573,7 @@
                             <h4 className="text-gray-500 text-xs uppercase tracking-wide mb-3">Feedback del usuario</h4>
                             {entry.fueUtil && (
                                 <p className="text-gray-300 text-sm mb-2">
-                                    ¿Fue útil? <span className={entry.fueUtil === 'Sí' ? 'text-green-400 font-medium' : 'text-red-400 font-medium'}>{entry.fueUtil}</span>
+                                    ¿Fue útil? <span className={`font-medium ${entry.fueUtil === 'Sí' ? 'text-green-400' : entry.fueUtil === 'Parcial' ? 'text-yellow-400' : 'text-red-400'}`}>{entry.fueUtil}</span>
                                 </p>
                             )}
                             {entry.comentario && (
@@ -633,6 +634,7 @@
             return entries.filter(e => {
                 if (filterGenero !== 'todos' && e.genero !== filterGenero) return false;
                 if (filterUtil === 'Sí' && e.fueUtil !== 'Sí') return false;
+                if (filterUtil === 'Parcial' && e.fueUtil !== 'Parcial') return false;
                 if (filterUtil === 'No' && e.fueUtil !== 'No') return false;
                 if (filterUtil === 'Sin respuesta' && e.fueUtil) return false;
                 if (filterEstado !== 'todos') {
@@ -650,8 +652,10 @@
         const uniqueEmails = new Set(entries.map(e => e.email).filter(Boolean)).size;
         const feedbackReal = entries.filter(e => e.enlaceFeedback).length;
         const utilSi = entries.filter(e => e.fueUtil === 'Sí').length;
+        const utilParcial = entries.filter(e => e.fueUtil === 'Parcial').length;
         const utilNo = entries.filter(e => e.fueUtil === 'No').length;
-        const utilTotal = utilSi + utilNo;
+        const utilNeg = utilParcial + utilNo; // Parcial + No = alarmas
+        const utilTotal = utilSi + utilNeg;
         const utilRate = utilTotal > 0 ? Math.round((utilSi / utilTotal) * 100) : 0;
         const conComentario = entries.filter(e => e.comentario).length;
 
@@ -779,7 +783,7 @@
                             <StatCard label="Análisis totales" value={totalUsers} icon="📊" />
                             <StatCard label="Usuarios únicos" value={uniqueEmails} color="#60a5fa" icon="👤" />
                             <StatCard label="Feedback real" value={feedbackReal} sub={`de ${totalUsers} análisis`} color="#a78bfa" icon="🎧" />
-                            <StatCard label="Satisfacción" value={`${utilRate}%`} sub={`${utilSi} sí / ${utilNo} no`} color={utilRate >= 70 ? '#4ade80' : utilRate >= 40 ? '#facc15' : '#f87171'} icon="💬" />
+                            <StatCard label="Satisfacción" value={`${utilRate}%`} sub={`${utilSi} sí / ${utilParcial} parcial / ${utilNo} no`} color={utilRate >= 70 ? '#4ade80' : utilRate >= 40 ? '#facc15' : '#f87171'} icon="💬" />
                         </div>
 
                         {/* Semáforo + Charts Grid */}
@@ -967,8 +971,8 @@
                                             <div className="flex items-center gap-3">
                                                 {anyFeedbackReal && <span className="text-purple-400 text-xs">🎧 Feedback real</span>}
                                                 {anyUtil && (
-                                                    <span className={`text-xs ${anyUtil.fueUtil === 'Sí' ? 'text-green-400' : 'text-red-400'}`}>
-                                                        {anyUtil.fueUtil === 'Sí' ? '👍' : '👎'}
+                                                    <span className={`text-xs ${anyUtil.fueUtil === 'Sí' ? 'text-green-400' : anyUtil.fueUtil === 'Parcial' ? 'text-yellow-400' : 'text-red-400'}`}>
+                                                        {anyUtil.fueUtil === 'Sí' ? '👍' : anyUtil.fueUtil === 'Parcial' ? '🤔' : '👎'}
                                                     </span>
                                                 )}
                                                 <span className="text-gray-500 text-xs">{formatDate(user.lastSeen)}</span>
@@ -1002,8 +1006,8 @@
                                                             </div>
                                                             <div className="flex items-center gap-3">
                                                                 {entry.fueUtil && (
-                                                                    <span className={`text-xs ${entry.fueUtil === 'Sí' ? 'text-green-400' : 'text-red-400'}`}>
-                                                                        {entry.fueUtil === 'Sí' ? '👍' : '👎'}
+                                                                    <span className={`text-xs ${entry.fueUtil === 'Sí' ? 'text-green-400' : entry.fueUtil === 'Parcial' ? 'text-yellow-400' : 'text-red-400'}`}>
+                                                                        {entry.fueUtil === 'Sí' ? '👍' : entry.fueUtil === 'Parcial' ? '🤔' : '👎'}
                                                                     </span>
                                                                 )}
                                                                 {entry.comentario && <span className="text-gray-500 text-xs">💬</span>}
@@ -1036,7 +1040,7 @@
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                             <StatCard label="Respondieron" value={utilTotal} sub={`de ${totalUsers}`} icon="📝" />
                             <StatCard label="Fue útil" value={utilSi} color="#4ade80" icon="👍" />
-                            <StatCard label="No fue útil" value={utilNo} color="#f87171" icon="👎" />
+                            <StatCard label="Parcial / No" value={utilNeg} sub={`${utilParcial} parcial · ${utilNo} no`} color="#f87171" icon="👎" />
                             <StatCard label="Con comentario" value={conComentario} color="#60a5fa" icon="💬" />
                         </div>
 
@@ -1050,8 +1054,8 @@
                                 {entries.filter(e => e.comentario).slice().reverse().map((e, i) => (
                                     <div key={i} className="bg-gray-800/50 rounded-lg p-4">
                                         <div className="flex items-center gap-2 mb-2">
-                                            <span className={e.fueUtil === 'Sí' ? 'text-green-400 text-xs' : 'text-red-400 text-xs'}>
-                                                {e.fueUtil === 'Sí' ? '👍 Útil' : '👎 No útil'}
+                                            <span className={`text-xs ${e.fueUtil === 'Sí' ? 'text-green-400' : e.fueUtil === 'Parcial' ? 'text-yellow-400' : 'text-red-400'}`}>
+                                                {e.fueUtil === 'Sí' ? '👍 Útil' : e.fueUtil === 'Parcial' ? '🤔 Parcial' : '👎 No útil'}
                                             </span>
                                             <span className="text-gray-600 text-xs">·</span>
                                             <span className="text-gray-500 text-xs">{e.email}</span>
