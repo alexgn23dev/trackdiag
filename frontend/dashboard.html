@@ -599,6 +599,7 @@
         const [filterEstado, setFilterEstado] = useState('todos');
         const [selectedEntry, setSelectedEntry] = useState(null);
         const [selectedUser, setSelectedUser] = useState(null);
+        const [userSort, setUserSort] = useState('recent'); // 'recent' | 'analyses'
         const [tab, setTab] = useState('overview'); // overview | analisis | users | feedback
         const [calendarMonth, setCalendarMonth] = useState(() => new Date(2026, 3, 1)); // Abril 2026
 
@@ -661,7 +662,13 @@
             });
             return map;
         }, [entries]);
-        const uniqueUsers = useMemo(() => Object.values(userMap).sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0)), [userMap]);
+        const uniqueUsers = useMemo(() => {
+            const users = Object.values(userMap);
+            if (userSort === 'analyses') {
+                return users.sort((a, b) => b.analyses.length - a.analyses.length || (b.lastSeen || 0) - (a.lastSeen || 0));
+            }
+            return users.sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
+        }, [userMap, userSort]);
 
         const generos = [...new Set(entries.map(e => e.genero).filter(Boolean))];
         const generoCounts = countBy(entries.filter(e => e.genero), 'genero');
@@ -902,7 +909,23 @@
                 {/* ============ TAB: USUARIOS ============ */}
                 {tab === 'users' && (
                     <div className="fade-in">
-                        <p className="text-gray-500 text-xs mb-4">{uniqueUsers.length} usuarios únicos</p>
+                        <div className="flex items-center justify-between mb-4">
+                            <p className="text-gray-500 text-xs">{uniqueUsers.length} usuarios únicos</p>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => setUserSort('recent')}
+                                    className={`px-3 py-1 rounded-full text-xs transition-colors ${userSort === 'recent' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+                                >
+                                    Más recientes
+                                </button>
+                                <button
+                                    onClick={() => setUserSort('analyses')}
+                                    className={`px-3 py-1 rounded-full text-xs transition-colors ${userSort === 'analyses' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+                                >
+                                    Más análisis
+                                </button>
+                            </div>
+                        </div>
 
                         <div className="space-y-3">
                             {uniqueUsers.map(user => {
