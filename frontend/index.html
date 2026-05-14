@@ -1316,12 +1316,10 @@
                                         const vidMatch = tut.url.match(/[?&]v=([^&]+)/);
                                         const vidId = vidMatch ? vidMatch[1] : null;
                                         return (
-                                            <a
+                                            <div
                                                 key={`main-${i}`}
-                                                href={tut.url}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="block rounded-xl overflow-hidden transition-all hover:scale-[1.02]"
+                                                role="link"
+                                                className="block rounded-xl overflow-hidden transition-all hover:scale-[1.02] cursor-pointer"
                                                 style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}
                                                 onClick={() => {
                                                     trackEvent('tutorial_clicked', {
@@ -1340,6 +1338,7 @@
                                                             })], { type: 'application/json' })
                                                         );
                                                     } catch(e) {}
+                                                    window.open(tut.url, '_blank', 'noopener,noreferrer');
                                                 }}
                                             >
                                                 {vidId && (
@@ -1362,7 +1361,7 @@
                                                     <h4 className="text-white text-sm font-medium leading-snug mb-1">{tut.titulo}</h4>
                                                     <p className="text-gray-500 text-xs leading-relaxed">{tut.descripcion}</p>
                                                 </div>
-                                            </a>
+                                            </div>
                                         );
                                     })}
 
@@ -1380,12 +1379,10 @@
                                                 const vidMatch = tut.url.match(/[?&]v=([^&]+)/);
                                                 const vidId = vidMatch ? vidMatch[1] : null;
                                                 return (
-                                                    <a
+                                                    <div
                                                         key={`sec-${i}`}
-                                                        href={tut.url}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="block rounded-xl overflow-hidden transition-all hover:scale-[1.02]"
+                                                        role="link"
+                                                        className="block rounded-xl overflow-hidden transition-all hover:scale-[1.02] cursor-pointer"
                                                         style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}
                                                         onClick={() => {
                                                             trackEvent('tutorial_clicked', {
@@ -1403,6 +1400,7 @@
                                                                     tutoriales_sugeridos: allTutoriales.map(t => t.titulo).join(' | '),
                                                                 })], { type: 'application/json' })
                                                             );
+                                                            window.open(tut.url, '_blank', 'noopener,noreferrer');
                                                         }}
                                                     >
                                                         {vidId && (
@@ -1425,7 +1423,7 @@
                                                             <h4 className="text-white text-sm font-medium leading-snug mb-1">{tut.titulo}</h4>
                                                             <p className="text-gray-500 text-xs leading-relaxed">{tut.descripcion}</p>
                                                         </div>
-                                                    </a>
+                                                    </div>
                                                 );
                                             })}
                                         </>
