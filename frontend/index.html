@@ -1329,16 +1329,17 @@
                                                         tutorial_titulo: tut.titulo,
                                                         tutorial_index: i,
                                                     });
-                                                    fetch(`${API_URL}/api/sheets/tutorial-click`, {
-                                                        method: 'POST',
-                                                        headers: {'Content-Type': 'application/json'},
-                                                        body: JSON.stringify({
-                                                            email: userEmail,
-                                                            diagnostico_id: diagId,
-                                                            tutorial_clickado: tut.titulo,
-                                                            tutoriales_sugeridos: allTutoriales.map(t => t.titulo).join(' | '),
-                                                        }),
-                                                    }).catch(() => {});
+                                                    try {
+                                                        navigator.sendBeacon(
+                                                            `${API_URL}/api/sheets/tutorial-click`,
+                                                            new Blob([JSON.stringify({
+                                                                email: userEmail,
+                                                                diagnostico_id: diagId,
+                                                                tutorial_clickado: tut.titulo,
+                                                                tutoriales_sugeridos: allTutoriales.map(t => t.titulo).join(' | '),
+                                                            })], { type: 'application/json' })
+                                                        );
+                                                    } catch(e) {}
                                                 }}
                                             >
                                                 {vidId && (
@@ -1393,16 +1394,15 @@
                                                                 tutorial_index: i,
                                                                 es_secundario: true,
                                                             });
-                                                            fetch(`${API_URL}/api/sheets/tutorial-click`, {
-                                                                method: 'POST',
-                                                                headers: {'Content-Type': 'application/json'},
-                                                                body: JSON.stringify({
+                                                            navigator.sendBeacon(
+                                                                `${API_URL}/api/sheets/tutorial-click`,
+                                                                new Blob([JSON.stringify({
                                                                     email: userEmail,
                                                                     diagnostico_id: secId,
                                                                     tutorial_clickado: tut.titulo,
                                                                     tutoriales_sugeridos: allTutoriales.map(t => t.titulo).join(' | '),
-                                                                }),
-                                                            }).catch(() => {});
+                                                                })], { type: 'application/json' })
+                                                            );
                                                         }}
                                                     >
                                                         {vidId && (
