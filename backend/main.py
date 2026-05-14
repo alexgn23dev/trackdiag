@@ -421,8 +421,11 @@ async def _sheets_post(payload: dict) -> dict:
     try:
         async with httpx.AsyncClient(follow_redirects=True) as client:
             resp = await client.post(SHEETS_WEBHOOK, json=payload, timeout=15)
-            data = resp.json()
-            return data
+            try:
+                return resp.json()
+            except Exception:
+                # Apps Script legacy devuelve texto plano "ok", no JSON
+                return {"ok": True, "raw": resp.text[:100]}
     except Exception as e:
         print(f"[SHEETS POST] Error: {e}")
         return {"error": str(e)}
@@ -1131,6 +1134,12 @@ def _file_response_with_cache(file_path: Path) -> FileResponse:
 @app.get("/{full_path:path}")
 def serve_catch_all(full_path: str):
     """Catch-all para SPA: si no es /api, devuelve index.html."""
+    # Bloquear acceso a archivos/directorios ocultos (.git, .env, etc.)
+    if any(part.startswith('.') for part in full_path.split('/')):
+        return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
+    # Bloquear paths peligrosos (wp-*, etc.)
+    if full_path.startswith(('wp-', 'wp/', 'xmlrpc', 'admin', 'phpmyadmin')):
+        return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
     # Proteger acceso directo al archivo dashboard.html
     if "dashboard" in full_path.lower():
         return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
