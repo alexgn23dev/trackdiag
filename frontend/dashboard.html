@@ -616,27 +616,38 @@
                                     <a href={entry.enlaceFeedback} target="_blank" rel="noopener" className="text-purple-400 text-xs hover:underline break-all">{entry.enlaceFeedback}</a>
                                 </div>
                             )}
-                            {(entry.tutorialesSugeridos || entry.tutorialClickado) && (
-                                <div className="mt-3 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                                    <p className="text-gray-500 text-xs mb-2">🎬 Tutoriales</p>
-                                    {entry.tutorialesSugeridos && (
-                                        <div className="mb-2">
-                                            <p className="text-gray-600 text-xs mb-1">Sugeridos:</p>
-                                            <div className="flex flex-wrap gap-1">
-                                                {entry.tutorialesSugeridos.split(' | ').map((t, ti) => {
-                                                    const isClicked = entry.tutorialClickado && entry.tutorialClickado.includes(t.trim());
-                                                    return (
-                                                        <span key={ti} className={`text-xs px-2 py-0.5 rounded-full ${isClicked ? 'bg-blue-500/20 text-blue-400 font-medium' : 'bg-white/5 text-gray-500'}`}>
-                                                            {isClicked && '▶ '}{t.trim().length > 45 ? t.trim().substring(0, 45) + '…' : t.trim()}
-                                                        </span>
-                                                    );
-                                                })}
+                        </div>
+                    )}
+
+                    {/* Tutoriales sugeridos y clickados */}
+                    {(entry.tutorialesSugeridos || entry.tutorialClickado) && (
+                        <div className="px-5 py-4 border-t border-gray-800">
+                            <h4 className="text-gray-500 text-xs uppercase tracking-wide mb-3">🎬 Tutoriales sugeridos</h4>
+                            {entry.tutorialesSugeridos && (
+                                <div className="space-y-1.5">
+                                    {entry.tutorialesSugeridos.split(' | ').map((t, ti) => {
+                                        const titulo = t.trim();
+                                        const clicked = entry.tutorialClickado && entry.tutorialClickado.includes(titulo);
+                                        return (
+                                            <div key={ti} className={`flex items-start gap-2 px-3 py-2 rounded-lg ${clicked ? 'bg-blue-500/10' : 'bg-white/3'}`}>
+                                                <span className={`text-xs mt-0.5 ${clicked ? 'text-blue-400' : 'text-gray-700'}`}>{clicked ? '▶' : '○'}</span>
+                                                <div>
+                                                    <p className={`text-xs ${clicked ? 'text-blue-400 font-medium' : 'text-gray-500'}`}>{titulo}</p>
+                                                    {clicked && <p className="text-xs text-blue-500/50 mt-0.5">Clickado</p>}
+                                                </div>
                                             </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                            {entry.tutorialClickado && !entry.tutorialesSugeridos && (
+                                <div className="space-y-1.5">
+                                    {entry.tutorialClickado.split(' || ').map((t, ti) => (
+                                        <div key={ti} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500/10">
+                                            <span className="text-blue-400 text-xs">▶</span>
+                                            <p className="text-blue-400 text-xs font-medium">{t.trim()}</p>
                                         </div>
-                                    )}
-                                    {entry.tutorialClickado && !entry.tutorialesSugeridos && (
-                                        <p className="text-blue-400 text-xs">▶ {entry.tutorialClickado}</p>
-                                    )}
+                                    ))}
                                 </div>
                             )}
                         </div>
@@ -758,20 +769,14 @@
 
         // Tutoriales: métricas de clicks
         const tutorialData = useMemo(() => {
-            const conSugeridos = entries.filter(e => e.tutorialesSugeridos);
-            const conClick = entries.filter(e => e.tutorialClickado);
-            const clickRate = conSugeridos.length > 0 ? Math.round((conClick.length / conSugeridos.length) * 100) : 0;
-            // Contar qué tutoriales se clickan más
-            const tutCounts = {};
-            conClick.forEach(e => {
-                const clicks = e.tutorialClickado.split(' || ');
-                clicks.forEach(t => {
-                    const titulo = t.trim();
-                    if (titulo) tutCounts[titulo] = (tutCounts[titulo] || 0) + 1;
-                });
-            });
-            const topTutoriales = Object.entries(tutCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
-            return { conSugeridos: conSugeridos.length, conClick: conClick.length, clickRate, topTutoriales };
+            const total = entries.length;
+            const conSugeridos = entries.filter(e => e.tutorialesSugeridos).length;
+            const conClick = entries.filter(e => e.tutorialClickado).length;
+            // % de análisis que abrieron el panel de tutoriales (= tienen sugeridos)
+            const openRate = total > 0 ? Math.round((conSugeridos / total) * 100) : 0;
+            // % de análisis que clickaron un video (de los que abrieron)
+            const clickRate = conSugeridos > 0 ? Math.round((conClick / conSugeridos) * 100) : 0;
+            return { total, conSugeridos, conClick, openRate, clickRate };
         }, [entries]);
 
         const generos = [...new Set(entries.map(e => e.genero).filter(Boolean))];
@@ -935,48 +940,25 @@
 
                         {/* Tutoriales Card */}
                         <div className="card p-5 mb-8">
-                            <h3 className="text-sm font-medium text-gray-300 mb-4">🎬 Tutoriales YouTube — ¿Los miran?</h3>
-                            <div className="grid grid-cols-3 gap-4 mb-4">
-                                <div className="text-center">
-                                    <p className="text-2xl font-bold" style={{ color: tutorialData.clickRate >= 30 ? '#4ade80' : tutorialData.clickRate >= 10 ? '#facc15' : '#9ca3af' }}>
-                                        {tutorialData.clickRate}%
-                                    </p>
-                                    <p className="text-gray-500 text-xs mt-1">Click-through rate</p>
-                                </div>
-                                <div className="text-center">
-                                    <p className="text-2xl font-bold text-purple-400">{tutorialData.conClick}</p>
-                                    <p className="text-gray-500 text-xs mt-1">Análisis con click</p>
-                                </div>
-                                <div className="text-center">
-                                    <p className="text-2xl font-bold text-gray-400">{tutorialData.conSugeridos}</p>
-                                    <p className="text-gray-500 text-xs mt-1">Tutoriales mostrados</p>
-                                </div>
-                            </div>
-                            {tutorialData.topTutoriales.length > 0 && (
-                                <div>
-                                    <p className="text-gray-500 text-xs mb-2">Más clickados</p>
-                                    <div className="space-y-2">
-                                        {tutorialData.topTutoriales.map(([titulo, count], i) => {
-                                            const maxCount = tutorialData.topTutoriales[0][1];
-                                            const pct = Math.round((count / maxCount) * 100);
-                                            return (
-                                                <div key={i} className="flex items-center gap-3">
-                                                    <div className="flex-1">
-                                                        <div className="flex justify-between mb-1">
-                                                            <span className="text-gray-300 text-xs truncate max-w-xs">{titulo}</span>
-                                                            <span className="text-purple-400 text-xs font-medium ml-2">{count}</span>
-                                                        </div>
-                                                        <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                                                            <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: '#8b5cf6' }}></div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
+                            <h3 className="text-sm font-medium text-gray-300 mb-4">🎬 Tutoriales YouTube</h3>
+                            {tutorialData.total > 0 ? (
+                                <div className="grid grid-cols-2 gap-6">
+                                    <div className="text-center">
+                                        <p className="text-3xl font-bold" style={{ color: tutorialData.openRate >= 30 ? '#a78bfa' : '#6b7280' }}>
+                                            {tutorialData.openRate}%
+                                        </p>
+                                        <p className="text-gray-500 text-xs mt-1">abrieron "Ver tutoriales"</p>
+                                        <p className="text-gray-600 text-xs">{tutorialData.conSugeridos} de {tutorialData.total} análisis</p>
+                                    </div>
+                                    <div className="text-center">
+                                        <p className="text-3xl font-bold" style={{ color: tutorialData.clickRate >= 30 ? '#4ade80' : tutorialData.clickRate >= 10 ? '#facc15' : '#6b7280' }}>
+                                            {tutorialData.clickRate}%
+                                        </p>
+                                        <p className="text-gray-500 text-xs mt-1">clickaron un video</p>
+                                        <p className="text-gray-600 text-xs">{tutorialData.conClick} de {tutorialData.conSugeridos} que abrieron</p>
                                     </div>
                                 </div>
-                            )}
-                            {tutorialData.conSugeridos === 0 && (
+                            ) : (
                                 <p className="text-gray-600 text-xs text-center">Aún no hay datos de tutoriales</p>
                             )}
                         </div>
