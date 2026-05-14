@@ -187,24 +187,51 @@
             ? '🔵'
             : '⚪';
 
+        const sugeridos = entry.tutorialesSugeridos ? entry.tutorialesSugeridos.split(' | ') : [];
+        const clickados = entry.tutorialClickado ? entry.tutorialClickado.split(' || ').map(t => t.trim()) : [];
+
         return (
-            <tr className="table-row border-t border-gray-800 cursor-pointer" onClick={onClick}>
-                <td className="py-3 px-4 text-xs text-gray-500">{formatDate(entry.date)}</td>
-                <td className="py-3 px-4 text-sm text-gray-300">{entry.email || '—'}</td>
-                <td className="py-3 px-4 text-xs text-gray-300">{entry.nombreProyecto || '—'}</td>
-                <td className="py-3 px-4 text-xs text-gray-400">{entry.genero || '—'}</td>
-                <td className="py-3 px-4 text-xs">{estadoEmoji} <span className="text-gray-400">{entry.estadoTrack}</span></td>
-                <td className="py-3 px-4 text-xs text-gray-400 max-w-xs truncate">{entry.diagPrincipal || '—'}</td>
-                <td className="py-3 px-4 text-xs">
-                    {entry.fueUtil === 'Sí' ? <span className="text-green-400">Sí</span>
-                     : entry.fueUtil === 'Parcial' ? <span className="text-yellow-400">Parcial</span>
-                     : entry.fueUtil === 'No' ? <span className="text-red-400">No</span>
-                     : <span className="text-gray-600">—</span>}
-                </td>
-                <td className="py-3 px-4 text-xs">
-                    {entry.enlaceFeedback ? <span className="text-purple-400">Solicitado</span> : <span className="text-gray-600">—</span>}
-                </td>
-            </tr>
+            <React.Fragment>
+                <tr className="table-row border-t border-gray-800 cursor-pointer" onClick={onClick}>
+                    <td className="py-3 px-4 text-xs text-gray-500">{formatDate(entry.date)}</td>
+                    <td className="py-3 px-4 text-sm text-gray-300">{entry.email || '—'}</td>
+                    <td className="py-3 px-4 text-xs text-gray-300">{entry.nombreProyecto || '—'}</td>
+                    <td className="py-3 px-4 text-xs text-gray-400">{entry.genero || '—'}</td>
+                    <td className="py-3 px-4 text-xs">{estadoEmoji} <span className="text-gray-400">{entry.estadoTrack}</span></td>
+                    <td className="py-3 px-4 text-xs text-gray-400 max-w-xs truncate">{entry.diagPrincipal || '—'}</td>
+                    <td className="py-3 px-4 text-xs">
+                        {entry.fueUtil === 'Sí' ? <span className="text-green-400">Sí</span>
+                         : entry.fueUtil === 'Parcial' ? <span className="text-yellow-400">Parcial</span>
+                         : entry.fueUtil === 'No' ? <span className="text-red-400">No</span>
+                         : <span className="text-gray-600">—</span>}
+                    </td>
+                    <td className="py-3 px-4 text-xs">
+                        {entry.enlaceFeedback ? <span className="text-purple-400">Solicitado</span> : <span className="text-gray-600">—</span>}
+                    </td>
+                    <td className="py-3 px-4 text-xs">
+                        {sugeridos.length > 0
+                            ? <span className="text-blue-400">{clickados.length}/{sugeridos.length}</span>
+                            : <span className="text-gray-600">—</span>}
+                    </td>
+                </tr>
+                {sugeridos.length > 0 && (
+                    <tr className="border-0">
+                        <td colSpan="9" className="px-4 pb-3 pt-0">
+                            <div className="flex flex-wrap gap-1 ml-4">
+                                {sugeridos.map((t, ti) => {
+                                    const titulo = t.trim();
+                                    const clicked = clickados.some(c => c === titulo);
+                                    return (
+                                        <span key={ti} className={`text-xs px-2 py-0.5 rounded-full ${clicked ? 'bg-blue-500/20 text-blue-400 font-medium' : 'bg-white/5 text-gray-600'}`}>
+                                            {clicked ? '▶ ' : ''}{titulo.length > 50 ? titulo.substring(0, 50) + '…' : titulo}
+                                        </span>
+                                    );
+                                })}
+                            </div>
+                        </td>
+                    </tr>
+                )}
+            </React.Fragment>
         );
     }
 
@@ -1073,6 +1100,7 @@
                                         <th className="text-left py-3 px-4 text-xs text-gray-500 font-medium">Diagnóstico</th>
                                         <th className="text-left py-3 px-4 text-xs text-gray-500 font-medium">Útil</th>
                                         <th className="text-left py-3 px-4 text-xs text-gray-500 font-medium">Feedback</th>
+                                        <th className="text-left py-3 px-4 text-xs text-gray-500 font-medium">🎬</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -1166,29 +1194,50 @@
                                                         ? '🔵' : '⚪';
 
                                                     return (
-                                                        <div
-                                                            key={idx}
-                                                            className="px-4 py-3 border-t border-gray-800/50 hover:bg-gray-800/20 cursor-pointer transition-colors flex items-center justify-between"
-                                                            onClick={(e) => { e.stopPropagation(); setSelectedEntry(entry); }}
-                                                        >
-                                                            <div className="flex items-center gap-3">
-                                                                <span className="text-gray-600 text-xs w-5 text-right">#{user.analyses.length - idx}</span>
-                                                                <span className="text-xs">{estadoEmoji}</span>
-                                                                <span className="text-gray-300 text-xs">{entry.genero || 'Sin género'}</span>
-                                                                <span className="text-gray-600 text-xs">·</span>
-                                                                <span className="text-gray-400 text-xs truncate max-w-xs">{entry.diagPrincipal || 'Sin diagnóstico'}</span>
+                                                        <div key={idx} className="border-t border-gray-800/50">
+                                                            <div
+                                                                className="px-4 py-3 hover:bg-gray-800/20 cursor-pointer transition-colors flex items-center justify-between"
+                                                                onClick={(e) => { e.stopPropagation(); setSelectedEntry(entry); }}
+                                                            >
+                                                                <div className="flex items-center gap-3">
+                                                                    <span className="text-gray-600 text-xs w-5 text-right">#{user.analyses.length - idx}</span>
+                                                                    <span className="text-xs">{estadoEmoji}</span>
+                                                                    <span className="text-gray-300 text-xs">{entry.genero || 'Sin género'}</span>
+                                                                    <span className="text-gray-600 text-xs">·</span>
+                                                                    <span className="text-gray-400 text-xs truncate max-w-xs">{entry.diagPrincipal || 'Sin diagnóstico'}</span>
+                                                                </div>
+                                                                <div className="flex items-center gap-3">
+                                                                    {entry.fueUtil && (
+                                                                        <span className={`text-xs ${entry.fueUtil === 'Sí' ? 'text-green-400' : entry.fueUtil === 'Parcial' ? 'text-yellow-400' : 'text-red-400'}`}>
+                                                                            {entry.fueUtil === 'Sí' ? '👍' : entry.fueUtil === 'Parcial' ? '🤔' : '👎'}
+                                                                        </span>
+                                                                    )}
+                                                                    {entry.comentario && <span className="text-gray-500 text-xs">💬</span>}
+                                                                    {entry.enlaceFeedback && <span className="text-purple-400 text-xs">🎧</span>}
+                                                                    {entry.tutorialClickado && <span className="text-blue-400 text-xs">🎬 {entry.tutorialClickado.split(' || ').length}</span>}
+                                                                    <span className="text-gray-600 text-xs">{formatDate(entry.date)}</span>
+                                                                </div>
                                                             </div>
-                                                            <div className="flex items-center gap-3">
-                                                                {entry.fueUtil && (
-                                                                    <span className={`text-xs ${entry.fueUtil === 'Sí' ? 'text-green-400' : entry.fueUtil === 'Parcial' ? 'text-yellow-400' : 'text-red-400'}`}>
-                                                                        {entry.fueUtil === 'Sí' ? '👍' : entry.fueUtil === 'Parcial' ? '🤔' : '👎'}
-                                                                    </span>
-                                                                )}
-                                                                {entry.comentario && <span className="text-gray-500 text-xs">💬</span>}
-                                                                {entry.enlaceFeedback && <span className="text-purple-400 text-xs">🎧</span>}
-                                                                {entry.tutorialClickado && <span className="text-blue-400 text-xs" title={entry.tutorialClickado}>🎬 {entry.tutorialClickado.split(' || ').length}</span>}
-                                                                <span className="text-gray-600 text-xs">{formatDate(entry.date)}</span>
-                                                            </div>
+                                                            {(entry.tutorialesSugeridos || entry.tutorialClickado) && (
+                                                                <div className="px-4 pb-3 pl-12">
+                                                                    {entry.tutorialesSugeridos && entry.tutorialesSugeridos.split(' | ').map((t, ti) => {
+                                                                        const titulo = t.trim();
+                                                                        const clicked = entry.tutorialClickado && entry.tutorialClickado.includes(titulo);
+                                                                        return (
+                                                                            <div key={ti} className={`text-xs py-0.5 flex items-center gap-1.5 ${clicked ? 'text-blue-400' : 'text-gray-600'}`}>
+                                                                                <span>{clicked ? '▶' : '·'}</span>
+                                                                                <span className={clicked ? 'font-medium' : ''}>{titulo.length > 60 ? titulo.substring(0, 60) + '…' : titulo}</span>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                    {entry.tutorialClickado && !entry.tutorialesSugeridos && entry.tutorialClickado.split(' || ').map((t, ti) => (
+                                                                        <div key={ti} className="text-xs py-0.5 flex items-center gap-1.5 text-blue-400">
+                                                                            <span>▶</span>
+                                                                            <span className="font-medium">{t.trim()}</span>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     );
                                                 })}
