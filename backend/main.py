@@ -474,8 +474,15 @@ async def proxy_sheets_feedback_real(request: Request, data: dict):
 
 @app.post("/api/sheets/tutorial-click")
 @limiter.limit("20/minute")
-async def proxy_sheets_tutorial_click(request: Request, data: dict):
-    """Proxy: registra click en tutorial de YouTube en Google Sheets."""
+async def proxy_sheets_tutorial_click(request: Request):
+    """Proxy: registra click en tutorial de YouTube en Google Sheets.
+    Parsea body manualmente para soportar sendBeacon (que puede no
+    enviar Content-Type: application/json correctamente)."""
+    try:
+        body = await request.body()
+        data = json.loads(body) if body else {}
+    except Exception:
+        data = {}
     payload = {
         "tipo": "tutorial_click",
         "email": data.get("email", ""),
