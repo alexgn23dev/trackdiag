@@ -472,6 +472,21 @@ async def proxy_sheets_feedback_real(request: Request, data: dict):
     return {"ok": True}
 
 
+@app.post("/api/sheets/tutorial-click")
+@limiter.limit("20/minute")
+async def proxy_sheets_tutorial_click(request: Request, data: dict):
+    """Proxy: registra click en tutorial de YouTube en Google Sheets."""
+    payload = {
+        "tipo": "tutorial_click",
+        "email": data.get("email", ""),
+        "diagnostico_id": data.get("diagnostico_id", ""),
+        "tutorial_clickado": data.get("tutorial_clickado", ""),
+        "tutoriales_sugeridos": data.get("tutoriales_sugeridos", ""),
+    }
+    result = await _sheets_post(payload)
+    return {"ok": True}
+
+
 @app.get("/api/sheets/datos")
 @limiter.limit("5/minute")
 async def proxy_sheets_datos(request: Request):

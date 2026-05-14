@@ -107,6 +107,8 @@
             fueUtil: row.fue_util || '',
             comentario: row.comentario || '',
             enlaceFeedback: row.enlace_feedback_real || '',
+            tutorialesSugeridos: row.tutoriales_sugeridos || '',
+            tutorialClickado: row.tutorial_clickado || '',
             genero: formData['Género'] || '',
             experiencia: formData['Experiencia'] || '',
             fase: formData['Fase'] || '',
@@ -587,6 +589,12 @@
                                     <a href={entry.enlaceFeedback} target="_blank" rel="noopener" className="text-purple-400 text-xs hover:underline break-all">{entry.enlaceFeedback}</a>
                                 </div>
                             )}
+                            {entry.tutorialClickado && (
+                                <div className="mt-3 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                                    <p className="text-gray-500 text-xs mb-1">🎬 Tutorial clickado</p>
+                                    <p className="text-blue-400 text-xs">{entry.tutorialClickado}</p>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -703,6 +711,24 @@
                 topUser: topUser ? topUser.email : null
             };
         }, [userMap]);
+
+        // Tutoriales: métricas de clicks
+        const tutorialData = useMemo(() => {
+            const conSugeridos = entries.filter(e => e.tutorialesSugeridos);
+            const conClick = entries.filter(e => e.tutorialClickado);
+            const clickRate = conSugeridos.length > 0 ? Math.round((conClick.length / conSugeridos.length) * 100) : 0;
+            // Contar qué tutoriales se clickan más
+            const tutCounts = {};
+            conClick.forEach(e => {
+                const clicks = e.tutorialClickado.split(' || ');
+                clicks.forEach(t => {
+                    const titulo = t.trim();
+                    if (titulo) tutCounts[titulo] = (tutCounts[titulo] || 0) + 1;
+                });
+            });
+            const topTutoriales = Object.entries(tutCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+            return { conSugeridos: conSugeridos.length, conClick: conClick.length, clickRate, topTutoriales };
+        }, [entries]);
 
         const generos = [...new Set(entries.map(e => e.genero).filter(Boolean))];
         const generoCounts = countBy(entries.filter(e => e.genero), 'genero');
@@ -861,6 +887,54 @@
                                     </div>
                                 );
                             })()}
+                        </div>
+
+                        {/* Tutoriales Card */}
+                        <div className="card p-5 mb-8">
+                            <h3 className="text-sm font-medium text-gray-300 mb-4">🎬 Tutoriales YouTube — ¿Los miran?</h3>
+                            <div className="grid grid-cols-3 gap-4 mb-4">
+                                <div className="text-center">
+                                    <p className="text-2xl font-bold" style={{ color: tutorialData.clickRate >= 30 ? '#4ade80' : tutorialData.clickRate >= 10 ? '#facc15' : '#9ca3af' }}>
+                                        {tutorialData.clickRate}%
+                                    </p>
+                                    <p className="text-gray-500 text-xs mt-1">Click-through rate</p>
+                                </div>
+                                <div className="text-center">
+                                    <p className="text-2xl font-bold text-purple-400">{tutorialData.conClick}</p>
+                                    <p className="text-gray-500 text-xs mt-1">Análisis con click</p>
+                                </div>
+                                <div className="text-center">
+                                    <p className="text-2xl font-bold text-gray-400">{tutorialData.conSugeridos}</p>
+                                    <p className="text-gray-500 text-xs mt-1">Tutoriales mostrados</p>
+                                </div>
+                            </div>
+                            {tutorialData.topTutoriales.length > 0 && (
+                                <div>
+                                    <p className="text-gray-500 text-xs mb-2">Más clickados</p>
+                                    <div className="space-y-2">
+                                        {tutorialData.topTutoriales.map(([titulo, count], i) => {
+                                            const maxCount = tutorialData.topTutoriales[0][1];
+                                            const pct = Math.round((count / maxCount) * 100);
+                                            return (
+                                                <div key={i} className="flex items-center gap-3">
+                                                    <div className="flex-1">
+                                                        <div className="flex justify-between mb-1">
+                                                            <span className="text-gray-300 text-xs truncate max-w-xs">{titulo}</span>
+                                                            <span className="text-purple-400 text-xs font-medium ml-2">{count}</span>
+                                                        </div>
+                                                        <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                                                            <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: '#8b5cf6' }}></div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+                            {tutorialData.conSugeridos === 0 && (
+                                <p className="text-gray-600 text-xs text-center">Aún no hay datos de tutoriales</p>
+                            )}
                         </div>
 
                         {/* Semáforo + Charts Grid */}
@@ -1023,6 +1097,7 @@
                                 const lastExperiencia = user.analyses[user.analyses.length - 1]?.experiencia || '';
                                 const anyFeedbackReal = user.analyses.some(a => a.enlaceFeedback);
                                 const anyUtil = user.analyses.find(a => a.fueUtil);
+                                const anyTutorialClick = user.analyses.some(a => a.tutorialClickado);
                                 const lastComment = [...user.analyses].reverse().find(a => a.comentario);
 
                                 return (
@@ -1046,6 +1121,7 @@
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-3">
+                                                {anyTutorialClick && <span className="text-blue-400 text-xs">🎬</span>}
                                                 {anyFeedbackReal && <span className="text-purple-400 text-xs">🎧 Feedback real</span>}
                                                 {anyUtil && (
                                                     <span className={`text-xs ${anyUtil.fueUtil === 'Sí' ? 'text-green-400' : anyUtil.fueUtil === 'Parcial' ? 'text-yellow-400' : 'text-red-400'}`}>
@@ -1089,6 +1165,7 @@
                                                                 )}
                                                                 {entry.comentario && <span className="text-gray-500 text-xs">💬</span>}
                                                                 {entry.enlaceFeedback && <span className="text-purple-400 text-xs">🎧</span>}
+                                                                {entry.tutorialClickado && <span className="text-blue-400 text-xs" title={entry.tutorialClickado}>🎬</span>}
                                                                 <span className="text-gray-600 text-xs">{formatDate(entry.date)}</span>
                                                             </div>
                                                         </div>
