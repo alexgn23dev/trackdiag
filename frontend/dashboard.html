@@ -589,10 +589,27 @@
                                     <a href={entry.enlaceFeedback} target="_blank" rel="noopener" className="text-purple-400 text-xs hover:underline break-all">{entry.enlaceFeedback}</a>
                                 </div>
                             )}
-                            {entry.tutorialClickado && (
+                            {(entry.tutorialesSugeridos || entry.tutorialClickado) && (
                                 <div className="mt-3 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                                    <p className="text-gray-500 text-xs mb-1">🎬 Tutorial clickado</p>
-                                    <p className="text-blue-400 text-xs">{entry.tutorialClickado}</p>
+                                    <p className="text-gray-500 text-xs mb-2">🎬 Tutoriales</p>
+                                    {entry.tutorialesSugeridos && (
+                                        <div className="mb-2">
+                                            <p className="text-gray-600 text-xs mb-1">Sugeridos:</p>
+                                            <div className="flex flex-wrap gap-1">
+                                                {entry.tutorialesSugeridos.split(' | ').map((t, ti) => {
+                                                    const isClicked = entry.tutorialClickado && entry.tutorialClickado.includes(t.trim());
+                                                    return (
+                                                        <span key={ti} className={`text-xs px-2 py-0.5 rounded-full ${isClicked ? 'bg-blue-500/20 text-blue-400 font-medium' : 'bg-white/5 text-gray-500'}`}>
+                                                            {isClicked && '▶ '}{t.trim().length > 45 ? t.trim().substring(0, 45) + '…' : t.trim()}
+                                                        </span>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {entry.tutorialClickado && !entry.tutorialesSugeridos && (
+                                        <p className="text-blue-400 text-xs">▶ {entry.tutorialClickado}</p>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -1121,7 +1138,11 @@
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-3">
-                                                {anyTutorialClick && <span className="text-blue-400 text-xs">🎬</span>}
+                                                {anyTutorialClick && (() => {
+                                                    const clickCount = user.analyses.filter(a => a.tutorialClickado).length;
+                                                    const totalClicks = user.analyses.reduce((sum, a) => sum + (a.tutorialClickado ? a.tutorialClickado.split(' || ').length : 0), 0);
+                                                    return <span className="text-blue-400 text-xs" title={`${totalClicks} video(s) clickado(s) en ${clickCount} análisis`}>🎬 {totalClicks}</span>;
+                                                })()}
                                                 {anyFeedbackReal && <span className="text-purple-400 text-xs">🎧 Feedback real</span>}
                                                 {anyUtil && (
                                                     <span className={`text-xs ${anyUtil.fueUtil === 'Sí' ? 'text-green-400' : anyUtil.fueUtil === 'Parcial' ? 'text-yellow-400' : 'text-red-400'}`}>
@@ -1165,7 +1186,7 @@
                                                                 )}
                                                                 {entry.comentario && <span className="text-gray-500 text-xs">💬</span>}
                                                                 {entry.enlaceFeedback && <span className="text-purple-400 text-xs">🎧</span>}
-                                                                {entry.tutorialClickado && <span className="text-blue-400 text-xs" title={entry.tutorialClickado}>🎬</span>}
+                                                                {entry.tutorialClickado && <span className="text-blue-400 text-xs" title={entry.tutorialClickado}>🎬 {entry.tutorialClickado.split(' || ').length}</span>}
                                                                 <span className="text-gray-600 text-xs">{formatDate(entry.date)}</span>
                                                             </div>
                                                         </div>
