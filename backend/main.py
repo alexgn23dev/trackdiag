@@ -478,15 +478,10 @@ async def proxy_sheets_tutorial_click(request: Request):
     """Proxy: registra click en tutorial de YouTube en Google Sheets.
     Parsea body manualmente para soportar sendBeacon (que puede no
     enviar Content-Type: application/json correctamente)."""
-    content_type = request.headers.get("content-type", "unknown")
-    print(f"[TUTORIAL-CLICK] Content-Type: {content_type}")
     try:
         body = await request.body()
-        print(f"[TUTORIAL-CLICK] Body raw ({len(body)} bytes): {body[:500]}")
         data = json.loads(body) if body else {}
-        print(f"[TUTORIAL-CLICK] Parsed data: email={data.get('email')}, clickado={data.get('tutorial_clickado')}")
-    except Exception as e:
-        print(f"[TUTORIAL-CLICK] ERROR parsing body: {e}")
+    except Exception:
         data = {}
     payload = {
         "tipo": "tutorial_click",
@@ -495,9 +490,7 @@ async def proxy_sheets_tutorial_click(request: Request):
         "tutorial_clickado": data.get("tutorial_clickado", ""),
         "tutoriales_sugeridos": data.get("tutoriales_sugeridos", ""),
     }
-    print(f"[TUTORIAL-CLICK] Sending to Sheets: {payload}")
     result = await _sheets_post(payload)
-    print(f"[TUTORIAL-CLICK] Sheets response: {result}")
     return {"ok": True}
 
 
