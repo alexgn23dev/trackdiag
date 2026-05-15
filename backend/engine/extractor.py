@@ -438,9 +438,22 @@ def _analizar_loudness(audio_path: str, y_preloaded=None, sr_preloaded=None,
 
         if lufs_blocks:
             resultado["lufs_short_term_max"] = round(float(max(lufs_blocks)), 1)
-            resultado["rango_loudness"] = round(
-                float(max(lufs_blocks) - min(lufs_blocks)), 1
-            )
+            # LRA según EBU R-128 (versión simplificada):
+            # 1) Gate absoluto: descartar bloques < -70 LUFS (ya hecho arriba)
+            # 2) Gate relativo: descartar bloques > 20 LU por debajo del LUFS integrado
+            #    (esto elimina silencios largos al inicio/final que falseaban el rango)
+            # 3) LRA = percentil 95 − percentil 10 de los bloques que quedan
+            lufs_arr = np.array(lufs_blocks)
+            if lufs_i > -70:
+                lufs_arr = lufs_arr[lufs_arr > (lufs_i - 20)]
+            if len(lufs_arr) >= 2:
+                p95 = float(np.percentile(lufs_arr, 95))
+                p10 = float(np.percentile(lufs_arr, 10))
+                resultado["rango_loudness"] = round(p95 - p10, 1)
+            else:
+                resultado["rango_loudness"] = round(
+                    float(max(lufs_blocks) - min(lufs_blocks)), 1
+                )
 
         # Clasificación de nivel
         lufs = resultado["lufs_integrado"]
