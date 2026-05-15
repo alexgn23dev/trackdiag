@@ -464,12 +464,11 @@ def _analizar_loudness(audio_path: str, y_preloaded=None, sr_preloaded=None,
                 "Spotify normaliza a -14 LUFS, así que parte de este volumen se pierde en streaming."
             )
             resultado["consejo_master"] = (
-                "Puede ser correcto si el destino es club o tocar en sesión, donde se busca "
-                "máxima presencia. Pero a este nivel es muy fácil haber comprimido en exceso: "
-                "verifica que el track sigue teniendo cuerpo y aire en un sistema grande, y "
-                "que el limiter no esté generando artefactos de saturación en los transitorios "
-                "del kick. Si suena 'pequeño' o aplanado en monitores grandes, baja 1-2dB el "
-                "input gain del limiter."
+                "Si la intención es tocar en sesión, este nivel es coherente con lo que se "
+                "escucha hoy en pista. Asegúrate de que no estás sacrificando dinámica: el "
+                "kick debe seguir teniendo pegada propia, el track debe respirar entre "
+                "secciones, y la mezcla no debería sonar plana ni fatigada al escucharla "
+                "varios minutos seguidos."
             )
         elif lufs > -9:
             resultado["nivel"] = "alto"
@@ -478,11 +477,7 @@ def _analizar_loudness(audio_path: str, y_preloaded=None, sr_preloaded=None,
                 "Spotify normaliza a -14 LUFS, así que parte del volumen se perderá en streaming."
             )
             resultado["consejo_master"] = (
-                "Si la intención es tocar en sesión, este nivel es coherente con lo que se "
-                "escucha hoy en pista. Asegúrate de que no estás sacrificando dinámica: el "
-                "kick debe seguir teniendo pegada propia, el track debe respirar entre "
-                "secciones, y la mezcla no debería sonar plana ni fatigada al escucharla "
-                "varios minutos seguidos."
+                "Nivel coherente con masters de club y pista actuales."
             )
         elif lufs > -14:
             resultado["nivel"] = "moderado"
