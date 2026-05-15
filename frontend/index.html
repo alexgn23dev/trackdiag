@@ -1566,12 +1566,19 @@
                 });
         }, []);
 
+        const MAX_FILE_MB = 50;
         const handleFileSelected = (f) => {
+            const sizeMB = f.size / 1024 / 1024;
+            if (sizeMB > MAX_FILE_MB) {
+                setError(`El archivo pesa ${Math.round(sizeMB)} MB, el máximo es ${MAX_FILE_MB} MB. Convierte a MP3 para reducir el tamaño.`);
+                setScreen('upload');
+                return;
+            }
             setFile(f);
             setScreen('questionnaire');
             trackEvent('funnel_file_uploaded', {
                 file_type: f.name.split('.').pop().toLowerCase(),
-                file_size_mb: Math.round(f.size / 1024 / 1024),
+                file_size_mb: Math.round(sizeMB),
             });
         };
 
