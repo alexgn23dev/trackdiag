@@ -162,6 +162,7 @@ async def diagnosticar(
     request: Request,
     audio: UploadFile = File(...),
     genero: str = Form(...),
+    genero_custom: str = Form(""),
     fase: str = Form(...),
     objetivo: str = Form(...),
     bloqueo_percibido: str = Form(""),
@@ -255,9 +256,11 @@ async def diagnosticar(
                 content={"error": "El análisis tardó demasiado. El archivo puede estar corrupto. Inténtalo con otro archivo."}
             )
 
-        # Construir contexto
+        # Construir contexto. genero_custom solo se usa cuando genero == "otro"
+        # (texto libre que el usuario escribe para describir su género).
         contexto = {
             "genero": genero,
+            "genero_custom": _sanitize(genero_custom, 60) if genero == "otro" else "",
             "fase": fase,
             "objetivo": objetivo,
             "bloqueo_percibido": bloqueo_percibido,
@@ -310,12 +313,20 @@ def opciones():
             {"value": "house", "label": "House"},
             {"value": "techno", "label": "Techno"},
             {"value": "techno_acido", "label": "Techno ácido"},
+            {"value": "hard_techno", "label": "Hard Techno"},
             {"value": "minimal", "label": "Minimal"},
             {"value": "progressive_house", "label": "Progressive House"},
             {"value": "trance", "label": "Trance"},
             {"value": "progressive_trance", "label": "Progressive Trance"},
+            {"value": "psytrance", "label": "Psytrance"},
             {"value": "melodic_techno", "label": "Melodic Techno"},
             {"value": "deep_house", "label": "Deep House"},
+            {"value": "afro_house", "label": "Afro House"},
+            {"value": "indie_dance", "label": "Indie Dance"},
+            {"value": "downtempo", "label": "Downtempo"},
+            {"value": "breaks", "label": "Breaks"},
+            {"value": "drum_and_bass", "label": "Drum & Bass"},
+            {"value": "dubstep", "label": "Dubstep"},
             {"value": "otro", "label": "Otro"},
         ],
         "fases": [
@@ -443,6 +454,7 @@ async def proxy_sheets_registro(request: Request, data: dict):
         "formulario": data.get("formulario", ""),
         "diagnostico": data.get("diagnostico", ""),
         "senales_json": data.get("senales_json", ""),
+        "genero_custom": data.get("genero_custom", ""),
     }
     result = await _sheets_post(payload)
     return {"ok": True}

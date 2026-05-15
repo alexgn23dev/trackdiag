@@ -15,12 +15,20 @@ DURACIONES_GENERO = {
     "house":             {"min": 300, "max": 420, "label": "5–7 minutos"},
     "techno":            {"min": 330, "max": 480, "label": "5:30–8 minutos"},
     "techno_acido":      {"min": 330, "max": 480, "label": "5:30–8 minutos"},
+    "hard_techno":       {"min": 300, "max": 420, "label": "5–7 minutos"},
     "minimal":           {"min": 330, "max": 480, "label": "5:30–8 minutos"},
     "progressive_house": {"min": 360, "max": 540, "label": "6–9 minutos"},
     "trance":            {"min": 360, "max": 540, "label": "6–9 minutos"},
     "progressive_trance":{"min": 420, "max": 600, "label": "7–10 minutos"},
+    "psytrance":         {"min": 420, "max": 540, "label": "7–9 minutos"},
     "melodic_techno":    {"min": 360, "max": 540, "label": "6–9 minutos"},
     "deep_house":        {"min": 300, "max": 420, "label": "5–7 minutos"},
+    "afro_house":        {"min": 360, "max": 480, "label": "6–8 minutos"},
+    "indie_dance":       {"min": 240, "max": 360, "label": "4–6 minutos"},
+    "downtempo":         {"min": 240, "max": 360, "label": "4–6 minutos"},
+    "breaks":            {"min": 300, "max": 420, "label": "5–7 minutos"},
+    "drum_and_bass":     {"min": 300, "max": 420, "label": "5–7 minutos"},
+    "dubstep":           {"min": 240, "max": 360, "label": "4–6 minutos"},
 }
 
 # =============================================================================
@@ -88,7 +96,81 @@ ESTRUCTURA_GENERO = {
         "builds": "orgánicos, sin prisa",
         "nota": "El deep house es sobre sensación, no sobre impacto. Si tu break suena demasiado dramático, probablemente no encaja en el género.",
     },
+    "hard_techno": {
+        "patron": "kicks distorsionados y tempo rápido (140-160 BPM)",
+        "breaks": "cortos y tensos, mantienen la presión",
+        "builds": "agresivos, basados en distorsión y filtros",
+        "nota": "En hard techno el kick es el track. La distorsión y el tempo elevado son parte del lenguaje — pero ojo con el rango dinámico: que esté limitado no significa que tenga que sonar plano.",
+    },
+    "psytrance": {
+        "patron": "bassline rodante 16ths + capas psicodélicas",
+        "breaks": "largos y melódicos, con FX y atmósferas",
+        "builds": "graduales, con risers y modulaciones de filtro",
+        "nota": "En psytrance el bajo es el motor. El groove kick+bass funciona como un solo elemento y debe ser tight. Cuida especialmente el rango 60-120Hz.",
+    },
+    "afro_house": {
+        "patron": "percusión orgánica latina/africana + 4/4 house",
+        "breaks": "moderados, sostenidos por la percusión",
+        "builds": "acumulación de capas percusivas y vocales",
+        "nota": "El afro house vive de la percusión orgánica. Los hi-hats programados y las congas dan vida al groove — no los tapes con elementos digitales fuertes.",
+    },
+    "indie_dance": {
+        "patron": "estructura tipo canción con bajo prominente",
+        "breaks": "cortos, dan paso a versos o estribillos",
+        "builds": "cantados o instrumentales con melodía clara",
+        "nota": "El indie dance se mueve entre canción y club. La estructura puede tener verso-estribillo, pero el groove de pista tiene que sostenerse.",
+    },
+    "downtempo": {
+        "patron": "tempo lento (80-110 BPM) con paisaje sonoro elaborado",
+        "breaks": "fluidos, sin contraste brusco",
+        "builds": "muy graduales, casi imperceptibles",
+        "nota": "En downtempo la atmósfera importa más que la energía. La estructura es más libre — funciona como un viaje, no como un track de pista.",
+    },
+    "breaks": {
+        "patron": "breakbeat (no 4/4) + bajo prominente",
+        "breaks": "definidos, con cambios rítmicos claros",
+        "builds": "típicamente con tensión rítmica antes del drop",
+        "nota": "En breaks el ritmo no es lineal — el groove vive en el shuffle. Asegúrate de que el kick y el snare tengan suficiente espacio para que el patrón se entienda.",
+    },
+    "drum_and_bass": {
+        "patron": "breakbeat rápido (160-180 BPM) + sub bass",
+        "breaks": "marcados, suelen llevar a un drop intenso",
+        "builds": "cortos y agresivos antes del drop",
+        "nota": "En D&B el sub bass es protagonista, pero el groove está en el ritmo del break. Mono compatibility en graves es crítica — si el sub se cae al mezclar, el track se cae.",
+    },
+    "dubstep": {
+        "patron": "tempo 140 BPM con énfasis en 1 y 3, wobble bass",
+        "breaks": "marcados, dan paso al drop",
+        "builds": "tensión con risers + silencio antes del drop",
+        "nota": "En dubstep el drop lo es todo. Cuida que la energía baje lo suficiente antes del drop para que el contraste funcione. El espacio entre golpes es parte del groove.",
+    },
 }
+
+# =============================================================================
+# REFERENCIAS DE LUFS POR GÉNERO (target + rango aceptable)
+# =============================================================================
+
+LUFS_GENERO = {
+    "techno":             {"target": -8,  "rango": "-7 a -9"},
+    "techno_acido":       {"target": -8,  "rango": "-7 a -9"},
+    "hard_techno":        {"target": -7,  "rango": "-6 a -8"},
+    "trance":             {"target": -9,  "rango": "-8 a -10"},
+    "deep_house":         {"target": -10, "rango": "-9 a -11"},
+    "house":              {"target": -9,  "rango": "-8 a -10"},
+    "tech_house":         {"target": -8,  "rango": "-7 a -9"},
+    "minimal":            {"target": -9,  "rango": "-8 a -10"},
+    "progressive_house":  {"target": -10, "rango": "-9 a -11"},
+    "melodic_techno":     {"target": -9,  "rango": "-8 a -10"},
+    "progressive_trance": {"target": -9,  "rango": "-8 a -10"},
+    "afro_house":         {"target": -9,  "rango": "-8 a -10"},
+    "indie_dance":        {"target": -9,  "rango": "-8 a -10"},
+    "downtempo":          {"target": -11, "rango": "-10 a -13"},
+    "breaks":             {"target": -8,  "rango": "-7 a -9"},
+    "drum_and_bass":      {"target": -7,  "rango": "-6 a -8"},
+    "dubstep":            {"target": -7,  "rango": "-6 a -8"},
+    "psytrance":          {"target": -8,  "rango": "-7 a -9"},
+}
+
 
 # =============================================================================
 # TIPS SEGÚN OBJETIVO
@@ -176,6 +258,7 @@ def contextualizar_feedback(diagnostico_id: str, contexto: dict, senales: dict) 
         "referencia_temporal": "",
         "prioridades_extra": [],
         "nota_motivacional": "",
+        "referencia_lufs_genero": "",
     }
 
     # --- Nota motivacional según experiencia ---
@@ -233,6 +316,30 @@ def contextualizar_feedback(diagnostico_id: str, contexto: dict, senales: dict) 
             f"A {bpm:.0f} BPM, 8 compases duran ~{seg_8_compases:.0f}s "
             f"y 16 compases ~{seg_16_compases:.0f}s."
         )
+
+    # --- Referencia LUFS por género (comparar medición vs target del género) ---
+    lufs_ref = LUFS_GENERO.get(genero)
+    lufs_medido = senales.get("loudness", {}).get("lufs_integrado", -99)
+    if lufs_ref and lufs_medido > -50:
+        target = lufs_ref["target"]
+        rango = lufs_ref["rango"]
+        diff = lufs_medido - target
+        label_g = _label_genero(genero)
+        if abs(diff) <= 1.5:
+            resultado["referencia_lufs_genero"] = (
+                f"Tu LUFS integrado ({lufs_medido:.1f}) está en el rango habitual de "
+                f"{label_g} ({rango} LUFS)."
+            )
+        elif diff > 0:
+            resultado["referencia_lufs_genero"] = (
+                f"Tu LUFS integrado ({lufs_medido:.1f}) está {abs(diff):.1f}dB por encima "
+                f"del target típico de {label_g} ({target} LUFS, rango {rango})."
+            )
+        else:
+            resultado["referencia_lufs_genero"] = (
+                f"Tu LUFS integrado ({lufs_medido:.1f}) está {abs(diff):.1f}dB por debajo "
+                f"del target típico de {label_g} ({target} LUFS, rango {rango})."
+            )
 
     # --- Nota contextual (la pieza central personalizada) ---
     resultado["nota_contextual"] = _generar_nota_contextual(
@@ -389,6 +496,60 @@ def _generar_tips_genero(diagnostico_id: str, info_genero: dict, genero: str, se
             tips.append(
                 f"En {_label_genero(genero)} no siempre hace falta melodía, pero incluso "
                 f"un bajo con movimiento de notas o un stab puntual pueden dar mucha vida al track."
+            )
+
+    elif diagnostico_id == "harshness_mezcla":
+        harshness = senales.get("harshness", {})
+        zona = harshness.get("zona_problema", "")
+        generos_percusivos_h = ["techno", "techno_acido", "minimal", "tech_house", "hard_techno"]
+        generos_melodicos_h = ["trance", "progressive_trance", "progressive_house",
+                               "melodic_techno", "deep_house"]
+
+        if zona == "presencia":
+            if genero in generos_percusivos_h:
+                tips.append(
+                    f"En {_label_genero(genero)}, la energía entre 2-6kHz suele venir de "
+                    f"hi-hats, claps y leads percusivos. Soluciona el harshness identificando "
+                    f"qué elemento es el más adelante: solea cada track de tu bus de percusión "
+                    f"y baja el que más empuje en esa banda. Un EQ dinámico es preferible a "
+                    f"un corte estático."
+                )
+            elif genero in generos_melodicos_h:
+                tips.append(
+                    f"En {_label_genero(genero)}, los 2-6kHz son la zona donde brillan leads "
+                    f"y vocales. Si chirría, probablemente el lead principal está saturando esa "
+                    f"banda. Prueba un de-esser sobre el lead o un EQ dinámico con threshold "
+                    f"suave a 3-4kHz."
+                )
+            else:
+                tips.append(
+                    "La zona de 2-6kHz controla la sensación de 'estar adelante' en la mezcla. "
+                    "Si chirría, hay demasiados elementos peleando por esa banda."
+                )
+        elif zona == "brillos":
+            if genero in generos_melodicos_h:
+                tips.append(
+                    f"En {_label_genero(genero)} los crashes, risers y reverbs de synths viven "
+                    f"en 6-10kHz. Revisa los tails: aplica un low-pass shelf suave en las colas "
+                    f"de los reverbs y baja el envío de high-shelf de los crashes."
+                )
+            elif genero in generos_percusivos_h:
+                tips.append(
+                    f"En {_label_genero(genero)} la zona de 6-10kHz viene casi siempre de "
+                    f"hi-hats abiertos, shakers y crashes. Si te suena duro, baja el bus de "
+                    f"percusión aguda 1-2dB o pon un shelf -2dB a 8kHz en el master."
+                )
+            else:
+                tips.append(
+                    "Los 6-10kHz dan brillo y aire, pero exceso ahí fatiga el oído. "
+                    "Revisa hi-hats, crashes, reverbs y exciters."
+                )
+        elif zona == "ambas":
+            tips.append(
+                "El rango entero de agudos está empujando. Antes de tocar EQs individuales, "
+                "bypasea el limiter de master y vuelve a escuchar: si la harshness baja, el "
+                "problema es de mastering. Si persiste, hay un problema general de mezcla "
+                "en agudos que tienes que resolver pista a pista."
             )
 
     return tips
@@ -632,12 +793,20 @@ def _label_genero(genero: str) -> str:
         "house": "House",
         "techno": "Techno",
         "techno_acido": "Techno Ácido",
+        "hard_techno": "Hard Techno",
         "minimal": "Minimal",
         "progressive_house": "Progressive House",
         "trance": "Trance",
         "progressive_trance": "Progressive Trance",
+        "psytrance": "Psytrance",
         "melodic_techno": "Melodic Techno",
         "deep_house": "Deep House",
+        "afro_house": "Afro House",
+        "indie_dance": "Indie Dance",
+        "downtempo": "Downtempo",
+        "breaks": "Breaks",
+        "drum_and_bass": "Drum & Bass",
+        "dubstep": "Dubstep",
         "otro": "tu género",
     }
     return labels.get(genero, "tu género")

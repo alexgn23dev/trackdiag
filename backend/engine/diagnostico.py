@@ -92,6 +92,8 @@ def generar_diagnostico(senales: dict, contexto: dict) -> dict:
                 "rango_loudness": senales["loudness"]["rango_loudness"],
                 "nivel": senales["loudness"]["nivel"],
                 "referencia": senales["loudness"]["referencia"],
+                "consejo_master": senales["loudness"].get("consejo_master", ""),
+                "referencia_genero": feedback_ctx.get("referencia_lufs_genero", ""),
             },
             "mono_compat": {
                 "es_stereo": senales["mono_compat"]["es_stereo"],

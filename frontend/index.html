@@ -500,6 +500,19 @@
                         name="genero"
                     />
 
+                    {contexto.genero === 'otro' && (
+                        <div className="mb-5 -mt-2">
+                            <input
+                                type="text"
+                                value={contexto.genero_custom || ''}
+                                onChange={(e) => onChange('genero_custom', e.target.value)}
+                                placeholder="Escribe tu género (ej: afro house, UK garage, jungle...)"
+                                maxLength={60}
+                                className="w-full px-4 py-3 rounded-lg text-sm input-field"
+                            />
+                        </div>
+                    )}
+
                     <SelectField
                         label="¿En qué fase crees que está el track?"
                         options={opciones.fases}
@@ -902,6 +915,12 @@
                                             <span className={loudnessColor}>{d.loudness.lufs_integrado} LUFS</span>
                                         </div>
                                         <p className="text-gray-600 text-xs mt-1">{d.loudness.referencia}</p>
+                                        {d.loudness.referencia_genero && (
+                                            <p className="text-gray-500 text-xs mt-1">{d.loudness.referencia_genero}</p>
+                                        )}
+                                        {d.loudness.consejo_master && (
+                                            <p className="text-gray-400 text-xs mt-2 italic">{d.loudness.consejo_master}</p>
+                                        )}
                                         {loudnessTip && (
                                             <p className={`text-xs mt-1 ${loudnessColor.replace('text-', 'text-').replace('400', '400/70')}`}>{loudnessTip}</p>
                                         )}
@@ -1511,7 +1530,7 @@
         const [pendingAfterAuth, setPendingAfterAuth] = useState(null); // null | 'analyze'
         const [nombreProyecto, setNombreProyecto] = useState('');
         const [contexto, setContexto] = useState({
-            genero: '', fase: '', objetivo: '',
+            genero: '', genero_custom: '', fase: '', objetivo: '',
             bloqueo_percibido: '', experiencia: '',
             dificultad_habitual: '',
         });
@@ -1531,10 +1550,21 @@
                             {value: "tech_house", label: "Tech House"},
                             {value: "house", label: "House"},
                             {value: "techno", label: "Techno"},
+                            {value: "techno_acido", label: "Techno ácido"},
+                            {value: "hard_techno", label: "Hard Techno"},
+                            {value: "minimal", label: "Minimal"},
                             {value: "progressive_house", label: "Progressive House"},
                             {value: "trance", label: "Trance"},
+                            {value: "progressive_trance", label: "Progressive Trance"},
+                            {value: "psytrance", label: "Psytrance"},
                             {value: "melodic_techno", label: "Melodic Techno"},
                             {value: "deep_house", label: "Deep House"},
+                            {value: "afro_house", label: "Afro House"},
+                            {value: "indie_dance", label: "Indie Dance"},
+                            {value: "downtempo", label: "Downtempo"},
+                            {value: "breaks", label: "Breaks"},
+                            {value: "drum_and_bass", label: "Drum & Bass"},
+                            {value: "dubstep", label: "Dubstep"},
                             {value: "otro", label: "Otro"},
                         ],
                         fases: [
@@ -1653,8 +1683,11 @@
                     const found = opts.find(o => o.value === value);
                     return found ? found.label : value;
                 };
+                const generoLabel = contexto.genero === 'otro' && contexto.genero_custom
+                    ? `Otro: ${contexto.genero_custom}`
+                    : getLabel('genero', contexto.genero);
                 const formularioTexto = [
-                    getLabel('genero', contexto.genero),
+                    generoLabel,
                     getLabel('fase', contexto.fase),
                     getLabel('objetivo', contexto.objetivo),
                     getLabel('experiencia', contexto.experiencia),
@@ -1802,6 +1835,7 @@
                         formulario: formularioTexto,
                         diagnostico: informe,
                         senales_json: JSON.stringify(senales),
+                        genero_custom: contexto.genero === 'otro' ? (contexto.genero_custom || '').trim() : '',
                     }),
                 }).catch(() => {});
                 setScreen('diagnostico');
@@ -1827,7 +1861,7 @@
             setEmailError('');
             setNombreProyecto('');
             setContexto({
-                genero: '', fase: '', objetivo: '',
+                genero: '', genero_custom: '', fase: '', objetivo: '',
                 bloqueo_percibido: '', experiencia: '',
                 dificultad_habitual: '',
             });

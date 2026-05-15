@@ -126,12 +126,12 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None) -> dict:
     )
 
     # Umbrales calibrados para electrónica (kick 4x4 → graves naturalmente dominantes)
-    # Normal: hasta 18dB es típico en producción electrónica con kick prominente
-    # Elevado: 18-24dB indica acumulación grave que vale la pena revisar
-    # Excesivo: >24dB es claramente problemático
-    if diff_grave_media > 24:
+    # Recalibrado tras feedback de 46 usuarios (mayo 2026): los umbrales 18/24 generaban
+    # demasiados falsos positivos en géneros con kick fuerte. Subimos a 20/26.
+    # Combinado con descuentos por género en reglas.py, doble protección contra FPs.
+    if diff_grave_media > 26:
         balance_grave = "excesivo"
-    elif diff_grave_media > 18:
+    elif diff_grave_media > 20:
         balance_grave = "elevado"
     else:
         balance_grave = "normal"
@@ -318,8 +318,9 @@ def _analizar_loudness(audio_path: str, y_preloaded=None, sr_preloaded=None,
         "lufs_integrado": -99.0,
         "lufs_short_term_max": -99.0,
         "rango_loudness": 0.0,
-        "nivel": "",        # "bajo", "moderado", "alto", "muy_alto"
-        "referencia": "",   # texto con contexto
+        "nivel": "",          # "bajo", "moderado", "alto", "muy_alto"
+        "referencia": "",     # texto con contexto
+        "consejo_master": "", # texto accionable según nivel
     }
 
     try:
@@ -370,11 +371,21 @@ def _analizar_loudness(audio_path: str, y_preloaded=None, sr_preloaded=None,
                 "Nivel muy alto. El track probablemente está sobre-comprimido o clippeando. "
                 "Las plataformas de streaming lo van a bajar de volumen igualmente."
             )
+            resultado["consejo_master"] = (
+                "Baja el ceiling del limiter a -1dB y reduce el input gain hasta que el LUFS "
+                "integrado baje a -7/-8. Si pierdes pegada, el problema está en la mezcla, "
+                "no en el mastering."
+            )
         elif lufs > -9:
             resultado["nivel"] = "alto"
             resultado["referencia"] = (
                 "Nivel alto, típico de masters agresivos. "
                 "Spotify normaliza a -14 LUFS, así que parte de este volumen se perderá en streaming."
+            )
+            resultado["consejo_master"] = (
+                "Estás en zona de master agresivo. Para streaming, no tiene sentido subir más "
+                "de -8 LUFS — Spotify lo va a bajar igualmente. Considera apuntar a -9/-10 LUFS "
+                "para mantener rango dinámico."
             )
         elif lufs > -14:
             resultado["nivel"] = "moderado"
@@ -382,17 +393,31 @@ def _analizar_loudness(audio_path: str, y_preloaded=None, sr_preloaded=None,
                 "Buen nivel para un pre-master o master. "
                 "Cerca del estándar de streaming (-14 LUFS en Spotify, -16 en Apple Music)."
             )
+            resultado["consejo_master"] = (
+                "Nivel bien situado para streaming. Si vas a club o sello, ajusta hacia "
+                "-8/-10 LUFS según el género."
+            )
         elif lufs > -20:
             resultado["nivel"] = "bajo"
             resultado["referencia"] = (
                 "Nivel bajo — normal si el track no está masterizado. "
                 "Un mastering profesional subirá esto a -8 a -14 LUFS según el género."
             )
+            resultado["consejo_master"] = (
+                "Si el track está terminado, un mastering básico lo sube: limiter con ceiling "
+                "a -1dB, input gain hasta -8/-10 LUFS. Si suena distorsionado al subir, hay "
+                "problemas de mezcla que resolver primero."
+            )
         else:
             resultado["nivel"] = "muy_bajo"
             resultado["referencia"] = (
                 "Nivel muy bajo. Puede ser que el track esté en fase muy temprana "
                 "o que los niveles de mezcla estén demasiado bajos."
+            )
+            resultado["consejo_master"] = (
+                "Antes de pensar en mastering, sube los niveles de mezcla. Apunta a que el "
+                "bus master marque picos en -6dB y RMS en torno a -18dB. Luego ya aplicas "
+                "limiter para llegar al target del género."
             )
 
     except Exception:

@@ -57,8 +57,10 @@
 
         // Parsear formulario — formato: "Tech House | Arreglo en progreso | Publicar... | 2 a 5 años | Mezcla..."
         // Los campos van en orden fijo: género, fase, objetivo, experiencia, dificultad, [bloqueo]
+        // El género puede venir como "Otro: <texto libre>" cuando el usuario escribió uno custom.
         const formulario = row.formulario || '';
         const formData = {};
+        let generoCustom = '';
         if (formulario) {
             const parts = formulario.split(' | ').map(p => p.trim());
             const fieldNames = ['Género', 'Fase', 'Objetivo', 'Experiencia', 'Dificultad habitual'];
@@ -69,6 +71,14 @@
                     formData[fieldNames[idx]] = val;
                 }
             });
+            // Normalizar "Otro: texto" → género "Otros" + guardar el texto libre aparte
+            const rawGenero = formData['Género'] || '';
+            if (rawGenero.startsWith('Otro:')) {
+                generoCustom = rawGenero.replace(/^Otro:\s*/, '').trim();
+                formData['Género'] = 'Otros';
+            } else if (rawGenero === 'Otro') {
+                formData['Género'] = 'Otros';
+            }
         }
 
         // Parsear diagnóstico para extraer datos clave
@@ -110,6 +120,7 @@
             tutorialesSugeridos: row.tutoriales_sugeridos || '',
             tutorialClickado: row.tutorial_clickado || '',
             genero: formData['Género'] || '',
+            generoCustom,
             experiencia: formData['Experiencia'] || '',
             fase: formData['Fase'] || '',
             objetivo: formData['Objetivo'] || '',
@@ -673,6 +684,7 @@
         const [userSort, setUserSort] = useState('recent'); // 'recent' | 'analyses'
         const [tab, setTab] = useState('overview'); // overview | analisis | users | feedback
         const [calendarMonth, setCalendarMonth] = useState(() => new Date(2026, 3, 1)); // Abril 2026
+        const [showOtrosDetalle, setShowOtrosDetalle] = useState(false);
 
         // Auth via HttpOnly cookie (set by /api/admin/login or /dashboard?key=)
         useEffect(() => {
@@ -781,6 +793,18 @@
 
         const generos = [...new Set(entries.map(e => e.genero).filter(Boolean))];
         const generoCounts = countBy(entries.filter(e => e.genero), 'genero');
+        // Detalle de "Otros": agrupar generoCustom (texto libre) por conteo,
+        // sin agrupar por similaridad — el admin decide qué géneros añadir.
+        const otrosCustomCounts = useMemo(() => {
+            const counts = {};
+            entries.forEach(e => {
+                const txt = (e.generoCustom || '').trim();
+                if (!txt) return;
+                const key = txt.toLowerCase();
+                counts[key] = (counts[key] || 0) + 1;
+            });
+            return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+        }, [entries]);
         const experienciaCounts = countBy(entries.filter(e => e.experiencia), 'experiencia');
         const faseCounts = countBy(entries.filter(e => e.fase), 'fase');
         const objetivoCounts = countBy(entries.filter(e => e.objetivo), 'objetivo');
@@ -997,6 +1021,26 @@
                             <div className="card p-5">
                                 <h3 className="text-sm font-medium text-gray-300 mb-4">Géneros más analizados</h3>
                                 <BarChart data={generoCounts} color="#8b5cf6" />
+                                {otrosCustomCounts.length > 0 && (
+                                    <div className="mt-4 pt-3 border-t border-gray-800">
+                                        <button
+                                            onClick={() => setShowOtrosDetalle(s => !s)}
+                                            className="text-xs text-gray-400 hover:text-gray-200 transition-colors"
+                                        >
+                                            {showOtrosDetalle ? '▼' : '▶'} Detalle "Otros" ({otrosCustomCounts.length} {otrosCustomCounts.length === 1 ? 'género distinto' : 'géneros distintos'})
+                                        </button>
+                                        {showOtrosDetalle && (
+                                            <div className="mt-2 space-y-1 max-h-48 overflow-y-auto">
+                                                {otrosCustomCounts.map(([txt, count]) => (
+                                                    <div key={txt} className="flex justify-between text-xs">
+                                                        <span className="text-gray-300">{txt}</span>
+                                                        <span className="text-gray-500">{count}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
 
                             {/* Objetivo */}

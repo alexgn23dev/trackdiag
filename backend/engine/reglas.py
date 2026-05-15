@@ -124,8 +124,10 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     # Ponderado por género: géneros oscuros/percusivos toleran más graves
     score, razones = 0, []
     genero = contexto.get("genero", "")
-    generos_graves_ok = ["techno", "techno_acido", "minimal", "tech_house"]
-    generos_graves_menos = ["trance", "progressive_trance", "progressive_house", "melodic_techno"]
+    generos_graves_ok = ["techno", "techno_acido", "minimal", "tech_house",
+                         "hard_techno", "drum_and_bass", "dubstep", "psytrance"]
+    generos_graves_menos = ["trance", "progressive_trance", "progressive_house",
+                            "melodic_techno", "downtempo", "indie_dance"]
     usuario_menciona_graves = any(p in bloqueo for p in
                                   ["grave", "bajo", "bass", "kick", "bombo", "turbio", "mud", "sub"])
     if senales["balance_grave"] == "excesivo":
@@ -216,8 +218,10 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     # --- 7: Carencia espectral ---
     # Ponderado por género: no todo género necesita el mismo brillo o cuerpo en medios
     score, razones = 0, []
-    generos_brillantes = ["trance", "progressive_trance", "progressive_house", "melodic_techno", "house"]
-    generos_oscuros = ["techno", "techno_acido", "minimal"]
+    generos_brillantes = ["trance", "progressive_trance", "progressive_house",
+                          "melodic_techno", "house", "psytrance", "dubstep",
+                          "indie_dance"]
+    generos_oscuros = ["techno", "techno_acido", "minimal", "hard_techno", "downtempo"]
     if senales["carencia_medios"]:
         score += 3; razones.append(f"Los medios están a {senales['db_media']:.0f}dB — falta cuerpo y presencia en esa zona")
     if senales["carencia_agudos"]:
@@ -344,14 +348,54 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
             score += 1; razones.append(
                 f"Ligero exceso puntual en medios-altos (picos de {harshness.get('pico_p95', 0):.1f}dB)"
             )
-        # Localización
+        # Localización — razones específicas cruzando zona + género
         zona = harshness.get("zona_problema", "")
+        generos_percusivos = ["techno", "techno_acido", "minimal", "tech_house", "hard_techno"]
+        generos_melodicos = ["trance", "progressive_trance", "progressive_house",
+                            "melodic_techno", "deep_house"]
+
         if zona == "presencia":
-            razones.append("El problema está en la zona de presencia (2-6kHz) — sintes, voces o percusiones pueden estar demasiado adelante")
+            if genero in generos_percusivos:
+                razones.append(
+                    "Problema en zona de presencia (2-6kHz): probablemente hi-hats metálicos, "
+                    "claps con demasiado top o synth leads agresivos. Revisa qué elemento "
+                    "percusivo o sintetizado está acumulando energía en esa banda."
+                )
+            elif genero in generos_melodicos:
+                razones.append(
+                    "Problema en zona de presencia (2-6kHz): suele venir de leads, voces o "
+                    "stabs sintéticos demasiado adelante en la mezcla. Prueba un EQ dinámico "
+                    "o de-esser en esa banda sobre los elementos protagonistas."
+                )
+            else:
+                razones.append(
+                    "Problema en zona de presencia (2-6kHz) — sintes, voces o percusiones "
+                    "pueden estar demasiado adelante"
+                )
         elif zona == "brillos":
-            razones.append("El problema está en la zona de brillos (6-10kHz) — hi-hats, crashes o efectos pueden estar demasiado altos")
+            if genero in generos_melodicos:
+                razones.append(
+                    "Problema en zona de brillos (6-10kHz): crashes, risers o reverbs de "
+                    "synths con demasiada cola en agudos. Revisa los tails de tus efectos "
+                    "y los high shelves de los reverbs."
+                )
+            elif genero in generos_percusivos:
+                razones.append(
+                    "Problema en zona de brillos (6-10kHz): hi-hats, shakers o crashes "
+                    "demasiado altos. Baja el nivel del bus de percusión aguda o aplica "
+                    "un low-pass shelf sutil."
+                )
+            else:
+                razones.append(
+                    "Problema en zona de brillos (6-10kHz) — hi-hats, crashes o efectos "
+                    "pueden estar demasiado altos"
+                )
         elif zona == "ambas":
-            razones.append("Todo el rango de medios-altos está elevado — posible falta de EQ correctivo en la mezcla")
+            razones.append(
+                "Todo el rango de agudos está elevado — posible falta de EQ correctivo "
+                "general o compresión en el bus master que está empujando los agudos. "
+                "Bypasea el limiter de master y comprueba si persiste el problema."
+            )
         # Cruce: harshness + densidad alta = todo compite y se amplifica
         if harshness.get("tiene_harshness") and senales["densidad_global"] in ["alta", "saturada"]:
             score += 1; razones.append("Harshness agravada por la densidad alta — demasiados elementos compitiendo en la misma zona")
