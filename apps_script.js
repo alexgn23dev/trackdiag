@@ -109,7 +109,8 @@ function doPost(e) {
   // Columnas (1-indexed):
   //  1=timestamp, 2=email, 3=nombre_proyecto, 4=formulario, 5=diagnostico,
   //  6=senales_json, 7=fue_util, 8=comentario, 9=enlace_feedback_real,
-  // 10=genero_custom (texto libre cuando el usuario eligió "Otro")
+  // 10-13 = columnas manuales del admin (no las pisamos en cada append),
+  // 14 = genero_custom (texto libre cuando el usuario eligió "Otro")
   if (data.tipo === 'registro' || (!data.action && !data.tipo)) {
     sheet.appendRow([
       new Date().toISOString(),
@@ -121,7 +122,11 @@ function doPost(e) {
       '',
       '',
       '',
-      data.genero_custom || ''
+      '',  // 10
+      '',  // 11
+      '',  // 12
+      '',  // 13
+      data.genero_custom || ''  // 14
     ]);
     return ContentService.createTextOutput(JSON.stringify({ ok: true }))
       .setMimeType(ContentService.MimeType.JSON);

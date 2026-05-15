@@ -316,7 +316,8 @@ function doPost(e) {
   } else {
     // Columnas: 1=timestamp, 2=email, 3=nombre_proyecto, 4=formulario,
     // 5=diagnostico, 6=senales_json, 7=fue_util, 8=comentario,
-    // 9=enlace_feedback_real, 10=genero_custom
+    // 9=enlace_feedback_real, 10-13=columnas manuales del admin,
+    // 14=genero_custom
     sheet.appendRow([
       new Date().toISOString(),
       data.email || '',
@@ -327,7 +328,11 @@ function doPost(e) {
       '',
       '',
       '',
-      data.genero_custom || ''
+      '',  // 10
+      '',  // 11
+      '',  // 12
+      '',  // 13
+      data.genero_custom || ''  // 14
     ]);
   }
 
