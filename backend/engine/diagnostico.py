@@ -94,6 +94,8 @@ def generar_diagnostico(senales: dict, contexto: dict) -> dict:
                 "referencia": senales["loudness"]["referencia"],
                 "consejo_master": senales["loudness"].get("consejo_master", ""),
                 "referencia_genero": feedback_ctx.get("referencia_lufs_genero", ""),
+                "saturacion_dinamica": senales["loudness"].get("saturacion_dinamica", ""),
+                "aviso_saturacion": senales["loudness"].get("aviso_saturacion", ""),
             },
             "mono_compat": {
                 "es_stereo": senales["mono_compat"]["es_stereo"],
@@ -110,6 +112,8 @@ def generar_diagnostico(senales: dict, contexto: dict) -> dict:
                 "pico_p95": senales["harshness"]["pico_p95"],
                 "pct_frames_harsh": senales["harshness"]["pct_frames_harsh"],
                 "zona_problema": senales["harshness"]["zona_problema"],
+                "peak_freq_hz": senales["harshness"].get("peak_freq_hz", 0),
+                "caracter": senales["harshness"].get("caracter", ""),
             },
         },
         # Señales crudas para calibración del motor (el frontend las guarda en el Sheet)

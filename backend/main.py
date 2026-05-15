@@ -184,13 +184,13 @@ async def diagnosticar(
             content={"error": f"Formato no soportado: {extension}. Usa MP3, WAV, FLAC o AIFF."}
         )
 
-    # Leer contenido y validar tamaño (máx 50 MB para prevenir OOM crashes)
-    MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
+    # Leer contenido y validar tamaño (máx 100 MB para prevenir OOM crashes)
+    MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MB
     content = await audio.read()
     if len(content) > MAX_UPLOAD_BYTES:
         return JSONResponse(
             status_code=413,
-            content={"error": f"Archivo demasiado grande ({len(content) // (1024*1024)} MB). Máximo: 50 MB. Puedes convertir a MP3 para reducir el tamaño."}
+            content={"error": f"Archivo demasiado grande ({len(content) // (1024*1024)} MB). Máximo: 100 MB. Puedes convertir a MP3 para reducir el tamaño."}
         )
 
     # Validar magic bytes — confirmar que el archivo es audio real, no solo extensión
@@ -317,16 +317,12 @@ def opciones():
             {"value": "minimal", "label": "Minimal"},
             {"value": "progressive_house", "label": "Progressive House"},
             {"value": "trance", "label": "Trance"},
-            {"value": "progressive_trance", "label": "Progressive Trance"},
             {"value": "psytrance", "label": "Psytrance"},
             {"value": "melodic_techno", "label": "Melodic Techno"},
             {"value": "deep_house", "label": "Deep House"},
             {"value": "afro_house", "label": "Afro House"},
             {"value": "indie_dance", "label": "Indie Dance"},
-            {"value": "downtempo", "label": "Downtempo"},
             {"value": "breaks", "label": "Breaks"},
-            {"value": "drum_and_bass", "label": "Drum & Bass"},
-            {"value": "dubstep", "label": "Dubstep"},
             {"value": "otro", "label": "Otro"},
         ],
         "fases": [

@@ -19,16 +19,12 @@ DURACIONES_GENERO = {
     "minimal":           {"min": 330, "max": 480, "label": "5:30–8 minutos"},
     "progressive_house": {"min": 360, "max": 540, "label": "6–9 minutos"},
     "trance":            {"min": 360, "max": 540, "label": "6–9 minutos"},
-    "progressive_trance":{"min": 420, "max": 600, "label": "7–10 minutos"},
     "psytrance":         {"min": 420, "max": 540, "label": "7–9 minutos"},
     "melodic_techno":    {"min": 360, "max": 540, "label": "6–9 minutos"},
     "deep_house":        {"min": 300, "max": 420, "label": "5–7 minutos"},
     "afro_house":        {"min": 360, "max": 480, "label": "6–8 minutos"},
     "indie_dance":       {"min": 240, "max": 360, "label": "4–6 minutos"},
-    "downtempo":         {"min": 240, "max": 360, "label": "4–6 minutos"},
     "breaks":            {"min": 300, "max": 420, "label": "5–7 minutos"},
-    "drum_and_bass":     {"min": 300, "max": 420, "label": "5–7 minutos"},
-    "dubstep":           {"min": 240, "max": 360, "label": "4–6 minutos"},
 }
 
 # =============================================================================
@@ -78,12 +74,6 @@ ESTRUCTURA_GENERO = {
         "builds": "crescendo emocional, capas de sintes, risers, FX",
         "nota": "En trance, el breakdown largo NO es un problema — es donde vive la emoción. El build hacia el drop es donde se gana o se pierde al oyente.",
     },
-    "progressive_trance": {
-        "patron": "builds muy largos, evolución hipnótica",
-        "breaks": "extensos, con capas melódicas y atmósferas",
-        "builds": "graduales, casi meditativos, muy largos",
-        "nota": "El progressive trance es un viaje. Los builds de 64+ compases son normales. La clave es que cada compás añada algo sutil.",
-    },
     "melodic_techno": {
         "patron": "techno con capas melódicas y atmósferas",
         "breaks": "moderados a largos, con melodía y textura",
@@ -120,29 +110,11 @@ ESTRUCTURA_GENERO = {
         "builds": "cantados o instrumentales con melodía clara",
         "nota": "El indie dance se mueve entre canción y club. La estructura puede tener verso-estribillo, pero el groove de pista tiene que sostenerse.",
     },
-    "downtempo": {
-        "patron": "tempo lento (80-110 BPM) con paisaje sonoro elaborado",
-        "breaks": "fluidos, sin contraste brusco",
-        "builds": "muy graduales, casi imperceptibles",
-        "nota": "En downtempo la atmósfera importa más que la energía. La estructura es más libre — funciona como un viaje, no como un track de pista.",
-    },
     "breaks": {
         "patron": "breakbeat (no 4/4) + bajo prominente",
         "breaks": "definidos, con cambios rítmicos claros",
         "builds": "típicamente con tensión rítmica antes del drop",
         "nota": "En breaks el ritmo no es lineal — el groove vive en el shuffle. Asegúrate de que el kick y el snare tengan suficiente espacio para que el patrón se entienda.",
-    },
-    "drum_and_bass": {
-        "patron": "breakbeat rápido (160-180 BPM) + sub bass",
-        "breaks": "marcados, suelen llevar a un drop intenso",
-        "builds": "cortos y agresivos antes del drop",
-        "nota": "En D&B el sub bass es protagonista, pero el groove está en el ritmo del break. Mono compatibility en graves es crítica — si el sub se cae al mezclar, el track se cae.",
-    },
-    "dubstep": {
-        "patron": "tempo 140 BPM con énfasis en 1 y 3, wobble bass",
-        "breaks": "marcados, dan paso al drop",
-        "builds": "tensión con risers + silencio antes del drop",
-        "nota": "En dubstep el drop lo es todo. Cuida que la energía baje lo suficiente antes del drop para que el contraste funcione. El espacio entre golpes es parte del groove.",
     },
 }
 
@@ -161,13 +133,9 @@ LUFS_GENERO = {
     "minimal":            {"target": -9,  "rango": "-8 a -10"},
     "progressive_house":  {"target": -10, "rango": "-9 a -11"},
     "melodic_techno":     {"target": -9,  "rango": "-8 a -10"},
-    "progressive_trance": {"target": -9,  "rango": "-8 a -10"},
     "afro_house":         {"target": -9,  "rango": "-8 a -10"},
     "indie_dance":        {"target": -9,  "rango": "-8 a -10"},
-    "downtempo":          {"target": -11, "rango": "-10 a -13"},
     "breaks":             {"target": -8,  "rango": "-7 a -9"},
-    "drum_and_bass":      {"target": -7,  "rango": "-6 a -8"},
-    "dubstep":            {"target": -7,  "rango": "-6 a -8"},
     "psytrance":          {"target": -8,  "rango": "-7 a -9"},
 }
 
@@ -421,7 +389,7 @@ def _generar_tips_genero(diagnostico_id: str, info_genero: dict, genero: str, se
             )
 
     elif diagnostico_id == "exceso_densidad":
-        generos_densos = ["techno", "trance", "progressive_trance"]
+        generos_densos = ["techno", "trance"]
         if genero in generos_densos:
             tips.append(
                 f"{_label_genero(genero)} puede sonar denso, pero incluso en este género "
@@ -456,7 +424,7 @@ def _generar_tips_genero(diagnostico_id: str, info_genero: dict, genero: str, se
         )
 
     elif diagnostico_id == "conflicto_armonico":
-        generos_tonales = ["trance", "progressive_trance", "progressive_house", "melodic_techno", "deep_house"]
+        generos_tonales = ["trance", "progressive_house", "melodic_techno", "deep_house"]
         generos_percusivos = ["techno", "techno_acido", "minimal"]
         if genero in generos_tonales:
             tips.append(
@@ -484,7 +452,7 @@ def _generar_tips_genero(diagnostico_id: str, info_genero: dict, genero: str, se
             )
 
     elif diagnostico_id == "pobreza_armonica":
-        generos_melodicos = ["trance", "progressive_trance", "progressive_house", "melodic_techno", "deep_house", "house"]
+        generos_melodicos = ["trance", "progressive_house", "melodic_techno", "deep_house", "house"]
         generos_percusivos = ["techno", "techno_acido", "minimal"]
         if genero in generos_melodicos:
             tips.append(
@@ -502,7 +470,7 @@ def _generar_tips_genero(diagnostico_id: str, info_genero: dict, genero: str, se
         harshness = senales.get("harshness", {})
         zona = harshness.get("zona_problema", "")
         generos_percusivos_h = ["techno", "techno_acido", "minimal", "tech_house", "hard_techno"]
-        generos_melodicos_h = ["trance", "progressive_trance", "progressive_house",
+        generos_melodicos_h = ["trance", "progressive_house",
                                "melodic_techno", "deep_house"]
 
         if zona == "presencia":
@@ -551,6 +519,38 @@ def _generar_tips_genero(diagnostico_id: str, info_genero: dict, genero: str, se
                 "problema es de mastering. Si persiste, hay un problema general de mezcla "
                 "en agudos que tienes que resolver pista a pista."
             )
+
+        # Pista extra según carácter del pico (transitorio/sostenido/mixto)
+        caracter_h = harshness.get("caracter", "")
+        peak_khz_h = harshness.get("peak_freq_hz", 0) / 1000.0
+        if caracter_h == "transitorio" and peak_khz_h > 0:
+            tips.append(
+                f"El pico en {peak_khz_h:.1f} kHz aparece en ráfagas cortas: empieza soleando "
+                f"hi-hats, claps, snares y otros elementos percusivos. Aplica un EQ dinámico "
+                f"sobre ese bus con threshold suave en esa frecuencia para que solo actúe en "
+                f"los picos."
+            )
+        elif caracter_h == "sostenido" and peak_khz_h > 0:
+            tips.append(
+                f"El pico en {peak_khz_h:.1f} kHz es sostenido: revisa primero los elementos "
+                f"que permanecen tocando largo (leads, pads, voces, reverbs largos). Un "
+                f"high-shelf de -2dB sobre el lead o una cola más corta en el reverb suele "
+                f"resolverlo."
+            )
+        elif caracter_h == "mixto" and peak_khz_h > 0:
+            tips.append(
+                f"El pico en {peak_khz_h:.1f} kHz combina golpes y sostenidos: revisa tanto "
+                f"el bus de percusión metálica como los leads/pads dominantes en esa banda. "
+                f"Atacar solo uno no va a resolverlo."
+            )
+
+        # Aviso fijo de cierre — independiente de género y zona
+        tips.append(
+            "Pista universal: cuando hay chirrido, lo primero que casi siempre vale la pena "
+            "bajar son los hi-hats abiertos, rides, shakers y crashes. Bypasea ese bus en "
+            "el momento más harsh del track y compara — si el chirrido cae notablemente, "
+            "ya tienes el culpable."
+        )
 
     return tips
 
@@ -797,16 +797,12 @@ def _label_genero(genero: str) -> str:
         "minimal": "Minimal",
         "progressive_house": "Progressive House",
         "trance": "Trance",
-        "progressive_trance": "Progressive Trance",
         "psytrance": "Psytrance",
         "melodic_techno": "Melodic Techno",
         "deep_house": "Deep House",
         "afro_house": "Afro House",
         "indie_dance": "Indie Dance",
-        "downtempo": "Downtempo",
         "breaks": "Breaks",
-        "drum_and_bass": "Drum & Bass",
-        "dubstep": "Dubstep",
         "otro": "tu género",
     }
     return labels.get(genero, "tu género")

@@ -125,9 +125,9 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     score, razones = 0, []
     genero = contexto.get("genero", "")
     generos_graves_ok = ["techno", "techno_acido", "minimal", "tech_house",
-                         "hard_techno", "drum_and_bass", "dubstep", "psytrance"]
-    generos_graves_menos = ["trance", "progressive_trance", "progressive_house",
-                            "melodic_techno", "downtempo", "indie_dance"]
+                         "hard_techno", "psytrance"]
+    generos_graves_menos = ["trance", "progressive_house",
+                            "melodic_techno", "indie_dance"]
     usuario_menciona_graves = any(p in bloqueo for p in
                                   ["grave", "bajo", "bass", "kick", "bombo", "turbio", "mud", "sub"])
     if senales["balance_grave"] == "excesivo":
@@ -140,9 +140,21 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
         score += 1; razones.append(f"Poca presencia en agudos (nivel medio: {senales['db_aguda']:.0f}dB)")
     if usuario_menciona_graves:
         score += 2; razones.append("El usuario percibe problemas en graves")
-    # Ajuste por género: en géneros con kick protagonista, ser más permisivo
-    if genero in generos_graves_ok and senales["balance_grave"] != "excesivo":
-        score -= 1; razones.append(f"(−) En {genero}, cierta dominancia grave es natural")
+    # Ajuste por género: en géneros con kick protagonista, ser muy permisivo.
+    # tech_house y techno especialmente — el kick prominente es parte del lenguaje.
+    # "elevado" → -2 (suficiente para neutralizar el +1 de balance y los +1/+1 de
+    # carencias, evitando que se acumule a falso positivo).
+    # "excesivo" → -1 (suaviza pero no anula — si pasa de 28dB hay algo real).
+    generos_kick_protagonista = ["techno", "techno_acido", "tech_house", "hard_techno", "minimal"]
+    if genero in generos_kick_protagonista:
+        if senales["balance_grave"] == "elevado":
+            score -= 2; razones.append(f"(−) En {genero} el kick es protagonista — cierta dominancia grave es esperable")
+        elif senales["balance_grave"] == "excesivo":
+            score -= 1; razones.append(f"(−) En {genero} el kick es protagonista, pero los graves superan ya el rango habitual")
+    elif genero in generos_graves_ok:
+        # Resto de géneros del grupo (psytrance, etc): descuento moderado
+        if senales["balance_grave"] != "excesivo":
+            score -= 1; razones.append(f"(−) En {genero}, cierta dominancia grave es natural")
     # En géneros melódicos, el exceso de graves es más problemático
     if genero in generos_graves_menos and senales["balance_grave"] in ["elevado", "excesivo"]:
         score += 1; razones.append(f"(−) En {genero}, el exceso de graves enmascara melodías y atmósferas")
@@ -218,10 +230,9 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     # --- 7: Carencia espectral ---
     # Ponderado por género: no todo género necesita el mismo brillo o cuerpo en medios
     score, razones = 0, []
-    generos_brillantes = ["trance", "progressive_trance", "progressive_house",
-                          "melodic_techno", "house", "psytrance", "dubstep",
-                          "indie_dance"]
-    generos_oscuros = ["techno", "techno_acido", "minimal", "hard_techno", "downtempo"]
+    generos_brillantes = ["trance", "progressive_house",
+                          "melodic_techno", "house", "psytrance", "indie_dance"]
+    generos_oscuros = ["techno", "techno_acido", "minimal", "hard_techno"]
     if senales["carencia_medios"]:
         score += 3; razones.append(f"Los medios están a {senales['db_media']:.0f}dB — falta cuerpo y presencia en esa zona")
     if senales["carencia_agudos"]:
@@ -318,7 +329,7 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
             )
         # Géneros melódicos: la falta de armonía pesa más
         genero = contexto.get("genero", "")
-        generos_melodicos = ["trance", "progressive_trance", "progressive_house", "melodic_techno", "deep_house"]
+        generos_melodicos = ["trance", "progressive_house", "melodic_techno", "deep_house"]
         generos_percusivos = ["techno", "techno_acido", "minimal", "tech_house"]
         if genero in generos_melodicos and armonia.get("contenido_tonal", 0) < 0.35:
             score += 2; razones.append(
@@ -350,8 +361,10 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
             )
         # Localización — razones específicas cruzando zona + género
         zona = harshness.get("zona_problema", "")
+        peak_hz = harshness.get("peak_freq_hz", 0)
+        caracter = harshness.get("caracter", "")
         generos_percusivos = ["techno", "techno_acido", "minimal", "tech_house", "hard_techno"]
-        generos_melodicos = ["trance", "progressive_trance", "progressive_house",
+        generos_melodicos = ["trance", "progressive_house",
                             "melodic_techno", "deep_house"]
 
         if zona == "presencia":
@@ -396,6 +409,36 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
                 "general o compresión en el bus master que está empujando los agudos. "
                 "Bypasea el limiter de master y comprueba si persiste el problema."
             )
+
+        # Pico exacto + carácter (pistas adicionales sobre el tipo de elemento)
+        if peak_hz > 0:
+            peak_khz = peak_hz / 1000.0
+            if caracter == "transitorio":
+                razones.append(
+                    f"El pico se concentra en torno a {peak_khz:.1f} kHz y aparece en ráfagas "
+                    f"cortas — perfil compatible con percusión (hi-hats, claps, transientes de snare) "
+                    f"o golpes secos de elementos sintéticos."
+                )
+            elif caracter == "sostenido":
+                razones.append(
+                    f"El pico se concentra en torno a {peak_khz:.1f} kHz de forma sostenida — "
+                    f"perfil compatible con leads, voces, pads o reverbs largos en esa banda."
+                )
+            elif caracter == "mixto":
+                razones.append(
+                    f"El pico se concentra en torno a {peak_khz:.1f} kHz combinando ráfagas "
+                    f"cortas y contenido sostenido — probable mezcla de percusión y elementos "
+                    f"tonales empujando la misma banda."
+                )
+
+        # Aviso fijo: en casi todos los casos los hi-hats/percusión metálica
+        # son corresponsables. Vale la pena recordarlo siempre.
+        razones.append(
+            "Independientemente del género: una causa muy frecuente de harshness son los "
+            "hi-hats abiertos, rides, shakers o crashes con demasiado top. Solea tu bus de "
+            "percusión metálica y comprueba si el chirrido baja con un low-pass shelf suave "
+            "(-2dB a 8kHz) o bajando 1-2dB ese bus."
+        )
         # Cruce: harshness + densidad alta = todo compite y se amplifica
         if harshness.get("tiene_harshness") and senales["densidad_global"] in ["alta", "saturada"]:
             score += 1; razones.append("Harshness agravada por la densidad alta — demasiados elementos compitiendo en la misma zona")

@@ -126,12 +126,15 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None) -> dict:
     )
 
     # Umbrales calibrados para electrónica (kick 4x4 → graves naturalmente dominantes)
-    # Recalibrado tras feedback de 46 usuarios (mayo 2026): los umbrales 18/24 generaban
-    # demasiados falsos positivos en géneros con kick fuerte. Subimos a 20/26.
-    # Combinado con descuentos por género en reglas.py, doble protección contra FPs.
-    if diff_grave_media > 26:
+    # Recalibrado en dos pasos (mayo 2026) tras feedback de productores reales:
+    # los umbrales 18/24 y 20/26 seguían marcando como exceso tracks correctos
+    # de tech_house y techno con kick prominente. Subimos a 22/28 para dar más
+    # margen global. Combinado con descuentos por género reforzados en reglas.py,
+    # los géneros con kick fuerte (tech_house, techno, hard_techno, minimal)
+    # tienen triple protección contra falsos positivos.
+    if diff_grave_media > 28:
         balance_grave = "excesivo"
-    elif diff_grave_media > 20:
+    elif diff_grave_media > 22:
         balance_grave = "elevado"
     else:
         balance_grave = "normal"
@@ -184,6 +187,54 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None) -> dict:
     # Pasamos audio ya cargado para evitar re-lectura desde disco
     loudness = _analizar_loudness(audio_path, y_preloaded=y, sr_preloaded=sr,
                                   y_stereo_preloaded=y_stereo if es_stereo else None)
+
+    # === Saturación dinámica (over-compression / "chafado") ===
+    # Cruza LUFS + LRA + rango_dinamico para detectar si el limiter ha aplastado
+    # la dinámica. Los tres juntos dan una firma fiable de over-limiting:
+    #   - LUFS alto solo: puede ser correcto (master de club).
+    #   - LRA bajo solo: track simple sin variaciones, no es por sí solo señal de saturación.
+    #   - rango_dinamico bajo solo: track de mezcla densa, idem.
+    #   - LUFS alto + LRA bajo + rango_dinamico bajo: el track está apretado.
+    _lufs = loudness.get("lufs_integrado", -99)
+    _lra = loudness.get("rango_loudness", 0)
+    if _lufs > -50:  # solo si la medición es válida (no silencio)
+        sat_score = 0
+        if _lufs > -7:
+            sat_score += 2
+        elif _lufs > -9:
+            sat_score += 1
+        if _lra < 3:
+            sat_score += 2
+        elif _lra < 4.5:
+            sat_score += 1
+        if rango_dinamico < 1.5:
+            sat_score += 2
+        elif rango_dinamico < 1.8:
+            sat_score += 1
+
+        if sat_score >= 5:
+            loudness["saturacion_dinamica"] = "extrema"
+            loudness["aviso_saturacion"] = (
+                f"El track muestra firma clara de over-limiting: LUFS {_lufs:.1f}, LRA "
+                f"{_lra:.1f} LU y rango dinámico {rango_dinamico:.2f}. A este nivel de "
+                f"compresión es casi seguro que estás perdiendo cuerpo, transitorios del "
+                f"kick y aire en agudos. Probablemente el track suene 'pequeño' en sistemas "
+                f"grandes y fatigue al oído. Recomendado: baja 2-3dB el input gain del "
+                f"limiter y vuelve a comparar con una referencia del género."
+            )
+        elif sat_score >= 3:
+            loudness["saturacion_dinamica"] = "elevada"
+            loudness["aviso_saturacion"] = (
+                f"Hay señales de compresión agresiva: LUFS {_lufs:.1f}, LRA {_lra:.1f} LU, "
+                f"rango dinámico {rango_dinamico:.2f}. El track puede sonar plano o aplanado "
+                f"al compararlo con referencias. Si tu intención es tocar en club está dentro "
+                f"de norma, pero verifica con monitores grandes que no estés perdiendo "
+                f"cuerpo ni transitorios."
+            )
+        elif sat_score >= 2:
+            loudness["saturacion_dinamica"] = "moderada"
+        else:
+            loudness["saturacion_dinamica"] = "ok"
 
     # Madurez estimada
     if duracion_seg < 120 or (not tiene_desarrollo and contraste_energetico == "bajo"):
@@ -238,10 +289,12 @@ def _analizar_harshness(mel_db: np.ndarray, mel_freqs: np.ndarray) -> dict:
     """
     resultado = {
         "tiene_harshness": False,
-        "nivel": "",           # "leve", "notable", "severo"
-        "pico_p95": 0.0,      # percentil 95 del ratio presencia/medios por frame
+        "nivel": "",              # "leve", "notable", "severo"
+        "pico_p95": 0.0,          # percentil 95 del ratio presencia/medios por frame
         "pct_frames_harsh": 0.0,  # % de frames donde presencia > medios
-        "zona_problema": "",   # "presencia" (2-6kHz) o "brillos" (6-8kHz) o "ambas"
+        "zona_problema": "",      # "presencia" (2-6kHz) o "brillos" (6-8kHz) o "ambas"
+        "peak_freq_hz": 0,        # frecuencia (Hz) con más energía en la banda 2-10kHz
+        "caracter": "",           # "transitorio", "sostenido" o "mixto" — pista del tipo de elemento
     }
 
     # Bandas de análisis
@@ -304,6 +357,30 @@ def _analizar_harshness(mel_db: np.ndarray, mel_freqs: np.ndarray) -> dict:
         else:
             resultado["zona_problema"] = "ambas"
 
+        # Pico exacto: frecuencia con mayor energía media dentro de 2-10kHz.
+        # Da una pista más fina que la zona (ej: 3.5 kHz → presencia baja, sibilantes / leads;
+        # 7 kHz → brillos / aire). Usa mask_pres ∪ mask_pres_alta para cubrir 2-10kHz.
+        mask_full = mask_pres | mask_pres_alta
+        if mask_full.any():
+            mean_db_per_freq = np.mean(mel_db[mask_full, :], axis=1)
+            peak_idx_local = int(np.argmax(mean_db_per_freq))
+            peak_freq = float(mel_freqs[mask_full][peak_idx_local])
+            # Redondear a 100Hz para no dar falsa precisión (el mel-spectrogram tiene
+            # resolución limitada en agudos)
+            resultado["peak_freq_hz"] = int(round(peak_freq / 100.0) * 100)
+
+        # Carácter: transitorio vs sostenido.
+        # - Transitorio: pocos frames con harshness pero picos altos → percusión/golpes
+        # - Sostenido: muchos frames con harshness pero picos moderados → synth/voz/pad
+        # - Mixto: cualquier combinación intermedia
+        # Calibrado para los rangos típicos donde ya hay harshness detectada (p95 > 5, pct > 15)
+        if pct_mayor < 25 and p95 > 5:
+            resultado["caracter"] = "transitorio"
+        elif pct_mayor > 35 and p95 < 7:
+            resultado["caracter"] = "sostenido"
+        else:
+            resultado["caracter"] = "mixto"
+
     return resultado
 
 
@@ -318,9 +395,11 @@ def _analizar_loudness(audio_path: str, y_preloaded=None, sr_preloaded=None,
         "lufs_integrado": -99.0,
         "lufs_short_term_max": -99.0,
         "rango_loudness": 0.0,
-        "nivel": "",          # "bajo", "moderado", "alto", "muy_alto"
-        "referencia": "",     # texto con contexto
-        "consejo_master": "", # texto accionable según nivel
+        "nivel": "",                  # "bajo", "moderado", "alto", "muy_alto"
+        "referencia": "",             # texto con contexto
+        "consejo_master": "",         # texto accionable según nivel
+        "saturacion_dinamica": "",    # "ok"|"moderada"|"elevada"|"extrema"
+        "aviso_saturacion": "",       # texto solo cuando saturación elevada/extrema
     }
 
     try:
@@ -368,24 +447,29 @@ def _analizar_loudness(audio_path: str, y_preloaded=None, sr_preloaded=None,
         if lufs > -6:
             resultado["nivel"] = "muy_alto"
             resultado["referencia"] = (
-                "Nivel muy alto. El track probablemente está sobre-comprimido o clippeando. "
-                "Las plataformas de streaming lo van a bajar de volumen igualmente."
+                "Nivel muy alto, típico de masters preparados para club o pista. "
+                "Spotify normaliza a -14 LUFS, así que parte de este volumen se pierde en streaming."
             )
             resultado["consejo_master"] = (
-                "Baja el ceiling del limiter a -1dB y reduce el input gain hasta que el LUFS "
-                "integrado baje a -7/-8. Si pierdes pegada, el problema está en la mezcla, "
-                "no en el mastering."
+                "Puede ser correcto si el destino es club o tocar en sesión, donde se busca "
+                "máxima presencia. Pero a este nivel es muy fácil haber comprimido en exceso: "
+                "verifica que el track sigue teniendo cuerpo y aire en un sistema grande, y "
+                "que el limiter no esté generando artefactos de saturación en los transitorios "
+                "del kick. Si suena 'pequeño' o aplanado en monitores grandes, baja 1-2dB el "
+                "input gain del limiter."
             )
         elif lufs > -9:
             resultado["nivel"] = "alto"
             resultado["referencia"] = (
-                "Nivel alto, típico de masters agresivos. "
-                "Spotify normaliza a -14 LUFS, así que parte de este volumen se perderá en streaming."
+                "Nivel alto, en línea con masters de club/pista actuales. "
+                "Spotify normaliza a -14 LUFS, así que parte del volumen se perderá en streaming."
             )
             resultado["consejo_master"] = (
-                "Estás en zona de master agresivo. Para streaming, no tiene sentido subir más "
-                "de -8 LUFS — Spotify lo va a bajar igualmente. Considera apuntar a -9/-10 LUFS "
-                "para mantener rango dinámico."
+                "Si la intención es tocar en sesión, este nivel es coherente con lo que se "
+                "escucha hoy en pista. Asegúrate de que no estás sacrificando dinámica: el "
+                "kick debe seguir teniendo pegada propia, el track debe respirar entre "
+                "secciones, y la mezcla no debería sonar plana ni fatigada al escucharla "
+                "varios minutos seguidos."
             )
         elif lufs > -14:
             resultado["nivel"] = "moderado"

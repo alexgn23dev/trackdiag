@@ -921,6 +921,14 @@
                                         {d.loudness.consejo_master && (
                                             <p className="text-gray-400 text-xs mt-2 italic">{d.loudness.consejo_master}</p>
                                         )}
+                                        {d.loudness.aviso_saturacion && (
+                                            <div className={`mt-3 p-2 rounded border-l-2 ${d.loudness.saturacion_dinamica === 'extrema' ? 'border-red-400 bg-red-400/5' : 'border-yellow-400 bg-yellow-400/5'}`}>
+                                                <p className={`text-xs font-medium ${d.loudness.saturacion_dinamica === 'extrema' ? 'text-red-400' : 'text-yellow-400'}`}>
+                                                    {d.loudness.saturacion_dinamica === 'extrema' ? '⚠ Saturación dinámica extrema' : 'Compresión elevada'}
+                                                </p>
+                                                <p className="text-gray-300 text-xs mt-1">{d.loudness.aviso_saturacion}</p>
+                                            </div>
+                                        )}
                                         {loudnessTip && (
                                             <p className={`text-xs mt-1 ${loudnessColor.replace('text-', 'text-').replace('400', '400/70')}`}>{loudnessTip}</p>
                                         )}
@@ -1555,16 +1563,12 @@
                             {value: "minimal", label: "Minimal"},
                             {value: "progressive_house", label: "Progressive House"},
                             {value: "trance", label: "Trance"},
-                            {value: "progressive_trance", label: "Progressive Trance"},
                             {value: "psytrance", label: "Psytrance"},
                             {value: "melodic_techno", label: "Melodic Techno"},
                             {value: "deep_house", label: "Deep House"},
                             {value: "afro_house", label: "Afro House"},
                             {value: "indie_dance", label: "Indie Dance"},
-                            {value: "downtempo", label: "Downtempo"},
                             {value: "breaks", label: "Breaks"},
-                            {value: "drum_and_bass", label: "Drum & Bass"},
-                            {value: "dubstep", label: "Dubstep"},
                             {value: "otro", label: "Otro"},
                         ],
                         fases: [
@@ -1596,7 +1600,7 @@
                 });
         }, []);
 
-        const MAX_FILE_MB = 50;
+        const MAX_FILE_MB = 100;
         const handleFileSelected = (f) => {
             const sizeMB = f.size / 1024 / 1024;
             if (sizeMB > MAX_FILE_MB) {
