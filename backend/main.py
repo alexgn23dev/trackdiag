@@ -52,6 +52,24 @@ app = FastAPI(title="Mentotrack API", version="0.5.2")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+
+@app.on_event("startup")
+async def _startup_db():
+    """Inicializa el pool de Postgres si DATABASE_URL está disponible.
+    En local sin DATABASE_URL, la app sigue arrancando (el motor de análisis
+    no depende de la BD; los endpoints que sí dependan fallarán explícitos).
+    """
+    if os.environ.get("DATABASE_URL"):
+        from db import init_pool
+        await init_pool()
+
+
+@app.on_event("shutdown")
+async def _shutdown_db():
+    if os.environ.get("DATABASE_URL"):
+        from db import close_pool
+        await close_pool()
+
 # Ruta al frontend
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
