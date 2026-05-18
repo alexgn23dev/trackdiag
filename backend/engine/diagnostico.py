@@ -4,9 +4,25 @@ Combina señales + contexto + reglas → informe estructurado.
 v0.3: feedback contextualizado por experiencia, género, objetivo y fase.
 """
 
-from .reglas import evaluar_diagnosticos, aplicar_jerarquia
+from .reglas import evaluar_diagnosticos, aplicar_jerarquia, UMBRAL_MINIMO_CONFIANZA
 from .templates import TEMPLATES
 from .contextualizador import contextualizar_feedback
+
+# Umbrales por dx para contar "puntos pendientes" en el estado.
+# Coincide con aplicar_jerarquia en reglas.py: armónicos exigen más evidencia.
+_UMBRALES_PUNTOS = {
+    "conflicto_armonico": 3,
+    "pobreza_armonica": 3,
+}
+
+
+def _contar_puntos_pendientes(scores: dict) -> int:
+    """Cuenta hipótesis con score >= umbral, excluyendo sin_diagnostico."""
+    return sum(
+        1 for dx, score in scores.items()
+        if dx != "sin_diagnostico"
+        and score >= _UMBRALES_PUNTOS.get(dx, UMBRAL_MINIMO_CONFIANZA)
+    )
 
 
 def generar_diagnostico(senales: dict, contexto: dict) -> dict:
@@ -28,12 +44,24 @@ def generar_diagnostico(senales: dict, contexto: dict) -> dict:
     else:
         madurez_final = madurez_audio
 
-    estado_map = {
-        "verde": ("verde", "Fase temprana — aún necesita desarrollo"),
-        "avanzado": ("avanzado", "Listo para revisión más fina"),
-        "en_desarrollo": ("en_desarrollo", "Buena base, necesita iteración"),
-    }
-    estado, estado_texto = estado_map.get(madurez_final, estado_map["en_desarrollo"])
+    # Conteo de puntos pendientes — hipótesis con score >= umbral.
+    # Permite que el texto del estado se mueva con el progreso del usuario.
+    puntos_pendientes = _contar_puntos_pendientes(scores)
+
+    if madurez_final == "verde":
+        estado = "verde"
+        estado_texto = "Fase temprana — aún necesita desarrollo"
+    elif madurez_final == "avanzado":
+        estado = "avanzado"
+        estado_texto = "Mezcla lista — foco en máster y nivel"
+    else:
+        estado = "en_desarrollo"
+        if puntos_pendientes == 0:
+            estado_texto = "Mezcla casi lista — ajusta los detalles"
+        elif puntos_pendientes == 1:
+            estado_texto = "Mezcla casi lista — 1 punto pendiente antes del máster"
+        else:
+            estado_texto = f"Mezcla casi lista — {puntos_pendientes} puntos pendientes antes del máster"
 
     # Explicación
     razones = [r for r in detalles.get(principal_id, []) if not r.startswith("(−)")]
