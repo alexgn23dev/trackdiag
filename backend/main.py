@@ -911,6 +911,24 @@ def serve_ideas():
     return FileResponse(ideas_path, headers={"Cache-Control": "no-cache"})
 
 
+# Changelog: HTML lee el JSON y renderiza las entradas en cliente
+@app.get("/changelog")
+def serve_changelog():
+    changelog_path = FRONTEND_DIR / "changelog.html"
+    if not changelog_path.is_file():
+        return JSONResponse(status_code=404, content={"error": "Página no encontrada"})
+    return FileResponse(changelog_path, headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/changelog.json")
+def serve_changelog_json():
+    json_path = FRONTEND_DIR / "changelog.json"
+    if not json_path.is_file():
+        return JSONResponse(status_code=404, content={"error": "No encontrado"})
+    # no-cache: los cambios de versión deben verse inmediatamente
+    return FileResponse(json_path, headers={"Cache-Control": "no-cache"}, media_type="application/json")
+
+
 # =========================================================================
 # Páginas legales (servidas en URLs sin extensión)
 # =========================================================================

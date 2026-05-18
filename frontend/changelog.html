@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Changelog — Mentotrack</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <meta name="description" content="Historial de cambios y novedades de Mentotrack — todas las versiones, mejoras y correcciones.">
+  <meta name="robots" content="index, follow">
+  <meta name="theme-color" content="#0a0a0a">
+  <link rel="canonical" href="https://www.mentotrack.com/changelog">
+  <link rel="stylesheet" href="/legal.css">
+  <style>
+    /* === Estilos específicos del changelog === */
+    .changelog-intro {
+      color: var(--text-gray-400);
+      font-size: 0.9375rem;
+      margin-bottom: 2.5rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    .changelog-entries {
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+    }
+
+    .entry {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 0.75rem;
+      padding: 1.5rem 1.75rem;
+      transition: border-color 0.2s;
+    }
+
+    .entry:hover {
+      border-color: var(--hover-border);
+    }
+
+    .entry-header {
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .entry-version {
+      display: inline-flex;
+      align-items: center;
+      background: rgba(124, 58, 237, 0.15);
+      color: #c4b5fd;
+      border: 1px solid rgba(124, 58, 237, 0.3);
+      padding: 0.2rem 0.65rem;
+      border-radius: 0.375rem;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    .entry-version.latest {
+      background: rgba(16, 185, 129, 0.15);
+      color: #6ee7b7;
+      border-color: rgba(16, 185, 129, 0.3);
+    }
+
+    .entry-date {
+      color: var(--text-gray-500);
+      font-size: 0.8125rem;
+    }
+
+    .entry-title {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin: 0 0 1rem 0;
+      letter-spacing: -0.01em;
+    }
+
+    .entry-changes {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .entry-changes li {
+      position: relative;
+      padding-left: 1.25rem;
+      margin-bottom: 0.6rem;
+      font-size: 0.9375rem;
+      color: var(--text-gray-300);
+      line-height: 1.65;
+    }
+
+    .entry-changes li:last-child {
+      margin-bottom: 0;
+    }
+
+    .entry-changes li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0.7rem;
+      width: 0.375rem;
+      height: 0.375rem;
+      background: var(--purple-primary);
+      border-radius: 50%;
+      opacity: 0.7;
+    }
+
+    .loading,
+    .error-state {
+      text-align: center;
+      padding: 3rem 1rem;
+      color: var(--text-gray-500);
+      font-size: 0.9375rem;
+    }
+
+    .error-state strong {
+      display: block;
+      margin-bottom: 0.5rem;
+      color: var(--text-primary);
+    }
+
+    @media (max-width: 640px) {
+      .entry { padding: 1.25rem; }
+      .entry-title { font-size: 1rem; }
+      .entry-changes li { font-size: 0.9rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="header-content">
+      <a href="/" class="logo-link">
+        <span>mentotrack</span><span class="logo-knob">●</span>
+      </a>
+      <a href="/" class="back-link">← Volver al inicio</a>
+    </div>
+  </header>
+
+  <main>
+    <h1>Changelog</h1>
+    <p class="changelog-intro">Historial completo de cambios, mejoras y correcciones de Mentotrack. Las versiones más recientes aparecen primero.</p>
+
+    <div id="changelog-root">
+      <div class="loading">Cargando historial…</div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-content">
+      <nav class="footer-links" aria-label="Enlaces">
+        <a href="/">Inicio</a>
+        <a href="/ideas">Ideas</a>
+        <a href="/changelog">Changelog</a>
+        <a href="/aviso-legal">Aviso legal</a>
+        <a href="/privacidad">Privacidad</a>
+        <a href="/cookies">Cookies</a>
+        <a href="/terminos">Términos</a>
+      </nav>
+      <p class="footer-meta">© 2026 Mentotrack · Producción Online — www.mentotrack.com</p>
+    </div>
+  </footer>
+
+  <script>
+    (function() {
+      var root = document.getElementById('changelog-root');
+
+      function formatDate(isoDate) {
+        var parts = isoDate.split('-');
+        if (parts.length !== 3) return isoDate;
+        var meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+        var d = parseInt(parts[2], 10);
+        var m = parseInt(parts[1], 10) - 1;
+        var y = parts[0];
+        return d + ' ' + meses[m] + ' ' + y;
+      }
+
+      function escapeHtml(s) {
+        return String(s)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      function render(entries) {
+        if (!entries || entries.length === 0) {
+          root.innerHTML = '<div class="loading">No hay entradas todavía.</div>';
+          return;
+        }
+        var html = '<div class="changelog-entries">';
+        entries.forEach(function(entry, idx) {
+          var isLatest = idx === 0;
+          var changesHtml = (entry.changes || []).map(function(c) {
+            return '<li>' + escapeHtml(c) + '</li>';
+          }).join('');
+          html += '<article class="entry">'
+            + '<div class="entry-header">'
+            + '<span class="entry-version' + (isLatest ? ' latest' : '') + '">v' + escapeHtml(entry.version) + '</span>'
+            + '<span class="entry-date">' + escapeHtml(formatDate(entry.date)) + '</span>'
+            + '</div>'
+            + '<h2 class="entry-title">' + escapeHtml(entry.title) + '</h2>'
+            + '<ul class="entry-changes">' + changesHtml + '</ul>'
+            + '</article>';
+        });
+        html += '</div>';
+        root.innerHTML = html;
+      }
+
+      function showError() {
+        root.innerHTML = '<div class="error-state">'
+          + '<strong>No se pudo cargar el historial.</strong>'
+          + 'Inténtalo de nuevo más tarde o vuelve al <a href="/">inicio</a>.'
+          + '</div>';
+      }
+
+      fetch('/changelog.json', { cache: 'no-cache' })
+        .then(function(r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
+        .then(function(data) {
+          render(data.entries || []);
+        })
+        .catch(function() {
+          showError();
+        });
+    })();
+  </script>
+
+</body>
+</html>

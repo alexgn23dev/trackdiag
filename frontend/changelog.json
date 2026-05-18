@@ -1,0 +1,94 @@
+{
+  "entries": [
+    {
+      "version": "0.5.1",
+      "date": "2026-05-15",
+      "title": "LUFS sin juicio, saturación dinámica, harshness más preciso",
+      "changes": [
+        "El consejo de master para LUFS alto deja de presentarse como un error: ahora reconoce que un master agresivo puede ser correcto para club o pista, e invita a verificar que la dinámica no se haya comprometido.",
+        "Nueva detección de saturación dinámica (over-limiting) cruzando LUFS, LRA y rango dinámico. Avisa cuando el track suena \"chafado\" o ha perdido cuerpo y transitorios.",
+        "El cálculo de LRA respeta ahora el gating del estándar EBU R-128, descartando silencios al inicio/final del track que antes inflaban el rango hasta valores irreales.",
+        "Harshness mejora con detección de pico exacto (en Hz) y carácter (transitorio, sostenido o mixto), dando pistas más concretas sobre qué tipo de elemento está empujando.",
+        "Aviso fijo en cada diagnóstico de harshness sobre revisar hi-hats y percusión metálica, una de las causas más frecuentes."
+      ]
+    },
+    {
+      "version": "0.5",
+      "date": "2026-05-15",
+      "title": "Plan v0.5 — recalibrado de graves, géneros ampliados",
+      "changes": [
+        "Recalibrado de umbrales de exceso de graves: tras feedback de 46 usuarios reales, subidos los umbrales para reducir falsos positivos en géneros con kick prominente (tech house, techno, hard techno, minimal).",
+        "Descuento por género reforzado: en géneros con kick protagonista, el motor exige más evidencia antes de avisar por graves.",
+        "Consejos de harshness específicos según zona del problema (presencia 2-6 kHz, brillos 6-10 kHz o ambas) y según género (percusivo o melódico).",
+        "Consejos de mastering accionables por nivel de LUFS, con tabla de referencia por género (target y rango aceptable).",
+        "Comparación automática del LUFS medido con el target del género: \"Tu LUFS está 2 dB por encima del rango habitual de tech house\".",
+        "Nuevos géneros disponibles: Hard Techno, Psytrance, Afro House, Indie Dance, Breaks.",
+        "Campo \"Otro\" libre: cuando ningún género de la lista encaja, el usuario puede escribir el suyo. Sirve también para descubrir qué géneros faltan en la audiencia real.",
+        "Límite de subida ampliado de 50 a 100 MB."
+      ]
+    },
+    {
+      "version": "0.4.3",
+      "date": "2026-05-14",
+      "title": "Dashboard admin, tutoriales y PWA",
+      "changes": [
+        "Tracking de clicks en tutoriales de YouTube: cada video sugerido y cada video clickado se registra para medir engagement real.",
+        "Dashboard admin ampliado: nuevas métricas de engagement (repeat rate, distribución, media de análisis por usuario), satisfacción incluyendo \"Parcial\", y modal con detalle de tutoriales sugeridos vs. clickados.",
+        "Dashboard convertido en PWA (Progressive Web App): instalable en móvil como app nativa.",
+        "Bloqueo de acceso directo a recursos sensibles (.git, dashboard.html sin autenticación)."
+      ]
+    },
+    {
+      "version": "0.4.2",
+      "date": "2026-05-13",
+      "title": "Pre-lanzamiento y página de ideas",
+      "changes": [
+        "Página /ideas con propuestas votables por la comunidad, persistencia en Google Sheets y votación tipo toggle (cambiar voto o deshacerlo).",
+        "Auth con username (no solo email), modal flotante de login/registro integrado en el flow de subida.",
+        "Páginas legales completas (aviso legal, privacidad, cookies, términos) bajo la jurisdicción de Delaware (PRODONLINE LLC).",
+        "Limpieza automática de archivos temporales, validación de duración mínima del audio, timeout de procesamiento para prevenir cuelgues.",
+        "GA4 con funnel completo de 5 eventos para medir conversión y abandono."
+      ]
+    },
+    {
+      "version": "0.4.1",
+      "date": "2026-04-24",
+      "title": "Rebrand a Mentotrack y seguridad",
+      "changes": [
+        "TrackDiag pasa a llamarse Mentotrack. Nuevo wordmark con knob/onda verde integrada.",
+        "Branding Producción Online: nueva landing con dos columnas y logo definitivo.",
+        "10 fixes de seguridad: validación por magic bytes además de extensión, headers de seguridad, dashboard admin sin clave en URL, Docker corriendo como usuario no root, límite estricto de tamaño de subida.",
+        "Optimizaciones de rendimiento: lazy imports, compresión gzip, cache headers, carga única del audio (antes había doble lectura), STFT fuera del bucle de bandas."
+      ]
+    },
+    {
+      "version": "0.4",
+      "date": "2026-04-21",
+      "title": "Motor v0.4 — harshness, semáforo y feedback didáctico",
+      "changes": [
+        "Nuevo diagnóstico de harshness (chirrido/aspereza en medios-altos) con detección frame a frame y localización por zona.",
+        "Semáforo visual del estado del track (verde / amarillo / azul) según madurez detectada.",
+        "Feedback didáctico contextualizado por género, fase, objetivo y experiencia del usuario: el mismo diagnóstico se explica diferente según quién lo recibe.",
+        "Loudness contextual: el LUFS se interpreta según el objetivo (pinchar, enviar a sellos, aprender).",
+        "Nuevo diagnóstico falta_impacto con cruces entre rango dinámico y loudness.",
+        "Auth con contraseña (bcrypt) y JWT de sesión.",
+        "Dashboard admin protegido para ver todos los análisis y métricas en tiempo real.",
+        "Campo \"nombre del proyecto\" en el formulario para distinguir versiones."
+      ]
+    },
+    {
+      "version": "0.3",
+      "date": "2026-04-19",
+      "title": "Primera versión pública (TrackDiag v0.3)",
+      "changes": [
+        "Lanzamiento inicial: subir un bounce + cuestionario → diagnóstico priorizado con explicación, prioridades y \"no tocar aún\".",
+        "Motor de reglas con 9 diagnósticos ponderados y jerarquía pedagógica (estructura antes que mezcla).",
+        "Análisis de loudness LUFS según ITU-R BS.1770.",
+        "Visualización del espectro frecuencial por bandas (sub, graves, low-mid, mid, presencia, air).",
+        "Historial de análisis guardado en localStorage del navegador.",
+        "Captura de email y registro en Google Sheets para feedback posterior.",
+        "Inteligencia cruzada entre señales: el motor combina mediciones para validar/descartar diagnósticos antes de emitirlos."
+      ]
+    }
+  ]
+}
