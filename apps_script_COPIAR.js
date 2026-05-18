@@ -10,6 +10,11 @@
  *   check_username, get_all
  *
  * doPost también acepta el flow original sin "action" (tipo=feedback_*, o append diagnóstico).
+ *
+ * IMPORTANTE: este archivo es la fuente de verdad del Apps Script desplegado en
+ * script.google.com. Cualquier cambio aquí requiere copiar el contenido y desplegar
+ * manualmente. Mantener apps_script_COPIAR.js y docs/apps-script-completo.js
+ * sincronizados con este.
  */
 
 var SHEET_ID = '1kRn-h7efvND_ky4hM-WKUz96c6degPEFJMAu03ynHwQ';
@@ -203,13 +208,13 @@ function _handleAction(action, params) {
     var ideasSheet = ss.getSheetByName('ideas');
     if (!ideasSheet) {
       ideasSheet = ss.insertSheet('ideas');
-      ideasSheet.appendRow(['id', 'titulo', 'descripcion', 'nombre', 'fecha', 'votos']);
+      ideasSheet.appendRow(['id', 'nombre', 'titulo', 'descripcion', 'fecha', 'votos']);
     }
     // Self-healing: si la pestaña existe pero no tiene headers
     if (ideasSheet.getLastColumn() < 1) {
-      ideasSheet.getRange(1, 1, 1, 6).setValues([['id', 'titulo', 'descripcion', 'nombre', 'fecha', 'votos']]);
+      ideasSheet.getRange(1, 1, 1, 6).setValues([['id', 'nombre', 'titulo', 'descripcion', 'fecha', 'votos']]);
     }
-    ideasSheet.appendRow([id, titulo, descripcion, nombre, fecha, votos]);
+    ideasSheet.appendRow([id, nombre, titulo, descripcion, fecha, votos]);
     return _json({ ok: true, id: id });
   }
 

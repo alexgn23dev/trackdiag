@@ -1,6 +1,20 @@
 /**
  * Mentotrack — Google Apps Script
- * Pestañas: principal (diagnósticos) | usuarios | ideas
+ * Gestiona: diagnósticos (lectura/escritura), feedback, y usuarios (registro/login).
+ *
+ * Pestaña 'usuarios': email | password_hash | fecha_registro | username
+ * (la columna username se crea sola si no existe)
+ *
+ * Acciones (vía e.parameter.action en GET, o body.action en POST):
+ *   list, get_user, get_user_by_identifier, register, set_username,
+ *   check_username, get_all
+ *
+ * doPost también acepta el flow original sin "action" (tipo=feedback_*, o append diagnóstico).
+ *
+ * IMPORTANTE: este archivo es la fuente de verdad del Apps Script desplegado en
+ * script.google.com. Cualquier cambio aquí requiere copiar el contenido y desplegar
+ * manualmente. Mantener apps_script_COPIAR.js y docs/apps-script-completo.js
+ * sincronizados con este.
  */
 
 var SHEET_ID = '1kRn-h7efvND_ky4hM-WKUz96c6degPEFJMAu03ynHwQ';
@@ -18,7 +32,7 @@ function _getUsersSheet(ss, createIfMissing) {
 
 function _getColumnIndexes(sheet) {
   var lastCol = sheet.getLastColumn();
-  if (lastCol < 1) return {};
+  if (lastCol < 1) return {};  // pestaña vacía sin headers
   var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
   var map = {};
   for (var i = 0; i < headers.length; i++) {
@@ -29,6 +43,7 @@ function _getColumnIndexes(sheet) {
 
 function _ensureUsernameColumn(sheet) {
   var idx = _getColumnIndexes(sheet);
+  // Self-healing: si la pestaña está completamente vacía, crear todos los headers
   if (!idx.email) {
     sheet.getRange(1, 1, 1, 4).setValues([['email', 'password_hash', 'fecha_registro', 'username']]);
     return 4;
@@ -47,7 +62,6 @@ function _findUserRow(sheet, opts) {
   if (!emailQ && !usernameQ) return null;
 
   var idx = _getColumnIndexes(sheet);
-  if (!idx.email) return null;
   var emailCol = idx.email;
   var unameCol = idx.username;
   var data = sheet.getDataRange().getValues();
@@ -175,6 +189,7 @@ function _handleAction(action, params) {
       var row = idata[ii];
       var obj = {};
       for (var jj = 0; jj < iheaders.length; jj++) obj[iheaders[jj]] = row[jj];
+      // Normalizar votos a número
       obj.votos = Number(obj.votos || 0);
       ideas.push(obj);
     }
@@ -193,12 +208,13 @@ function _handleAction(action, params) {
     var ideasSheet = ss.getSheetByName('ideas');
     if (!ideasSheet) {
       ideasSheet = ss.insertSheet('ideas');
-      ideasSheet.appendRow(['id', 'titulo', 'descripcion', 'nombre', 'fecha', 'votos']);
+      ideasSheet.appendRow(['id', 'nombre', 'titulo', 'descripcion', 'fecha', 'votos']);
     }
+    // Self-healing: si la pestaña existe pero no tiene headers
     if (ideasSheet.getLastColumn() < 1) {
-      ideasSheet.getRange(1, 1, 1, 6).setValues([['id', 'titulo', 'descripcion', 'nombre', 'fecha', 'votos']]);
+      ideasSheet.getRange(1, 1, 1, 6).setValues([['id', 'nombre', 'titulo', 'descripcion', 'fecha', 'votos']]);
     }
-    ideasSheet.appendRow([id, titulo, descripcion, nombre, fecha, votos]);
+    ideasSheet.appendRow([id, nombre, titulo, descripcion, fecha, votos]);
     return _json({ ok: true, id: id });
   }
 
@@ -248,7 +264,7 @@ function _handleAction(action, params) {
     return _json({ ok: true, username: username });
   }
 
-  return null;
+  return null; // acción no reconocida → null para que el caller decida qué hacer
 }
 
 // ----------------------- doGet -----------------------
@@ -263,6 +279,7 @@ function doGet(e) {
 // ----------------------- doPost -----------------------
 
 function doPost(e) {
+  // 1) Parsear el body como JSON si lo hay
   var body = {};
   try {
     if (e && e.postData && e.postData.contents) {
@@ -272,13 +289,14 @@ function doPost(e) {
     body = {};
   }
 
+  // 2) Si hay 'action', tratarlo como una acción (mismo router que doGet)
   if (body.action) {
     var resp = _handleAction(body.action, body);
     if (resp) return resp;
     return _json({ error: 'Accion no reconocida' });
   }
 
-  // Flow legacy sin 'action': feedback / append diagnóstico / tutorial click
+  // 3) Flow legacy: feedback / append diagnóstico (sin 'action')
   var ss = SpreadsheetApp.openById(SHEET_ID);
   var sheet = ss.getSheets()[0];
   var data = body;
@@ -291,7 +309,6 @@ function doPost(e) {
         break;
       }
     }
-
   } else if (data.tipo === 'feedback_util') {
     var rows = sheet.getDataRange().getValues();
     for (var i = rows.length - 1; i >= 1; i--) {
@@ -301,46 +318,6 @@ function doPost(e) {
         break;
       }
     }
-
-  } else if (data.tipo === 'tutorial_click') {
-    // Buscar la última fila de este email y escribir tutoriales sugeridos + clickado
-    var email = (data.email || '').trim().toLowerCase();
-    if (email) {
-      var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-      var headerMap = {};
-      for (var h = 0; h < headers.length; h++) {
-        headerMap[String(headers[h]).trim().toLowerCase()] = h + 1;
-      }
-
-      // Crear columnas si no existen
-      var sugeridosCol = headerMap['tutoriales_sugeridos'];
-      var clickadoCol = headerMap['tutorial_clickado'];
-      if (!sugeridosCol) {
-        sugeridosCol = sheet.getLastColumn() + 1;
-        sheet.getRange(1, sugeridosCol).setValue('tutoriales_sugeridos');
-      }
-      if (!clickadoCol) {
-        clickadoCol = sheet.getLastColumn() + 1;
-        sheet.getRange(1, clickadoCol).setValue('tutorial_clickado');
-      }
-
-      // Buscar última fila del email (columna 2 = email)
-      var allRows = sheet.getDataRange().getValues();
-      for (var i = allRows.length - 1; i >= 1; i--) {
-        if (String(allRows[i][1]).trim().toLowerCase() === email) {
-          // Si ya tiene un click previo, acumular
-          var existingClick = String(sheet.getRange(i + 1, clickadoCol).getValue() || '').trim();
-          var nuevoClick = data.tutorial_clickado || '';
-          if (existingClick) {
-            nuevoClick = existingClick + ' || ' + nuevoClick;
-          }
-          sheet.getRange(i + 1, sugeridosCol).setValue(data.tutoriales_sugeridos || '');
-          sheet.getRange(i + 1, clickadoCol).setValue(nuevoClick);
-          break;
-        }
-      }
-    }
-
   } else {
     // Columnas: 1=timestamp, 2=email, 3=nombre_proyecto, 4=formulario,
     // 5=diagnostico, 6=senales_json, 7=fue_util, 8=comentario,
