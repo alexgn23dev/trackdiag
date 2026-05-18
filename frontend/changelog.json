@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "version": "0.5.2",
+      "date": "2026-05-18",
+      "title": "Razones del diagnóstico más precisas y consejos por pista",
+      "changes": [
+        "Mezcla prematura: las razones del diagnóstico ahora son específicas según la señal que dispara (poco desarrollo entre secciones, contraste energético bajo, o problemas estructurales reales), en lugar de generalizar todo como \"problemas estructurales\".",
+        "Carencia espectral: el motor ahora sugiere qué pistas concretas faltan según la banda afectada y el género — claps con cuerpo, hi-hats, leads, pads, charles, crashes — en lugar de un único consejo genérico.",
+        "Harshness más sensible: bajado el umbral del nivel \"notable\" para captar tracks con chirrido moderado que antes se quedaban en \"leve\". Aproximadamente 1 de cada 50 tracks históricos sube un escalón de severidad."
+      ]
+    },
+    {
       "version": "0.5.1",
       "date": "2026-05-15",
       "title": "LUFS sin juicio, saturación dinámica, harshness más preciso",
