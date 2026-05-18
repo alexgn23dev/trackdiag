@@ -7,7 +7,8 @@
       "changes": [
         "Mezcla prematura: las razones del diagnóstico ahora son específicas según la señal que dispara (poco desarrollo entre secciones, contraste energético bajo, o problemas estructurales reales), en lugar de generalizar todo como \"problemas estructurales\".",
         "Carencia espectral: el motor ahora sugiere qué pistas concretas faltan según la banda afectada y el género — claps con cuerpo, hi-hats, leads, pads, charles, crashes — en lugar de un único consejo genérico.",
-        "Harshness más sensible: bajado el umbral del nivel \"notable\" para captar tracks con chirrido moderado que antes se quedaban en \"leve\". Aproximadamente 1 de cada 50 tracks históricos sube un escalón de severidad."
+        "Harshness más sensible: bajado el umbral del nivel \"notable\" para captar tracks con chirrido moderado que antes se quedaban en \"leve\". Aproximadamente 1 de cada 50 tracks históricos sube un escalón de severidad.",
+        "Estado del track más accionable: \"Buena base, necesita iteración\" sustituido por \"Mezcla casi lista — N puntos pendientes antes del máster\" (con el conteo real); \"Listo para revisión más fina\" sustituido por \"Mezcla lista — foco en máster y nivel\". El titular se mueve con el progreso al reanalizar."
       ]
     },
     {
