@@ -417,10 +417,58 @@ def _generar_tips_genero(diagnostico_id: str, info_genero: dict, genero: str, se
             )
 
     elif diagnostico_id == "carencia_espectral":
+        carencia_medios = senales.get("carencia_medios", False)
+        carencia_agudos = senales.get("carencia_agudos", False)
+        generos_percusivos_ce = ["techno", "techno_acido", "minimal", "tech_house", "hard_techno"]
+        generos_melodicos_ce = ["trance", "progressive_house", "melodic_techno",
+                                "deep_house", "house", "afro_house", "indie_dance"]
+
+        # Sugerencias por pista cuando faltan MEDIOS (200 Hz – 2 kHz)
+        if carencia_medios:
+            if genero in generos_percusivos_ce:
+                tips.append(
+                    "Para llenar medios (200 Hz – 2 kHz) en este género suele faltar percusión "
+                    "con cuerpo: claps con peso, snares con tono, congas, toms o shakers de "
+                    "frecuencia media. Un stab corto o una textura de pad recortada también ayudan."
+                )
+            elif genero in generos_melodicos_ce:
+                tips.append(
+                    "Para llenar medios (200 Hz – 2 kHz) suele faltar la zona donde viven leads, "
+                    "voces, stabs y la parte alta del bajo. Revisa si tu lead principal tiene "
+                    "cuerpo en esa banda o si está demasiado en agudos; añade un pad de mid-range "
+                    "o una capa de plucks para rellenar."
+                )
+            else:
+                tips.append(
+                    "Faltan medios (200 Hz – 2 kHz): la zona donde 'vive el cuerpo' del track. "
+                    "Revisa percusiones de tono medio (claps, snares, congas), la parte alta del "
+                    "bajo, y elementos sostenidos como pads o stabs."
+                )
+
+        # Sugerencias por pista cuando faltan AGUDOS (>5 kHz)
+        if carencia_agudos:
+            if genero in generos_percusivos_ce:
+                tips.append(
+                    "Para llenar agudos (>5 kHz) en este género lo más rápido es trabajar el bus "
+                    "de percusión metálica: hi-hats cerrados, charles abiertos, rides, shakers. "
+                    "Un crash bien colocado al cambio de sección también suma aire."
+                )
+            elif genero in generos_melodicos_ce:
+                tips.append(
+                    "Para llenar agudos (>5 kHz) suele faltar aire en los elementos sostenidos: "
+                    "high-shelf suave (+1-2dB a 8-10kHz) sobre pads, leads y voces. También crashes, "
+                    "risers y reverbs con cola en agudos durante los builds y aperturas."
+                )
+            else:
+                tips.append(
+                    "Faltan agudos (>5 kHz): es lo que aporta brillo y 'aire'. Mira hi-hats, "
+                    "shakers, rides, crashes, y las colas de reverb de los pads o leads."
+                )
+
+        # Cierre de comparación con referencias — siempre
         tips.append(
-            f"Escucha 2-3 referencias de {_label_genero(genero)} y compara qué elementos "
-            f"llenan la zona media y alta. Fíjate en percusiones, hi-hats, texturas y capas "
-            f"de apoyo que dan cuerpo y brillo."
+            f"Como contraste, escucha 2-3 referencias de {_label_genero(genero)} y haz A/B: "
+            f"¿qué pistas tiene la referencia en esas zonas que tú no tienes?"
         )
 
     elif diagnostico_id == "conflicto_armonico":

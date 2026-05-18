@@ -100,17 +100,33 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     usuario_enfocado_mezcla = any(p in bloqueo for p in palabras_mezcla)
     fase_mezcla = fase in ["ajustando_mezcla", "casi_listo"]
     track_no_maduro = senales["madurez_estimada"] in ["verde", "en_desarrollo"]
-    problemas_estructura = (not senales["tiene_desarrollo"]
-                           or senales["contraste_energetico"] == "bajo"
-                           or dist["estructura_problematica"])
+    sin_desarrollo = not senales["tiene_desarrollo"]
+    contraste_bajo = senales["contraste_energetico"] == "bajo"
+    estructura_rota = bool(dist["estructura_problematica"])
+    problemas_estructura = sin_desarrollo or contraste_bajo or estructura_rota
+
+    def _motivo_estructura():
+        """Devuelve el texto preciso según qué señal disparó."""
+        if estructura_rota:
+            return "problemas estructurales en el reparto de secciones"
+        if sin_desarrollo and contraste_bajo:
+            return "poco desarrollo entre secciones y contraste energético bajo"
+        if sin_desarrollo:
+            return "poco desarrollo entre secciones"
+        if contraste_bajo:
+            return "poco contraste energético entre secciones"
+        return "señales de arreglo todavía abierto"
+
     if fase_mezcla and problemas_estructura:
-        score += 4; razones.append("El usuario dice estar mezclando pero el track tiene problemas estructurales")
+        score += 4
+        razones.append(f"El usuario dice estar mezclando pero el track presenta {_motivo_estructura()}")
     if usuario_enfocado_mezcla and track_no_maduro:
         score += 3; razones.append("El usuario habla de mezcla pero el track aún no está maduro")
     if fase_mezcla and senales["madurez_estimada"] == "verde":
         score += 2; razones.append("Fase de mezcla declarada en un track claramente verde")
     if usuario_enfocado_mezcla and problemas_estructura:
-        score += 1; razones.append("Foco en mezcla cuando hay señales de problema estructural")
+        score += 1
+        razones.append(f"Foco en mezcla cuando hay {_motivo_estructura()}")
     if senales["madurez_estimada"] == "avanzado" and senales["tiene_desarrollo"]:
         score -= 4; razones.append("(−) El track parece avanzado — la mezcla sí es relevante ahora")
     # Cruce: loudness alto + estructura inmadura = el usuario ha masterizado antes de arreglar

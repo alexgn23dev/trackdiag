@@ -90,6 +90,7 @@ def generar_diagnostico(senales: dict, contexto: dict) -> dict:
                 "lufs_integrado": senales["loudness"]["lufs_integrado"],
                 "lufs_short_term_max": senales["loudness"]["lufs_short_term_max"],
                 "rango_loudness": senales["loudness"]["rango_loudness"],
+                "true_peak_dbtp": senales["loudness"].get("true_peak_dbtp", -99.0),
                 "nivel": senales["loudness"]["nivel"],
                 "referencia": senales["loudness"]["referencia"],
                 "consejo_master": senales["loudness"].get("consejo_master", ""),

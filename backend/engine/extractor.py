@@ -324,6 +324,9 @@ def _analizar_harshness(mel_db: np.ndarray, mel_freqs: np.ndarray) -> dict:
     # Track 19 (bien):       p95=5.0, pct=25% → NO debe detectar
     # Track 10 (bien):       p95=2.3, pct=14% → NO debe detectar
     # Track 25 (chirriante): p95=2.2, pct=10% → no detectable por espectro (es tímbrico)
+    # Recalibrado con 583 sesiones: bajado pct>20 a pct>18 para capturar tracks
+    # ligeramente chirriantes (p95~5, pct~18) que estaban quedándose en "leve"
+    # cuando el usuario los percibía como "notable".
     puntos = 0
     if p95 > 7:
         puntos += 2
@@ -332,7 +335,7 @@ def _analizar_harshness(mel_db: np.ndarray, mel_freqs: np.ndarray) -> dict:
 
     if pct_mayor > 30:
         puntos += 2
-    elif pct_mayor > 20:
+    elif pct_mayor > 18:
         puntos += 1
 
     if puntos >= 3:
@@ -395,6 +398,7 @@ def _analizar_loudness(audio_path: str, y_preloaded=None, sr_preloaded=None,
         "lufs_integrado": -99.0,
         "lufs_short_term_max": -99.0,
         "rango_loudness": 0.0,
+        "true_peak_dbtp": -99.0,      # true peak con oversampling 4x (ITU-R BS.1770)
         "nivel": "",                  # "bajo", "moderado", "alto", "muy_alto"
         "referencia": "",             # texto con contexto
         "consejo_master": "",         # texto accionable según nivel
@@ -422,6 +426,41 @@ def _analizar_loudness(audio_path: str, y_preloaded=None, sr_preloaded=None,
         # LUFS integrado (todo el track)
         lufs_i = meter.integrated_loudness(data)
         resultado["lufs_integrado"] = round(float(lufs_i), 1)
+
+        # True Peak (dBTP) — ITU-R BS.1770 exige medirlo sobre el archivo a su
+        # sample rate nativo con oversampling 4x. Reusar el audio ya
+        # resampleado a 22050 introduce overshoot del filtro de antialiasing
+        # y falsea el valor (lo eleva 2-3 dB típicos).
+        # Por eso releemos el archivo aquí desde disco, fuera del flujo
+        # general que sí puede trabajar a 22050.
+        try:
+            native, native_sr = sf.read(audio_path, always_2d=True, dtype="float32")
+            # Sample peak primero (referencia exacta sobre samples del archivo)
+            sample_peak_lin = float(np.max(np.abs(native)))
+            sample_peak_db = 20.0 * float(np.log10(sample_peak_lin)) if sample_peak_lin > 1e-9 else -99.0
+
+            # Oversampling 4x con filtro polifásico de alta calidad para captar
+            # inter-sample peaks. Procesamos canal a canal en sr nativo.
+            tp_per_channel = []
+            for ch in range(native.shape[1]):
+                up = librosa.resample(
+                    native[:, ch],
+                    orig_sr=native_sr, target_sr=native_sr * 4,
+                    res_type="soxr_hq",
+                )
+                tp_per_channel.append(float(np.max(np.abs(up))))
+            tp_lin = max(tp_per_channel) if tp_per_channel else 0.0
+            tp_db = 20.0 * float(np.log10(tp_lin)) if tp_lin > 1e-9 else -99.0
+
+            # Sanity: el true peak nunca puede ser MENOR que el sample peak.
+            # Si por artefacto el oversampleado da menos, nos quedamos con el
+            # sample peak (cota inferior segura).
+            resultado["true_peak_dbtp"] = round(max(tp_db, sample_peak_db), 1)
+        except Exception:
+            # Fallback: sample peak sobre el audio ya cargado (sin oversampling)
+            peak_lin = float(np.max(np.abs(data)))
+            if peak_lin > 1e-9:
+                resultado["true_peak_dbtp"] = round(20.0 * float(np.log10(peak_lin)), 1)
 
         # Short-term loudness (ventanas de 3 segundos) para encontrar el pico
         block_size = int(rate * 3)  # 3 segundos
