@@ -809,7 +809,54 @@
         const faseCounts = countBy(entries.filter(e => e.fase), 'fase');
         const objetivoCounts = countBy(entries.filter(e => e.objetivo), 'objetivo');
         const dificultadCounts = countBy(entries.filter(e => e.dificultad), 'dificultad');
-        const diagCounts = countBy(entries.filter(e => e.diagPrincipal), 'diagPrincipal');
+        // Labels legibles para los IDs internos de diagnóstico
+        const DIAG_LABELS = {
+            problema_arreglo:   "Problema de arreglo",
+            poco_contraste:     "Poco contraste",
+            falta_impacto:      "Falta de impacto",
+            mezcla_prematura:   "Mezcla prematura",
+            exceso_lowend:      "Exceso de graves",
+            exceso_densidad:    "Exceso de densidad",
+            track_verde:        "Track verde",
+            carencia_espectral: "Carencia espectral",
+            conflicto_armonico: "Conflicto armónico",
+            pobreza_armonica:   "Pobreza armónica",
+            harshness_mezcla:   "Harshness en mezcla",
+            sin_diagnostico:    "Sin diagnóstico",
+        };
+
+        // Diagnóstico vs satisfacción: para cada diagnóstico, conteo total + breakdown
+        // de respuestas (sí / parcial / no / sin feedback). Los % se calculan sobre el
+        // total con feedback (sí+parcial+no), no sobre el total absoluto, para no
+        // confundir engagement con satisfacción.
+        const diagSatisfaccionData = useMemo(() => {
+            const acc = {};
+            entries.forEach(e => {
+                if (!e.diagPrincipal) return;
+                // Extraer ID del paréntesis, ej: "...texto... (harshness_mezcla)" → "harshness_mezcla"
+                const m = e.diagPrincipal.match(/\(([^)]+)\)\s*$/);
+                const id = m ? m[1].trim() : e.diagPrincipal.slice(0, 40);
+                if (!acc[id]) acc[id] = { id, total: 0, si: 0, parcial: 0, no: 0, sinFeedback: 0 };
+                acc[id].total++;
+                if (e.fueUtil === 'Sí') acc[id].si++;
+                else if (e.fueUtil === 'Parcial') acc[id].parcial++;
+                else if (e.fueUtil === 'No') acc[id].no++;
+                else acc[id].sinFeedback++;
+            });
+            return Object.values(acc)
+                .map(d => {
+                    const conFeedback = d.si + d.parcial + d.no;
+                    return {
+                        ...d,
+                        label: DIAG_LABELS[d.id] || d.id,
+                        conFeedback,
+                        pctSi: conFeedback > 0 ? Math.round((d.si / conFeedback) * 100) : null,
+                        pctParcial: conFeedback > 0 ? Math.round((d.parcial / conFeedback) * 100) : null,
+                        pctNo: conFeedback > 0 ? Math.round((d.no / conFeedback) * 100) : null,
+                    };
+                })
+                .sort((a, b) => b.total - a.total);
+        }, [entries]);
 
         // Semáforo counts
         const semaforoCounts = useMemo(() => {
@@ -986,6 +1033,61 @@
                                 <p className="text-gray-600 text-xs text-center">Aún no hay datos de tutoriales</p>
                             )}
                         </div>
+
+                        {/* Diagnóstico vs Satisfacción — ¿qué diagnósticos resuenan? */}
+                        {diagSatisfaccionData.length > 0 && (
+                            <div className="card p-5 mb-8">
+                                <h3 className="text-sm font-medium text-gray-300 mb-1">🩺 Diagnóstico vs satisfacción</h3>
+                                <p className="text-gray-500 text-xs mb-4">Qué diagnósticos resuenan más entre los usuarios. % calculados sobre los que dieron feedback (sí + parcial + no).</p>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-xs">
+                                        <thead>
+                                            <tr className="border-b border-gray-800">
+                                                <th className="text-left py-2 px-2 text-gray-500 font-normal">Diagnóstico</th>
+                                                <th className="text-right py-2 px-2 text-gray-500 font-normal">Total</th>
+                                                <th className="text-right py-2 px-2 text-green-400/70 font-normal">👍 Sí</th>
+                                                <th className="text-right py-2 px-2 text-yellow-400/70 font-normal">😐 Parcial</th>
+                                                <th className="text-right py-2 px-2 text-red-400/70 font-normal">👎 No</th>
+                                                <th className="text-right py-2 px-2 text-gray-600 font-normal">Sin resp.</th>
+                                                <th className="text-left py-2 pl-3 text-gray-500 font-normal w-32">Distribución</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {diagSatisfaccionData.map(d => {
+                                                const cf = d.conFeedback;
+                                                const wSi = cf > 0 ? (d.si / cf) * 100 : 0;
+                                                const wParcial = cf > 0 ? (d.parcial / cf) * 100 : 0;
+                                                const wNo = cf > 0 ? (d.no / cf) * 100 : 0;
+                                                return (
+                                                    <tr key={d.id} className="border-b border-gray-800/50 hover:bg-white/[0.02]">
+                                                        <td className="py-2 px-2">
+                                                            <span className="text-gray-200">{d.label}</span>
+                                                            <span className="text-gray-600 ml-2 text-[10px]">#{d.id}</span>
+                                                        </td>
+                                                        <td className="text-right py-2 px-2 text-gray-300 font-medium">{d.total}</td>
+                                                        <td className="text-right py-2 px-2 text-green-400">{d.si}{d.pctSi !== null && <span className="text-gray-600 text-[10px]"> ({d.pctSi}%)</span>}</td>
+                                                        <td className="text-right py-2 px-2 text-yellow-400">{d.parcial}{d.pctParcial !== null && <span className="text-gray-600 text-[10px]"> ({d.pctParcial}%)</span>}</td>
+                                                        <td className="text-right py-2 px-2 text-red-400">{d.no}{d.pctNo !== null && <span className="text-gray-600 text-[10px]"> ({d.pctNo}%)</span>}</td>
+                                                        <td className="text-right py-2 px-2 text-gray-500">{d.sinFeedback}</td>
+                                                        <td className="py-2 pl-3">
+                                                            {cf > 0 ? (
+                                                                <div className="flex h-2 rounded overflow-hidden bg-gray-800" title={`${d.si} sí · ${d.parcial} parcial · ${d.no} no`}>
+                                                                    {wSi > 0 && <div style={{ width: `${wSi}%`, background: '#4ade80' }}></div>}
+                                                                    {wParcial > 0 && <div style={{ width: `${wParcial}%`, background: '#facc15' }}></div>}
+                                                                    {wNo > 0 && <div style={{ width: `${wNo}%`, background: '#f87171' }}></div>}
+                                                                </div>
+                                                            ) : (
+                                                                <span className="text-gray-600 text-[10px]">sin feedback</span>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Semáforo + Charts Grid */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
