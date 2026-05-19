@@ -456,48 +456,152 @@ async def _sheets_post(payload: dict) -> dict:
         return {"error": str(e)}
 
 
+def _parse_formulario_str_to_dict(s: str) -> dict:
+    """'Tech House | Casi listo | Demo | 2-5 años | Estructura | Bloqueo: ...'
+    → dict para JSONB."""
+    if not s:
+        return {}
+    parts = [p.strip() for p in str(s).split("|")]
+    keys = ["genero", "fase", "objetivo", "experiencia", "dificultad_habitual", "bloqueo"]
+    out = {}
+    for i, p in enumerate(parts):
+        if i < len(keys):
+            if keys[i] == "bloqueo" and p.lower().startswith("bloqueo:"):
+                p = p[8:].strip()
+            out[keys[i]] = p
+    return out
+
+
 @app.post("/api/sheets/registro")
 @limiter.limit("5/minute")
 async def proxy_sheets_registro(request: Request, data: dict):
-    """Proxy: envía datos de registro/diagnóstico a Google Sheets."""
-    payload = {
-        "tipo": "registro",
-        "timestamp": data.get("timestamp", datetime.utcnow().isoformat()),
-        "email": data.get("email", ""),
-        "nombre_proyecto": data.get("nombre_proyecto", ""),
-        "formulario": data.get("formulario", ""),
-        "diagnostico": data.get("diagnostico", ""),
-        "senales_json": data.get("senales_json", ""),
-        "genero_custom": data.get("genero_custom", ""),
-    }
-    result = await _sheets_post(payload)
+    """Persiste un análisis. Postgres primary, Sheets mirror durante cutover B."""
+    email = (data.get("email") or "").strip().lower()
+    nombre_proyecto = (data.get("nombre_proyecto") or "").strip()
+    formulario_str = data.get("formulario", "")
+    diagnostico = data.get("diagnostico", "")
+    senales_json_str = data.get("senales_json", "")
+    genero_custom = (data.get("genero_custom") or "").strip()
+    ts_str = data.get("timestamp", "")
+
+    # Parse timestamp (acepta ISO con/sin Z)
+    try:
+        ts = ts_str.rstrip("Z") + "+00:00" if ts_str.endswith("Z") else ts_str
+        timestamp = datetime.fromisoformat(ts) if ts else datetime.now(timezone.utc)
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=timezone.utc)
+    except Exception:
+        timestamp = datetime.now(timezone.utc)
+
+    # Parse JSONB content
+    try:
+        senales_dict = json.loads(senales_json_str) if senales_json_str else {}
+    except Exception:
+        senales_dict = {}
+    formulario_dict = _parse_formulario_str_to_dict(formulario_str)
+
+    # Postgres primary
+    if _pg_available() and email and "@" in email:
+        try:
+            from db import get_pool
+            import repositories as repo
+            pool = get_pool()
+            user = await repo.get_user_by_email(pool, email)
+            usuario_id = user["id"] if user else None
+            await repo.create_analisis(
+                pool,
+                usuario_id=usuario_id,
+                proyecto_id=None,                # feature proyectos llegará en Fase 5
+                version_num=None,
+                version_etiqueta=None,
+                timestamp=timestamp,
+                email=email,
+                nombre_proyecto_legacy=(nombre_proyecto or None),
+                formulario=formulario_dict,
+                diagnostico=diagnostico or "",
+                senales=senales_dict,
+                genero_custom=(genero_custom or None),
+            )
+        except Exception as e:
+            print(f"[REGISTRO] Postgres falló (sigue Sheets): {e}")
+
+    # Sheets mirror (best-effort)
+    if SHEETS_WEBHOOK:
+        payload = {
+            "tipo": "registro",
+            "timestamp": ts_str or timestamp.isoformat(),
+            "email": email,
+            "nombre_proyecto": nombre_proyecto,
+            "formulario": formulario_str,
+            "diagnostico": diagnostico,
+            "senales_json": senales_json_str,
+            "genero_custom": genero_custom,
+        }
+        await _sheets_post(payload)
     return {"ok": True}
 
 
 @app.post("/api/sheets/feedback")
 @limiter.limit("10/minute")
 async def proxy_sheets_feedback(request: Request, data: dict):
-    """Proxy: envía feedback de utilidad a Google Sheets."""
-    payload = {
-        "tipo": "feedback_util",
-        "email": data.get("email", ""),
-        "fue_util": data.get("fue_util", ""),
-        "comentario": data.get("comentario", ""),
-    }
-    result = await _sheets_post(payload)
+    """Actualiza fue_util/comentario del análisis más reciente del usuario.
+    Postgres primary, Sheets mirror."""
+    email = (data.get("email") or "").strip().lower()
+    fue_util = data.get("fue_util", "")
+    comentario = data.get("comentario", "")
+
+    # Postgres primary: encontrar análisis más reciente y actualizar
+    if _pg_available() and email:
+        try:
+            from db import get_pool
+            import repositories as repo
+            pool = get_pool()
+            latest = await repo.find_latest_analisis_by_email(pool, email)
+            if latest:
+                await repo.update_analisis_feedback(
+                    pool, latest["id"],
+                    fue_util=(fue_util or None),
+                    comentario=(comentario or None),
+                )
+        except Exception as e:
+            print(f"[FEEDBACK] Postgres falló (sigue Sheets): {e}")
+
+    # Sheets mirror
+    if SHEETS_WEBHOOK:
+        await _sheets_post({
+            "tipo": "feedback_util",
+            "email": email,
+            "fue_util": fue_util,
+            "comentario": comentario,
+        })
     return {"ok": True}
 
 
 @app.post("/api/sheets/feedback-real")
 @limiter.limit("5/minute")
 async def proxy_sheets_feedback_real(request: Request, data: dict):
-    """Proxy: envía enlace de feedback real a Google Sheets."""
-    payload = {
-        "tipo": "feedback_real",
-        "email": data.get("email", ""),
-        "enlace": data.get("enlace", ""),
-    }
-    result = await _sheets_post(payload)
+    """Actualiza feedback_real (enlace SoundCloud) del análisis más reciente.
+    Postgres primary, Sheets mirror."""
+    email = (data.get("email") or "").strip().lower()
+    enlace = (data.get("enlace") or "").strip()
+
+    if _pg_available() and email:
+        try:
+            from db import get_pool
+            import repositories as repo
+            pool = get_pool()
+            latest = await repo.find_latest_analisis_by_email(pool, email)
+            if latest and enlace:
+                await repo.update_analisis_feedback_real(pool, latest["id"], enlace)
+        except Exception as e:
+            print(f"[FEEDBACK_REAL] Postgres falló (sigue Sheets): {e}")
+
+    if SHEETS_WEBHOOK:
+        await _sheets_post({
+            "tipo": "feedback_real",
+            "email": email,
+            "enlace": enlace,
+        })
     return {"ok": True}
 
 
@@ -506,7 +610,12 @@ async def proxy_sheets_feedback_real(request: Request, data: dict):
 async def proxy_sheets_tutorial_click(request: Request):
     """Proxy: registra click en tutorial de YouTube en Google Sheets.
     Parsea body manualmente para soportar sendBeacon (que puede no
-    enviar Content-Type: application/json correctamente)."""
+    enviar Content-Type: application/json correctamente).
+
+    Nota: no se persiste en Postgres por ahora; el campo tutorial_clickado/
+    tutoriales_sugeridos de la tabla analisis solo se hidrata vía la
+    migración inicial. Si en el futuro queremos persistir clicks nuevos,
+    añadir UPDATE aquí."""
     try:
         body = await request.body()
         data = json.loads(body) if body else {}
@@ -519,7 +628,8 @@ async def proxy_sheets_tutorial_click(request: Request):
         "tutorial_clickado": data.get("tutorial_clickado", ""),
         "tutoriales_sugeridos": data.get("tutoriales_sugeridos", ""),
     }
-    result = await _sheets_post(payload)
+    if SHEETS_WEBHOOK:
+        await _sheets_post(payload)
     return {"ok": True}
 
 
@@ -873,6 +983,19 @@ async def auth_check_username(request: Request, data: dict):
     username = (data.get("username") or "").strip().lstrip("@")
     if not _valid_username(username):
         return {"ok": False, "available": False, "error": "Formato inválido"}
+
+    # Postgres primary: comprobar si está cogido
+    if _pg_available():
+        try:
+            from db import get_pool
+            import repositories as repo
+            pool = get_pool()
+            available = await repo.is_username_available(pool, username)
+            return {"ok": True, "available": bool(available)}
+        except Exception as e:
+            print(f"[CHECK_USERNAME] Postgres falló, intentando Sheets: {e}")
+
+    # Fallback Sheets
     if not SHEETS_WEBHOOK:
         return {"ok": False, "available": False, "error": "Servicio no configurado"}
     result = await _sheets_get({"action": "check_username", "username": username})
@@ -900,6 +1023,32 @@ async def auth_set_username(request: Request, data: dict):
             "error": "Nombre de usuario inválido. Usa 3-20 caracteres: letras, números, guion bajo o guion."
         })
 
+    # Postgres primary
+    if _pg_available():
+        try:
+            from db import get_pool
+            import repositories as repo
+            pool = get_pool()
+            user = await repo.get_user_by_email(pool, email)
+            if not user:
+                # Fallback: usuario no está en Postgres todavía. Caer a Sheets.
+                pass
+            else:
+                # Comprobar disponibilidad del username
+                otro = await repo.get_user_by_username(pool, username)
+                if otro and otro["id"] != user["id"]:
+                    return JSONResponse(status_code=409, content={"error": "Ese nombre de usuario ya está cogido."})
+                await repo.update_user_username(pool, user["id"], username)
+                # Sheets mirror (best-effort)
+                if SHEETS_WEBHOOK:
+                    await _sheets_get({"action": "set_username", "email": email, "username": username})
+                return {"ok": True, "username": username}
+        except Exception as e:
+            print(f"[SET_USERNAME] Postgres falló, intentando Sheets: {e}")
+
+    # Fallback Sheets
+    if not SHEETS_WEBHOOK:
+        return JSONResponse(status_code=503, content={"error": "Servicio no configurado."})
     result = await _sheets_get({
         "action": "set_username",
         "email": email,
