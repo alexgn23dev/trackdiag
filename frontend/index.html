@@ -3089,7 +3089,10 @@
                                                             onClick={() => setPanelAvanceOpen(o => !o)}
                                                             className="flex items-baseline justify-between gap-3 cursor-pointer select-none"
                                                         >
-                                                            <h3 className="text-sm font-bold text-white">Avance del proyecto</h3>
+                                                            <h3 className="text-sm font-bold text-white">
+                                                                Progreso del proyecto
+                                                                <span className="text-xs font-normal text-gray-500 ml-2">(click para desplegar)</span>
+                                                            </h3>
                                                             <div className="flex items-baseline gap-3 whitespace-nowrap">
                                                                 <span className="text-xs font-semibold" style={{color: colorScore(lastSum)}}>
                                                                     {lastSum.ok}/{lastSum.total} en v{versiones[versiones.length - 1].version_num}
