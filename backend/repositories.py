@@ -272,6 +272,25 @@ async def update_analisis_feedback_real(
     return result.endswith(" 1")
 
 
+async def list_all_analisis(pool: asyncpg.Pool, limit: int = 10000) -> list[dict]:
+    """Lista todos los análisis (admin/dashboard). Usar con cuidado al escalar."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """SELECT id, usuario_id, proyecto_id, version_num, version_etiqueta,
+                      timestamp, email, nombre_proyecto_legacy,
+                      formulario, diagnostico, senales,
+                      fue_util, comentario, feedback_real,
+                      revision_alex, nota_alex,
+                      tutoriales_sugeridos, tutorial_clickado,
+                      genero_custom
+               FROM analisis
+               ORDER BY timestamp DESC
+               LIMIT $1""",
+            limit,
+        )
+    return [dict(r) for r in rows]
+
+
 async def find_latest_analisis_by_email(
     pool: asyncpg.Pool, email: str
 ) -> Optional[dict]:

@@ -636,11 +636,25 @@ async def proxy_sheets_tutorial_click(request: Request):
 @app.get("/api/sheets/datos")
 @limiter.limit("5/minute")
 async def proxy_sheets_datos(request: Request):
-    """Proxy: obtiene todos los datos de Sheets para el dashboard admin.
-    Solo acepta auth via cookie HttpOnly (no query params para evitar leaks)."""
+    """Devuelve todos los análisis para el dashboard admin.
+    Postgres primary con fallback a Sheets. Mantiene el formato legacy
+    que espera el dashboard (data: [...] con claves del Sheet)."""
     admin_cookie = request.cookies.get("admin_session", "")
     if not _verify_admin_token(admin_cookie):
         return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
+
+    # Postgres primary
+    if _pg_available():
+        try:
+            from db import get_pool
+            import repositories as repo
+            pool = get_pool()
+            rows = await repo.list_all_analisis(pool)
+            return {"ok": True, "data": [_pg_row_to_legacy_format(r) for r in rows]}
+        except Exception as e:
+            print(f"[ADMIN/DATOS] Postgres falló, fallback a Sheets: {e}")
+
+    # Fallback Sheets
     try:
         result = await _sheets_get({"action": "get_all"})
         if result.get("_connection_error"):
@@ -746,6 +760,14 @@ def _pg_row_to_legacy_format(row: dict) -> dict:
     else:
         senales_str = json.dumps(senales, ensure_ascii=False)
     ts = row.get("timestamp")
+    # tutoriales_sugeridos: el frontend lo trata como string. Si viene como
+    # dict/list desde JSONB lo serializamos.
+    tut_sug = row.get("tutoriales_sugeridos")
+    if isinstance(tut_sug, (dict, list)):
+        tut_sug = json.dumps(tut_sug, ensure_ascii=False)
+    elif tut_sug is None:
+        tut_sug = ""
+    nota_alex = row.get("nota_alex")
     return {
         "timestamp": ts.isoformat() if hasattr(ts, "isoformat") else (ts or ""),
         "email": row.get("email") or "",
@@ -756,6 +778,10 @@ def _pg_row_to_legacy_format(row: dict) -> dict:
         "fue_util": row.get("fue_util") or "",
         "comentario": row.get("comentario") or "",
         "feedback_real": row.get("feedback_real") or "",
+        "revision_alex": row.get("revision_alex") or "",
+        "nota_alex": float(nota_alex) if nota_alex is not None else "",
+        "tutoriales_sugeridos": tut_sug or "",
+        "tutorial_clickado": row.get("tutorial_clickado") or "",
         "genero_custom": row.get("genero_custom") or "",
     }
 
