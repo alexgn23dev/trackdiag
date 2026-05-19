@@ -478,6 +478,7 @@
         proyectosPrevios, proyectoMode, onProyectoModeChange,
         proyectoSeleccionadoId, onProyectoSeleccionadoChange,
         versionEtiqueta, onVersionEtiquetaChange,
+        prefilledFromProyecto,
     }) {
         const tieneProyectos = (proyectosPrevios || []).length > 0;
         const proyectoSeleccionado = tieneProyectos && proyectoMode === 'select'
@@ -573,6 +574,15 @@
                             El número se asigna automáticamente. La etiqueta te ayuda a recordar qué cambiaste en esta versión.
                         </p>
                     </div>
+
+                    {prefilledFromProyecto && (
+                        <div
+                            className="mb-4 px-3 py-2 rounded-md text-xs"
+                            style={{background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.25)', color: 'var(--po-light)'}}
+                        >
+                            Hemos rellenado todo con lo de la versión anterior para ahorrarte tiempo. Cambia cualquier campo si ha cambiado algo.
+                        </div>
+                    )}
 
                     <SelectField
                         label="¿Qué género estás produciendo?"
@@ -1621,6 +1631,7 @@
         const [panelProyectoActivo, setPanelProyectoActivo] = useState(null); // {proyecto, versiones} o null
         const [panelView, setPanelView] = useState('proyectos'); // 'proyectos' | 'detalle'
         const [panelExpandedVersion, setPanelExpandedVersion] = useState(null);
+        const [panelAvanceOpen, setPanelAvanceOpen] = useState(false);
         const [panelAnalisisSueltos, setPanelAnalisisSueltos] = useState([]);
         const [asignandoId, setAsignandoId] = useState(null); // id de análisis siendo asignado
         const [proyectoTarget, setProyectoTarget] = useState({}); // {analisisId: proyectoId}
@@ -1631,6 +1642,7 @@
         const [proyectoMode, setProyectoMode] = useState('select');  // 'select' | 'new'
         const [proyectoSeleccionadoId, setProyectoSeleccionadoId] = useState('');
         const [versionEtiqueta, setVersionEtiqueta] = useState('');
+        const [prefilledFromProyecto, setPrefilledFromProyecto] = useState(false);
         const [contexto, setContexto] = useState({
             genero: '', genero_custom: '', fase: '', objetivo: '',
             bloqueo_percibido: '', experiencia: '',
@@ -1726,6 +1738,19 @@
                 .catch(() => setPanelAnalisisSueltos([]));
         };
 
+        // Recarga el historial del usuario (incluye proyecto_id por análisis).
+        const refreshPanelHistorial = () => {
+            if (!panelAuth) return;
+            fetch(`${API_URL}/api/auth/historial`, {
+                method: 'POST',
+                headers: authHeaders(),
+                body: JSON.stringify({ email: panelAuth }),
+            })
+            .then(r => r.ok ? r.json() : null)
+            .then(data => { if (data) setPanelHistorial(data.historial || []); })
+            .catch(() => {});
+        };
+
         useEffect(() => {
             if (screen !== 'panel' || !panelAuth) return;
             refreshPanelProyectos();
@@ -1741,7 +1766,16 @@
                     headers: authHeaders(),
                     body: JSON.stringify({ proyecto_id: proyectoId }),
                 });
-                if (r.ok) refreshPanelProyectos();
+                if (r.ok) {
+                    refreshPanelProyectos();
+                    refreshPanelHistorial();
+                    // Limpiar selector para esa fila.
+                    setProyectoTarget(prev => {
+                        const next = {...prev};
+                        delete next[analisisId];
+                        return next;
+                    });
+                }
             } finally {
                 setAsignandoId(null);
             }
@@ -1765,41 +1799,367 @@
             setPanelExpandedVersion(null);
         };
 
-        // Calcula deltas entre dos versiones (lufs, harshness, balance, puntos pendientes).
-        // Devuelve un array de objetos {label, antes, despues, dir: '↑'|'↓'|'='}
-        const computeDeltas = (vAnterior, vActual) => {
-            if (!vAnterior || !vActual) return [];
-            const sA = vAnterior.senales || {};
-            const sB = vActual.senales || {};
-            const deltas = [];
-            const num = (x) => typeof x === 'number' ? x : (typeof x === 'string' ? parseFloat(x) : NaN);
-            const cmp = (label, vA, vB, mejor) => {
-                if (isNaN(vA) || isNaN(vB)) return;
-                const diff = vB - vA;
-                if (Math.abs(diff) < 0.05) return;
-                deltas.push({
-                    label,
-                    antes: vA.toFixed(1),
-                    despues: vB.toFixed(1),
-                    dir: diff > 0 ? '↑' : '↓',
-                    mejora: mejor === 'menos' ? diff < 0 : (mejor === 'mas' ? diff > 0 : null),
-                });
-            };
-            cmp('LUFS', num(sA.lufs_integrado), num(sB.lufs_integrado), null);
-            cmp('Harshness pct', num(sA.harshness_pct), num(sB.harshness_pct), 'menos');
-            cmp('Dinámica', num(sA.rango_dinamico), num(sB.rango_dinamico), null);
-            const npA = sA.scores ? Object.values(sA.scores).filter(v => v >= 2).length : null;
-            const npB = sB.scores ? Object.values(sB.scores).filter(v => v >= 2).length : null;
-            if (npA !== null && npB !== null && npA !== npB) {
-                deltas.push({
-                    label: 'Puntos pendientes',
-                    antes: String(npA),
-                    despues: String(npB),
-                    dir: npB > npA ? '↑' : '↓',
-                    mejora: npB < npA,
-                });
+        // Normaliza una fila de análisis (sea row del historial panel o versión
+        // de proyecto) en los mismos campos parseados que usa la tarjeta rica.
+        const parseAnalisisRow = (row) => {
+            const diag = row.diagnostico || '';
+            let genero = '', fase = '', objetivo = '';
+            if (typeof row.formulario === 'string') {
+                const parts = row.formulario.split(' | ').map(p => p.trim());
+                genero = parts[0] || '';
+                fase = parts[1] || '';
+                objetivo = parts[2] || '';
+            } else if (row.formulario && typeof row.formulario === 'object') {
+                genero = row.formulario.genero || '';
+                fase = row.formulario.fase || '';
+                objetivo = row.formulario.objetivo || '';
             }
-            return deltas;
+            // Helper: lee una línea con prefijo "LABEL:" del texto diag.
+            const lineField = (label) => {
+                const re = new RegExp('^' + label + ':\\s*(.+)$', 'im');
+                const m = diag.match(re);
+                return m ? m[1].trim() : '';
+            };
+            const estado = lineField('ESTADO');
+            const diagPrincipalRaw = lineField('DIAGN[ÓO]STICO PRINCIPAL');
+            const diagPrincipal = diagPrincipalRaw.replace(/\s*\([^)]*\)\s*$/, '');
+            const explicacion = lineField('Explicación');
+            const prioRaw = lineField('PRIORIDADES');
+            const prioridades = prioRaw
+                ? prioRaw.split(' | ').map(p => p.replace(/^\d+\.\s*/, '').trim()).filter(Boolean)
+                : [];
+            const notaContextual = lineField('NOTA CONTEXTUAL');
+            const motivacion = lineField('MOTIVACIÓN');
+            const tipObjetivo = lineField('TIP OBJETIVO');
+            const siguienteSesion = lineField('SIGUIENTE SESIÓN');
+            const referenciaTemporal = lineField('REFERENCIA TEMPORAL');
+            const balanceGrave = lineField('Balance grave');
+            const densidad = lineField('Densidad');
+            const loudnessLine = lineField('Loudness');
+            const monoCompatLine = lineField('Mono compat');
+            const harshnessLine = lineField('Harshness');
+            const bpmMatch = diag.match(/BPM:\s*(\d+)/);
+            const bpm = bpmMatch ? bpmMatch[1] : '';
+            const durMatch = diag.match(/Duración:\s*(.+)/);
+            const duracion = durMatch ? durMatch[1].trim().split(/\s*\|\s*|\n/)[0] : '';
+            const lufsMatch = diag.match(/([-\d.]+)\s*LUFS/);
+            const lufs = lufsMatch ? lufsMatch[1] : '';
+            const fueUtil = row.fue_util || '';
+            const comentario = row.comentario || '';
+            const enlace = row.feedback_real || row.enlace_feedback_real || '';
+            const est = estado.toLowerCase();
+            const semaforo = est.includes('temprana') || est.includes('verde')
+                ? { emoji: '🔴', color: '#f87171', bg: 'rgba(248,113,113,0.08)', border: '#7f1d1d', label: 'Fase temprana' }
+                : est.includes('pulir') || est.includes('avanzado') || est.includes('azul')
+                ? { emoji: '🔵', color: '#60a5fa', bg: 'rgba(96,165,250,0.08)', border: '#1e3a5f', label: 'Listo para pulir' }
+                : { emoji: '🟡', color: '#facc15', bg: 'rgba(250,204,21,0.08)', border: '#713f12', label: 'En desarrollo' };
+            return {
+                diag, genero, fase, objetivo, estado, diagPrincipal, explicacion, prioridades,
+                bpm, duracion, lufs, fueUtil, comentario, enlace, semaforo,
+                notaContextual, motivacion, tipObjetivo, siguienteSesion, referenciaTemporal,
+                balanceGrave, densidad, loudnessLine, monoCompatLine, harshnessLine,
+            };
+        };
+
+        // Renderiza el "Diagnóstico completo" formateado en tarjetas (no <pre>).
+        // Toma el row ya parseado y reproduce la estética de la pantalla original
+        // de diagnóstico, hasta donde nos llega la información guardada en texto.
+        const renderDiagnosticoCompleto = (parsed) => {
+            const {
+                diagPrincipal, explicacion, prioridades,
+                notaContextual, motivacion, tipObjetivo, siguienteSesion, referenciaTemporal,
+                balanceGrave, densidad, loudnessLine, monoCompatLine, harshnessLine,
+                bpm, duracion, semaforo, estado,
+            } = parsed;
+            // Helper: color para el valor de una métrica de mezcla.
+            const metricColor = (val, good, warn) => {
+                const v = (val || '').toLowerCase();
+                if (good.some(g => v.includes(g))) return 'accent-green';
+                if (warn.some(w => v.includes(w))) return 'text-yellow-400';
+                return 'text-red-400';
+            };
+            return (
+                <div className="mt-3 space-y-3">
+                    {/* Estado */}
+                    {estado && (
+                        <div className="rounded-lg px-4 py-3"
+                             style={{ background: semaforo.bg, border: `1px solid ${semaforo.border}` }}>
+                            <div className="flex items-center gap-2">
+                                <span>{semaforo.emoji}</span>
+                                <span className="text-sm" style={{ color: semaforo.color }}>{estado}</span>
+                            </div>
+                        </div>
+                    )}
+                    {/* Diagnóstico principal + explicación */}
+                    {diagPrincipal && (
+                        <div className="rounded-lg p-4" style={{ background: 'rgba(249,115,22,0.08)', border: '1px solid rgba(249,115,22,0.15)' }}>
+                            <p className="text-gray-500 text-xs uppercase tracking-wider mb-2">Diagnóstico principal</p>
+                            <p className="text-orange-400 text-sm font-medium">{diagPrincipal}</p>
+                            {explicacion && <p className="text-gray-300 text-xs mt-2 leading-relaxed">{explicacion}</p>}
+                        </div>
+                    )}
+                    {/* Nota contextual + motivación + referencia temporal */}
+                    {(notaContextual || motivacion || referenciaTemporal) && (
+                        <div className="rounded-lg p-4 bg-gray-900/40" style={{borderLeft: '3px solid var(--po-purple)'}}>
+                            {motivacion && (
+                                <p className="text-purple-300 text-sm font-medium mb-2">{motivacion}</p>
+                            )}
+                            {notaContextual && (
+                                <p className="text-gray-300 text-sm leading-relaxed">{notaContextual}</p>
+                            )}
+                            {referenciaTemporal && (
+                                <p className="text-gray-500 text-xs mt-3">{referenciaTemporal}</p>
+                            )}
+                        </div>
+                    )}
+                    {/* Prioridades */}
+                    {prioridades.length > 0 && (
+                        <div className="rounded-lg p-4 bg-gray-900/40">
+                            <p className="text-xs accent-green font-medium uppercase tracking-wider mb-3">Prioridades</p>
+                            <div className="space-y-2">
+                                {prioridades.map((p, i) => (
+                                    <div key={i} className="flex gap-2 items-start">
+                                        <span className="flex-shrink-0 w-5 h-5 rounded-full bg-green-900 accent-green flex items-center justify-center text-xs font-bold">{i + 1}</span>
+                                        <p className="text-gray-300 text-xs leading-relaxed pt-0.5">{p}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                    {/* Tip según objetivo */}
+                    {tipObjetivo && (
+                        <div className="rounded-lg p-4 bg-gray-900/40" style={{borderLeft: '3px solid #f59e0b'}}>
+                            <p className="text-xs text-yellow-500 font-medium uppercase tracking-wider mb-2">Según tu objetivo</p>
+                            <p className="text-gray-300 text-sm leading-relaxed">{tipObjetivo}</p>
+                        </div>
+                    )}
+                    {/* Siguiente sesión */}
+                    {siguienteSesion && (
+                        <div className="rounded-lg p-4 bg-gray-900/40 border border-purple-900/40">
+                            <p className="text-xs accent-purple font-medium uppercase tracking-wider mb-2">Tu próxima sesión</p>
+                            <p className="text-white text-sm leading-relaxed">{siguienteSesion}</p>
+                        </div>
+                    )}
+                    {/* Mezcla */}
+                    {(balanceGrave || densidad || loudnessLine || monoCompatLine || harshnessLine || bpm || duracion) && (
+                        <div className="rounded-lg p-4 bg-gray-900/40">
+                            <p className="text-xs text-gray-400 font-medium uppercase tracking-wider mb-3">Mezcla</p>
+                            <div className="space-y-2 text-sm">
+                                {(bpm || duracion) && (
+                                    <div className="flex flex-wrap gap-2 mb-2">
+                                        {bpm && <span className="px-2 py-1 rounded text-xs bg-gray-800 text-gray-300">{bpm} BPM</span>}
+                                        {duracion && <span className="px-2 py-1 rounded text-xs bg-gray-800 text-gray-300">{duracion}</span>}
+                                    </div>
+                                )}
+                                {balanceGrave && (
+                                    <div className="flex justify-between items-baseline">
+                                        <span className="text-gray-400 text-xs">Balance grave</span>
+                                        <span className={`text-xs ${metricColor(balanceGrave, ['normal'], ['elevado'])}`}>{balanceGrave}</span>
+                                    </div>
+                                )}
+                                {densidad && (
+                                    <div className="flex justify-between items-baseline">
+                                        <span className="text-gray-400 text-xs">Densidad</span>
+                                        <span className={`text-xs ${metricColor(densidad, ['baja','media'], ['alta'])}`}>{densidad}</span>
+                                    </div>
+                                )}
+                                {loudnessLine && (
+                                    <div>
+                                        <span className="text-gray-400 text-xs">Loudness:</span>
+                                        <span className="text-gray-300 text-xs ml-2">{loudnessLine}</span>
+                                    </div>
+                                )}
+                                {monoCompatLine && (
+                                    <div>
+                                        <span className="text-gray-400 text-xs">Mono compat:</span>
+                                        <span className="text-gray-300 text-xs ml-2">{monoCompatLine}</span>
+                                    </div>
+                                )}
+                                {harshnessLine && (
+                                    <div>
+                                        <span className="text-gray-400 text-xs">Harshness:</span>
+                                        <span className="text-gray-300 text-xs ml-2">{harshnessLine}</span>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // Bloque expandido reutilizable (estado + diagnóstico + prioridades + datos + feedback + ver completo).
+        const renderRichDetail = (parsed) => {
+            const { diag, estado, semaforo, diagPrincipal, explicacion, prioridades,
+                    genero, fase, objetivo, bpm, lufs, duracion, fueUtil, comentario, enlace } = parsed;
+            return (
+                <div className="border-t border-gray-800 fade-in">
+                    <div className="px-4 py-3">
+                        <div className="px-4 py-3 rounded-lg" style={{ background: semaforo.bg, border: `1px solid ${semaforo.border}` }}>
+                            <span className="text-sm" style={{ color: semaforo.color }}>{estado || semaforo.label}</span>
+                        </div>
+                    </div>
+                    {diagPrincipal && (
+                        <div className="px-4 pb-3">
+                            <p className="text-gray-500 text-xs uppercase tracking-wide mb-2">Diagnóstico principal</p>
+                            <div className="rounded-lg p-3" style={{ background: 'rgba(249,115,22,0.08)', border: '1px solid rgba(249,115,22,0.15)' }}>
+                                <p className="text-orange-400 text-sm font-medium">{diagPrincipal}</p>
+                                {explicacion && <p className="text-gray-300 text-xs mt-2 leading-relaxed">{explicacion}</p>}
+                            </div>
+                        </div>
+                    )}
+                    {prioridades.length > 0 && (
+                        <div className="px-4 pb-3">
+                            <p className="text-gray-500 text-xs uppercase tracking-wide mb-2">Prioridades</p>
+                            <div className="space-y-1.5">
+                                {prioridades.map((p, i) => (
+                                    <div key={i} className="flex items-start gap-2">
+                                        <span className="flex-shrink-0 w-5 h-5 rounded-full bg-purple-900/40 accent-purple text-xs flex items-center justify-center font-medium">{i+1}</span>
+                                        <p className="text-gray-300 text-xs leading-relaxed pt-0.5">{p}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                    <div className="px-4 pb-3">
+                        <p className="text-gray-500 text-xs uppercase tracking-wide mb-2">Datos</p>
+                        <div className="flex flex-wrap gap-2">
+                            {genero && <span className="px-2 py-1 rounded text-xs bg-gray-800 text-gray-300">{genero}</span>}
+                            {fase && <span className="px-2 py-1 rounded text-xs bg-gray-800 text-gray-300">{fase}</span>}
+                            {objetivo && <span className="px-2 py-1 rounded text-xs bg-gray-800 text-gray-300">{objetivo}</span>}
+                            {bpm && <span className="px-2 py-1 rounded text-xs bg-gray-800 text-gray-300">{bpm} BPM</span>}
+                            {lufs && <span className="px-2 py-1 rounded text-xs bg-gray-800 text-gray-300">{lufs} LUFS</span>}
+                            {duracion && <span className="px-2 py-1 rounded text-xs bg-gray-800 text-gray-300">{duracion}</span>}
+                        </div>
+                    </div>
+                    {(fueUtil || comentario || enlace) && (
+                        <div className="px-4 pb-4">
+                            <p className="text-gray-500 text-xs uppercase tracking-wide mb-2">Feedback</p>
+                            {fueUtil && <p className="text-gray-400 text-xs mb-1">¿Fue útil? <span className={fueUtil === 'Sí' ? 'accent-green' : 'text-red-400'}>{fueUtil}</span></p>}
+                            {comentario && <p className="text-gray-400 text-xs italic mb-1">"{comentario}"</p>}
+                            {enlace && <div className="mt-1"><span className="accent-purple text-xs">🎧 Feedback real solicitado</span></div>}
+                        </div>
+                    )}
+                    <div className="px-4 pb-4">
+                        <details className="group">
+                            <summary className="text-gray-500 text-xs cursor-pointer hover:text-gray-300 transition-colors">Ver diagnóstico completo</summary>
+                            {renderDiagnosticoCompleto(parsed)}
+                        </details>
+                    </div>
+                </div>
+            );
+        };
+
+        // Devuelve una lista de 6 ítems concretos de salud de la mezcla, cada uno
+        // pasado o pendiente, con su detalle. Sin números opacos: el usuario ve
+        // exactamente qué falta para que cada ítem pase.
+        //
+        // Cada item: {label, passed: bool|null, detail}
+        //   passed=null si el dato no está disponible (versión legacy / parseable).
+        const computeChecklist = (v) => {
+            const s = (v && v.senales) || {};
+            const diag = (v && v.diagnostico) || '';
+            const num = (x) => {
+                const n = typeof x === 'number' ? x : parseFloat(x);
+                return isNaN(n) ? null : n;
+            };
+            // Helper para extraer línea "LABEL: valor" del texto del diagnóstico.
+            const lineField = (label) => {
+                const re = new RegExp('^' + label + ':\\s*([^\\n|]+)', 'im');
+                const m = diag.match(re);
+                return m ? m[1].trim() : '';
+            };
+            // Item 1: Balance grave en rango
+            const balance = lineField('Balance grave').toLowerCase();
+            const balanceOk = balance === 'normal' ? true : (balance ? false : null);
+            // Item 2: Sin brillo agresivo
+            const h = num(s.harshness_pct);
+            const harshOk = h === null ? null : h <= 18;
+            // Item 3: Loudness en rango masterizable
+            const lufs = num(s.lufs_integrado);
+            const lufsOk = lufs === null ? null : (lufs <= -6 && lufs >= -22);
+            // Item 4: Densidad sana
+            const dens = lineField('Densidad').toLowerCase();
+            const densOk = (dens === 'baja' || dens === 'media') ? true : (dens ? false : null);
+            // Item 5: Compatibilidad mono
+            const mono = lineField('Mono compat').toLowerCase();
+            const monoOk = (mono === 'excelente' || mono === 'buena') ? true : (mono ? false : null);
+            // Item 6: Estructura y aporte sólidos (catch-all de diagnósticos
+            // estructurales/de capas/arreglos con severidad ≥ 2).
+            const STRUCT_DIAG_IDS = new Set([
+                'poco_contraste', 'problema_arreglo', 'mezcla_prematura',
+                'carencia_espectral', 'pobreza_armonica', 'falta_impacto',
+                'conflicto_armonico',
+            ]);
+            let structFailing = [];
+            if (s.scores && typeof s.scores === 'object') {
+                for (const [k, val] of Object.entries(s.scores)) {
+                    const nv = typeof val === 'number' ? val : parseFloat(val);
+                    if (!isNaN(nv) && nv >= 2 && STRUCT_DIAG_IDS.has(k)) {
+                        structFailing.push(k);
+                    }
+                }
+            }
+            const structOk = structFailing.length === 0;
+
+            return [
+                { label: 'Mezcla balanceada en graves', passed: balanceOk,
+                  detail: balance ? balance : 'sin datos' },
+                { label: 'Sin brillo agresivo', passed: harshOk,
+                  detail: h === null ? 'sin datos' : `${Math.round(h)}% de frames` },
+                { label: 'Loudness apto para masterizar', passed: lufsOk,
+                  detail: lufs === null ? 'sin datos' : `${lufs.toFixed(1)} LUFS` },
+                { label: 'Densidad espectral sana', passed: densOk,
+                  detail: dens ? dens : 'sin datos' },
+                { label: 'Buena compatibilidad mono', passed: monoOk,
+                  detail: mono ? mono : 'sin datos' },
+                { label: 'Estructura, capas y arreglo sólidos', passed: structOk,
+                  detail: structOk ? 'sin diagnósticos pendientes'
+                                   : `${structFailing.length} ${structFailing.length === 1 ? 'aspecto pendiente' : 'aspectos pendientes'}` },
+            ];
+        };
+
+        // Resumen del checklist: "N/6 puntos cubiertos".
+        const checklistSummary = (items) => {
+            const total = items.length;
+            const ok = items.filter(i => i.passed === true).length;
+            return { ok, total };
+        };
+
+        // Cambios significativos entre dos versiones: transiciones de items del
+        // checklist (que pasaron / dejaron de pasar) + matices perceptivos en
+        // métricas continuas (LUFS, dinámica).
+        const describePerceptualDeltas = (vAnt, vAct) => {
+            const out = [];
+            // 1) Transiciones del checklist (lo más relevante).
+            const itemsAnt = computeChecklist(vAnt);
+            const itemsAct = computeChecklist(vAct);
+            for (let i = 0; i < itemsAct.length; i++) {
+                const a = itemsAnt[i], b = itemsAct[i];
+                if (!a || !b) continue;
+                if (a.passed === false && b.passed === true) {
+                    out.push({ texto: `Ahora pasa: ${b.label}`, mejora: true });
+                } else if (a.passed === true && b.passed === false) {
+                    out.push({ texto: `Dejó de pasar: ${b.label}`, mejora: false });
+                }
+            }
+            // 2) Matices perceptivos continuos (sin contar como pass/fail).
+            const sA = (vAnt && vAnt.senales) || {};
+            const sB = (vAct && vAct.senales) || {};
+            const num = (x) => typeof x === 'number' ? x : parseFloat(x);
+            const lA = num(sA.lufs_integrado), lB = num(sB.lufs_integrado);
+            if (!isNaN(lA) && !isNaN(lB) && Math.abs(lB - lA) >= 0.5) {
+                out.push(lB > lA
+                    ? {texto: 'Suena con más nivel (más cuerpo y volumen)', mejora: null}
+                    : {texto: 'Suena con más headroom para masterizar', mejora: null});
+            }
+            const dA = num(sA.rango_dinamico), dB = num(sB.rango_dinamico);
+            if (!isNaN(dA) && !isNaN(dB) && Math.abs(dB - dA) >= 0.5) {
+                out.push(dB > dA
+                    ? {texto: 'Más dinámica, las partes respiran mejor', mejora: null}
+                    : {texto: 'Más comprimida, pierde aire entre golpes', mejora: null});
+            }
+            return out;
         };
 
         // Fetch proyectos previos del usuario cuando se entra al cuestionario.
@@ -1826,6 +2186,75 @@
                     setProyectoMode('new');
                 });
         }, [screen]);
+
+        // Al elegir un proyecto existente, prerrellenar género/objetivo/dificultad
+        // desde la última versión de ese proyecto. Fase, bloqueo y experiencia
+        // se piden de nuevo (cambian entre versiones, o el usuario puede ser
+        // distinto si está chequeando un proyecto ajeno).
+        //
+        // Nota: el `formulario` en Postgres guarda los LABELS (p.ej. "Tech House"),
+        // no los `value` ("tech_house"). Mapeamos label → value antes de
+        // setContexto para que los SelectField marquen la opción en morado.
+        useEffect(() => {
+            if (screen !== 'questionnaire') return;
+            if (proyectoMode !== 'select' || !proyectoSeleccionadoId) {
+                setPrefilledFromProyecto(false);
+                return;
+            }
+            if (!opciones) return; // necesitamos las opciones para mapear label → value
+            const ac = new AbortController();
+            fetch(`${API_URL}/api/proyectos/${proyectoSeleccionadoId}`, {
+                headers: authHeaders(),
+                signal: ac.signal,
+            })
+                .then(r => r.ok ? r.json() : null)
+                .then(data => {
+                    if (!data || !data.versiones || data.versiones.length === 0) return;
+                    const ultima = data.versiones[data.versiones.length - 1];
+                    const f = ultima.formulario || {};
+                    // Mapea label → value usando la lista de opciones cargada.
+                    const labelToValue = (opts, raw) => {
+                        if (!raw || !opts) return '';
+                        const s = String(raw).trim();
+                        // Primero por value exacto (legacy o ya normalizado).
+                        const byVal = opts.find(o => o.value === s);
+                        if (byVal) return byVal.value;
+                        // Luego por label exacto (case-insensitive).
+                        const byLab = opts.find(o => o.label.toLowerCase() === s.toLowerCase());
+                        return byLab ? byLab.value : '';
+                    };
+
+                    // Género: si la versión guardada empieza por "Otro:", marcamos 'otro'
+                    // y rellenamos genero_custom con el sufijo.
+                    let generoValue = '';
+                    let generoCustom = ultima.genero_custom || '';
+                    const rawGen = (f.genero || '').trim();
+                    if (rawGen.toLowerCase().startsWith('otro:')) {
+                        generoValue = 'otro';
+                        if (!generoCustom) generoCustom = rawGen.slice(5).trim();
+                    } else {
+                        generoValue = labelToValue(opciones.generos, rawGen);
+                    }
+                    const objetivoValue = labelToValue(opciones.objetivos, f.objetivo);
+                    const dificultadValue = labelToValue(opciones.dificultad_habitual, f.dificultad_habitual);
+                    const faseValue = labelToValue(opciones.fases, f.fase);
+                    const experienciaValue = labelToValue(opciones.experiencia, f.experiencia);
+
+                    setContexto(prev => ({
+                        ...prev,
+                        genero: generoValue || prev.genero || '',
+                        genero_custom: generoCustom || prev.genero_custom || '',
+                        objetivo: objetivoValue || prev.objetivo || '',
+                        dificultad_habitual: dificultadValue || prev.dificultad_habitual || '',
+                        fase: faseValue || prev.fase || '',
+                        experiencia: experienciaValue || prev.experiencia || '',
+                        bloqueo_percibido: (f.bloqueo || prev.bloqueo_percibido || ''),
+                    }));
+                    setPrefilledFromProyecto(true);
+                })
+                .catch(() => {});
+            return () => ac.abort();
+        }, [screen, proyectoMode, proyectoSeleccionadoId, opciones]);
 
         const isQuestionnaireValid = contexto.genero && contexto.fase && contexto.objetivo && contexto.experiencia && contexto.dificultad_habitual;
 
@@ -2082,6 +2511,9 @@
             setUserPassword('');
             setEmailError('');
             setNombreProyecto('');
+            setProyectoSeleccionadoId('');
+            setVersionEtiqueta('');
+            setPrefilledFromProyecto(false);
             setContexto({
                 genero: '', genero_custom: '', fase: '', objetivo: '',
                 bloqueo_percibido: '', experiencia: '',
@@ -2320,6 +2752,7 @@
                         onProyectoSeleccionadoChange={setProyectoSeleccionadoId}
                         versionEtiqueta={versionEtiqueta}
                         onVersionEtiquetaChange={setVersionEtiqueta}
+                        prefilledFromProyecto={prefilledFromProyecto}
                     />
                 )}
                 {/* (screen 'email' eliminada — la auth ahora pasa por el AuthModal) */}
@@ -2580,77 +3013,36 @@
                             </div>
 
                             {/* === VISTA DE PROYECTOS === */}
-                            {panelView === 'proyectos' && panelProyectos.length > 0 && (
+                            {panelView === 'proyectos' && (
                                 <div className="mb-8">
-                                    <h3 className="text-sm font-bold text-white mb-3">Tus proyectos</h3>
-                                    <div className="grid gap-3" style={{gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))'}}>
-                                        {panelProyectos.map(p => (
-                                            <div
-                                                key={p.id}
-                                                className="card p-4 cursor-pointer hover:bg-gray-800/30 transition-colors"
-                                                onClick={() => loadProyectoDetalle(p.id)}
-                                                style={{borderLeft: '3px solid var(--po-purple)'}}
-                                            >
-                                                <div className="text-white text-sm font-medium mb-1 truncate" title={p.nombre}>
-                                                    {p.nombre}
-                                                </div>
-                                                <div className="text-xs text-gray-500">
-                                                    {p.n_versiones || 0} {(p.n_versiones || 0) === 1 ? 'versión' : 'versiones'}
-                                                    {p.fecha_ultima_version && (
-                                                        <> · última: {new Date(p.fecha_ultima_version).toLocaleDateString('es-ES', {day:'numeric', month:'short'})}</>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* === ANÁLISIS SUELTOS (sin proyecto) === */}
-                            {panelView === 'proyectos' && panelAnalisisSueltos.length > 0 && (
-                                <div className="mb-8">
-                                    <h3 className="text-sm font-bold text-white mb-1">Análisis sin proyecto</h3>
+                                    <h3 className="text-sm font-bold text-white mb-1">Tus proyectos</h3>
                                     <p className="text-xs text-gray-500 mb-3">
-                                        {panelAnalisisSueltos.length} {panelAnalisisSueltos.length === 1 ? 'análisis' : 'análisis'} que aún no tienen proyecto asignado. Puedes vincularlos al proyecto que les corresponda.
+                                        Para crear un proyecto nuevo, empieza un análisis y elige “+ Crear nuevo” al rellenar el campo Proyecto.
                                     </p>
-                                    <div className="space-y-2">
-                                        {panelAnalisisSueltos.map(a => {
-                                            const dpMatch = (a.diagnostico || '').match(/DIAGN[ÓO]STICO PRINCIPAL:\s*(.+)/i);
-                                            const diagPrincipal = dpMatch ? dpMatch[1].trim().replace(/\s*\([^)]*\)\s*$/, '') : 'Sin diagnóstico';
-                                            const ts = a.timestamp ? new Date(a.timestamp).toLocaleDateString('es-ES', {day:'numeric',month:'short',year:'numeric'}) : '';
-                                            const isAsignando = asignandoId === a.id;
-                                            return (
-                                                <div key={a.id} className="card p-3" style={{borderLeft: '3px solid #555'}}>
-                                                    <div className="flex items-start justify-between gap-3 flex-wrap">
-                                                        <div className="flex-1 min-w-0">
-                                                            <div className="text-xs text-gray-500">{ts} {a.nombre_proyecto_legacy && <>· nombre original: "{a.nombre_proyecto_legacy}"</>}</div>
-                                                            <div className="text-sm text-gray-300 mt-1 truncate" title={diagPrincipal}>{diagPrincipal}</div>
-                                                        </div>
-                                                        <div className="flex items-center gap-2">
-                                                            <select
-                                                                value={proyectoTarget[a.id] || ''}
-                                                                onChange={(e) => setProyectoTarget(prev => ({...prev, [a.id]: e.target.value}))}
-                                                                className="px-2 py-1.5 rounded text-xs input-field"
-                                                                style={{minWidth: '180px'}}
-                                                            >
-                                                                <option value="">— Asignar a proyecto —</option>
-                                                                {panelProyectos.map(p => (
-                                                                    <option key={p.id} value={p.id}>{p.nombre}</option>
-                                                                ))}
-                                                            </select>
-                                                            <button
-                                                                onClick={() => asignarAnalisisAProyecto(a.id)}
-                                                                disabled={!proyectoTarget[a.id] || isAsignando}
-                                                                className="px-3 py-1.5 btn-primary rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-                                                            >
-                                                                {isAsignando ? '...' : 'Asignar'}
-                                                            </button>
-                                                        </div>
+                                    {panelProyectos.length > 0 ? (
+                                        <div className="grid gap-3" style={{gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))'}}>
+                                            {panelProyectos.map(p => (
+                                                <div
+                                                    key={p.id}
+                                                    className="card p-4 cursor-pointer hover:bg-gray-800/30 transition-colors"
+                                                    onClick={() => loadProyectoDetalle(p.id)}
+                                                    style={{borderLeft: '3px solid var(--po-purple)'}}
+                                                >
+                                                    <div className="text-white text-sm font-medium mb-1 truncate" title={p.nombre}>
+                                                        {p.nombre}
+                                                    </div>
+                                                    <div className="text-xs text-gray-500">
+                                                        {p.n_versiones || 0} {(p.n_versiones || 0) === 1 ? 'versión' : 'versiones'}
+                                                        {p.fecha_ultima_version && (
+                                                            <> · última: {new Date(p.fecha_ultima_version).toLocaleDateString('es-ES', {day:'numeric', month:'short'})}</>
+                                                        )}
                                                     </div>
                                                 </div>
-                                            );
-                                        })}
-                                    </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="text-xs text-gray-600 italic">Aún no hay proyectos.</div>
+                                    )}
                                 </div>
                             )}
 
@@ -2672,83 +3064,147 @@
                                                 {panelProyectoActivo.versiones.length} {panelProyectoActivo.versiones.length === 1 ? 'versión' : 'versiones'}
                                             </p>
 
-                                            {/* Avance entre versiones consecutivas */}
-                                            {panelProyectoActivo.versiones.length >= 2 && (
-                                                <div className="card p-4 mb-5" style={{borderLeft: '3px solid var(--po-purple)'}}>
-                                                    <h4 className="text-xs uppercase tracking-wider text-gray-400 mb-3">Avance entre versiones</h4>
-                                                    <div className="space-y-3">
-                                                        {panelProyectoActivo.versiones.slice(1).map((v, i) => {
-                                                            const vAnt = panelProyectoActivo.versiones[i];
-                                                            const deltas = computeDeltas(vAnt, v);
-                                                            return (
-                                                                <div key={v.id} className="text-xs">
-                                                                    <div className="text-gray-300 mb-1.5">
-                                                                        <strong>v{vAnt.version_num} → v{v.version_num}</strong>
-                                                                        {v.version_etiqueta && <span className="text-gray-500 ml-2">— {v.version_etiqueta}</span>}
-                                                                    </div>
-                                                                    {deltas.length === 0 ? (
-                                                                        <div className="text-gray-600 pl-3">Sin cambios objetivos detectables</div>
-                                                                    ) : (
-                                                                        <div className="flex flex-wrap gap-2 pl-3">
-                                                                            {deltas.map((d, j) => (
-                                                                                <span
-                                                                                    key={j}
-                                                                                    className="px-2 py-1 rounded text-xs"
-                                                                                    style={{
-                                                                                        background: d.mejora === true ? 'rgba(74,222,128,0.10)'
-                                                                                            : d.mejora === false ? 'rgba(248,113,113,0.10)'
-                                                                                            : 'rgba(156,163,175,0.08)',
-                                                                                        color: d.mejora === true ? '#4ade80'
-                                                                                            : d.mejora === false ? '#f87171' : '#9ca3af',
-                                                                                    }}
-                                                                                >
-                                                                                    {d.label}: {d.antes} {d.dir} {d.despues}
-                                                                                </span>
-                                                                            ))}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                </div>
-                                            )}
+                                            {/* Avance del proyecto: lista vertical de versiones, cada una con su checklist */}
+                                            {panelProyectoActivo.versiones.length >= 1 && (() => {
+                                                const versiones = panelProyectoActivo.versiones;
+                                                const colorScore = (s) => s.ok === s.total ? '#4ade80'
+                                                    : s.ok >= s.total / 2 ? '#facc15' : '#f87171';
 
-                                            {/* Lista de versiones desplegables */}
+                                                // Punto coloreado (verde si pasa, rojo si no, gris si sin datos).
+                                                const Dot = ({ passed }) => {
+                                                    const color = passed === true ? '#4ade80'
+                                                        : passed === false ? '#f87171' : '#4b5563';
+                                                    return (
+                                                        <span
+                                                            className="inline-block rounded-full flex-shrink-0"
+                                                            style={{ width: 10, height: 10, background: color }}
+                                                        />
+                                                    );
+                                                };
+
+                                                const lastSum = checklistSummary(computeChecklist(versiones[versiones.length - 1]));
+                                                return (
+                                                    <div className="card p-5 mb-6">
+                                                        <div
+                                                            onClick={() => setPanelAvanceOpen(o => !o)}
+                                                            className="flex items-baseline justify-between gap-3 cursor-pointer select-none"
+                                                        >
+                                                            <h3 className="text-sm font-bold text-white">Avance del proyecto</h3>
+                                                            <div className="flex items-baseline gap-3 whitespace-nowrap">
+                                                                <span className="text-xs font-semibold" style={{color: colorScore(lastSum)}}>
+                                                                    {lastSum.ok}/{lastSum.total} en v{versiones[versiones.length - 1].version_num}
+                                                                </span>
+                                                                <span className="text-xs text-gray-500">{panelAvanceOpen ? '▾' : '▸'}</span>
+                                                            </div>
+                                                        </div>
+                                                        {panelAvanceOpen && (
+                                                        <>
+                                                        <p className="text-xs text-gray-500 mt-1 mb-5">
+                                                            Estado de cada versión, de la más reciente arriba a la más antigua abajo.
+                                                        </p>
+                                                        <div className="space-y-6">
+                                                            {versiones
+                                                                .map((v, idx) => ({ v, idx, vAnt: idx > 0 ? versiones[idx - 1] : null }))
+                                                                .reverse()
+                                                                .map(({ v, idx, vAnt }) => {
+                                                                const items = computeChecklist(v);
+                                                                const sum = checklistSummary(items);
+                                                                const deltas = vAnt ? describePerceptualDeltas(vAnt, v) : [];
+                                                                return (
+                                                                    <div key={v.id}>
+                                                                        {/* Header de la versión */}
+                                                                        <div className="flex items-baseline justify-between gap-3 mb-3">
+                                                                            <div className="text-sm text-white min-w-0">
+                                                                                <strong>v{v.version_num}</strong>
+                                                                                {v.version_etiqueta && (
+                                                                                    <span className="text-gray-500 ml-2 text-xs truncate font-normal">— {v.version_etiqueta}</span>
+                                                                                )}
+                                                                            </div>
+                                                                            <span className="text-xs font-semibold whitespace-nowrap" style={{color: colorScore(sum)}}>
+                                                                                {sum.ok}/{sum.total} puntos cubiertos
+                                                                            </span>
+                                                                        </div>
+
+                                                                        {/* Checklist */}
+                                                                        <ul className="space-y-2 mb-2">
+                                                                            {items.map((it, i) => (
+                                                                                <li key={i} className="flex items-baseline gap-3">
+                                                                                    <span className="self-center"><Dot passed={it.passed} /></span>
+                                                                                    <span className="flex-1 text-sm text-gray-300 truncate">{it.label}</span>
+                                                                                    <span className="text-xs text-gray-500 whitespace-nowrap">{it.detail}</span>
+                                                                                </li>
+                                                                            ))}
+                                                                        </ul>
+
+                                                                        {/* Cambios respecto a la versión anterior */}
+                                                                        {vAnt && deltas.length > 0 && (
+                                                                            <div className="mt-3 pl-5">
+                                                                                <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">
+                                                                                    cambios vs v{vAnt.version_num}
+                                                                                </p>
+                                                                                <ul className="space-y-1">
+                                                                                    {deltas.map((d, j) => (
+                                                                                        <li key={j}
+                                                                                            className="text-xs flex items-baseline gap-2"
+                                                                                            style={{
+                                                                                                color: d.mejora === true ? '#4ade80'
+                                                                                                    : d.mejora === false ? '#f87171' : '#9ca3af',
+                                                                                            }}>
+                                                                                            <span>{d.mejora === true ? '↑' : d.mejora === false ? '↓' : '·'}</span>
+                                                                                            <span>{d.texto}</span>
+                                                                                        </li>
+                                                                                    ))}
+                                                                                </ul>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                        </>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })()}
+
+                                            {/* Lista de versiones desplegables — usa la tarjeta rica */}
                                             <div className="space-y-2">
                                                 {panelProyectoActivo.versiones.slice().reverse().map(v => {
                                                     const isOpen = panelExpandedVersion === v.id;
-                                                    const dpMatch = (v.diagnostico || '').match(/DIAGN[ÓO]STICO PRINCIPAL:\s*(.+)/i);
-                                                    const diagPrincipal = dpMatch ? dpMatch[1].trim().replace(/\s*\([^)]*\)\s*$/, '') : 'Sin diagnóstico';
-                                                    const estadoMatch = (v.diagnostico || '').match(/ESTADO:\s*(.+)/i);
-                                                    const estado = estadoMatch ? estadoMatch[1].trim() : '';
+                                                    const parsed = parseAnalisisRow(v);
                                                     return (
                                                         <div key={v.id} className="card overflow-hidden">
                                                             <div
-                                                                className="p-4 cursor-pointer hover:bg-gray-800/30"
+                                                                className="p-4 cursor-pointer hover:bg-gray-800/30 transition-colors"
                                                                 onClick={() => setPanelExpandedVersion(isOpen ? null : v.id)}
                                                             >
                                                                 <div className="flex items-center justify-between">
-                                                                    <div>
-                                                                        <div className="flex items-center gap-2">
-                                                                            <span className="text-purple-400 font-medium text-sm">v{v.version_num}</span>
-                                                                            {v.version_etiqueta && <span className="text-gray-500 text-xs">{v.version_etiqueta}</span>}
+                                                                    <div className="flex items-center gap-3 min-w-0">
+                                                                        <span className="text-lg">{parsed.semaforo.emoji}</span>
+                                                                        <div className="min-w-0">
+                                                                            <div className="flex items-center gap-2">
+                                                                                <span className="text-white font-medium text-sm">v{v.version_num}</span>
+                                                                                {v.version_etiqueta && <span className="text-gray-500 text-xs truncate">— {v.version_etiqueta}</span>}
+                                                                                {parsed.bpm && <span className="text-gray-600 text-xs">{parsed.bpm} BPM</span>}
+                                                                            </div>
+                                                                            <p className="text-gray-400 text-xs mt-0.5 truncate max-w-md">{parsed.diagPrincipal || 'Sin diagnóstico'}</p>
                                                                         </div>
-                                                                        <p className="text-gray-400 text-xs mt-1 truncate max-w-md">{diagPrincipal}</p>
                                                                     </div>
-                                                                    <div className="text-gray-600 text-xs whitespace-nowrap">
-                                                                        {v.timestamp ? new Date(v.timestamp).toLocaleDateString('es-ES', {day:'numeric',month:'short'}) : ''}
+                                                                    <div className="flex items-center gap-3 whitespace-nowrap">
+                                                                        {parsed.fueUtil && (
+                                                                            <span className={parsed.fueUtil === 'Sí' ? 'accent-green text-xs' : 'text-red-400 text-xs'}>
+                                                                                {parsed.fueUtil === 'Sí' ? '👍' : '👎'}
+                                                                            </span>
+                                                                        )}
+                                                                        {parsed.enlace && <span className="accent-purple text-xs">🎧</span>}
+                                                                        <span className="text-gray-600 text-xs">
+                                                                            {v.timestamp ? new Date(v.timestamp).toLocaleDateString('es-ES', {day:'numeric',month:'short'}) : ''}
+                                                                        </span>
+                                                                        <span className="text-gray-600 text-xs">{isOpen ? '▲' : '▼'}</span>
                                                                     </div>
                                                                 </div>
                                                             </div>
-                                                            {isOpen && (
-                                                                <div className="px-4 pb-4 border-t border-gray-800/50">
-                                                                    {estado && <p className="text-xs text-gray-300 mt-3 mb-2"><strong>Estado:</strong> {estado}</p>}
-                                                                    <pre className="text-xs text-gray-400 whitespace-pre-wrap mt-2" style={{fontFamily: 'inherit'}}>
-                                                                        {(v.diagnostico || '').slice(0, 1500)}
-                                                                    </pre>
-                                                                </div>
-                                                            )}
+                                                            {isOpen && renderRichDetail(parsed)}
                                                         </div>
                                                     );
                                                 })}
@@ -2781,6 +3237,17 @@
                             ) : (
                                 <div className="space-y-4">
                                     {panelHistorial.slice().reverse().map((row, idx) => {
+                                        // Lookup proyecto por id (cada fila, barato — pocos proyectos).
+                                        const proyectosById = {};
+                                        (panelProyectos || []).forEach(p => { proyectosById[p.id] = p; });
+                                        const rowProyectoId = row.proyecto_id || '';
+                                        const rowAnalisisId = row.id || '';
+                                        const rowProyecto = rowProyectoId ? proyectosById[rowProyectoId] : null;
+                                        const rowProyectoNombre = rowProyecto ? rowProyecto.nombre
+                                            : (row.nombre_proyecto_legacy || row.nombre_proyecto || '');
+                                        const versionNum = row.version_num;
+                                        const versionEtq = row.version_etiqueta || '';
+                                        const puedeAsignar = !rowProyectoId && rowAnalisisId && (panelProyectos || []).length > 0;
                                         // Parsear datos del row
                                         const formulario = row.formulario || '';
                                         const diag = row.diagnostico || '';
@@ -2825,7 +3292,7 @@
 
                                         const fueUtil = row.fue_util || '';
                                         const comentario = row.comentario || '';
-                                        const enlace = row.enlace_feedback_real || '';
+                                        const enlace = row.feedback_real || row.enlace_feedback_real || '';
 
                                         const isExpanded = panelSelectedEntry === idx;
 
@@ -2861,6 +3328,52 @@
                                                         </div>
                                                     </div>
                                                 </div>
+
+                                                {/* Meta de proyecto: chip si está asignado, asignación inline si es huérfano */}
+                                                {rowProyectoId && rowProyectoNombre && (
+                                                    <div className="px-4 pb-3 -mt-1 flex items-center gap-2 flex-wrap">
+                                                        <span
+                                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px]"
+                                                            style={{background: 'rgba(168,85,247,0.18)', color: '#ffffff', border: '1px solid rgba(168,85,247,0.4)'}}
+                                                            title={rowProyectoNombre}
+                                                        >
+                                                            <span>📁</span>
+                                                            <span className="truncate" style={{maxWidth: '180px'}}>{rowProyectoNombre}</span>
+                                                            {versionNum != null && <span style={{opacity: 0.8}}>· v{versionNum}</span>}
+                                                            {versionEtq && <span style={{opacity: 0.7}} className="truncate" title={versionEtq}>· {versionEtq}</span>}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                {puedeAsignar && (
+                                                    <div className="px-4 pb-3 -mt-1 flex items-center gap-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
+                                                        <span className="text-[11px] text-gray-500">Sin proyecto:</span>
+                                                        <select
+                                                            value={proyectoTarget[rowAnalisisId] || ''}
+                                                            onChange={(e) => setProyectoTarget(prev => ({...prev, [rowAnalisisId]: e.target.value}))}
+                                                            className="px-2 py-1 rounded text-[11px] input-field"
+                                                            style={{minWidth: '160px'}}
+                                                        >
+                                                            <option value="">— Asignar a proyecto —</option>
+                                                            {panelProyectos.map(p => (
+                                                                <option key={p.id} value={p.id}>{p.nombre}</option>
+                                                            ))}
+                                                        </select>
+                                                        <button
+                                                            onClick={() => asignarAnalisisAProyecto(rowAnalisisId)}
+                                                            disabled={!proyectoTarget[rowAnalisisId] || asignandoId === rowAnalisisId}
+                                                            className="px-2 py-1 btn-primary rounded text-[11px] disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        >
+                                                            {asignandoId === rowAnalisisId ? '...' : 'Asignar'}
+                                                        </button>
+                                                    </div>
+                                                )}
+                                                {!rowProyectoId && rowAnalisisId && (panelProyectos || []).length === 0 && (
+                                                    <div className="px-4 pb-3 -mt-1">
+                                                        <span className="text-[11px] text-gray-600 italic">
+                                                            Sin proyecto · crea uno desde un nuevo análisis para empezar a agrupar.
+                                                        </span>
+                                                    </div>
+                                                )}
 
                                                 {/* Detalle expandido */}
                                                 {isExpanded && (
@@ -2929,7 +3442,7 @@
                                                         <div className="px-4 pb-4">
                                                             <details className="group">
                                                                 <summary className="text-gray-500 text-xs cursor-pointer hover:text-gray-300 transition-colors">Ver diagnóstico completo</summary>
-                                                                <pre className="mt-2 bg-gray-900 rounded-lg p-4 text-xs text-gray-300 whitespace-pre-wrap leading-relaxed max-h-64 overflow-y-auto">{diag}</pre>
+                                                                {renderDiagnosticoCompleto(parseAnalisisRow(row))}
                                                             </details>
                                                         </div>
                                                     </div>
