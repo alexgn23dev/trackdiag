@@ -48,7 +48,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.2")
+app = FastAPI(title="Mentotrack API", version="0.5.3")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -171,7 +171,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.2"}
+    return {"status": "ok", "version": "0.5.3"}
 
 
 @app.post("/api/diagnostico")
@@ -795,7 +795,15 @@ def _pg_row_to_legacy_format(row: dict) -> dict:
     elif tut_sug is None:
         tut_sug = ""
     nota_alex = row.get("nota_alex")
+    rid = row.get("id")
+    pid = row.get("proyecto_id")
     return {
+        # IDs (sólo presentes en filas Postgres; ausentes en filas Sheets legacy)
+        "id": str(rid) if rid is not None else "",
+        "proyecto_id": str(pid) if pid is not None else "",
+        "version_num": row.get("version_num"),
+        "version_etiqueta": row.get("version_etiqueta") or "",
+        "nombre_proyecto_legacy": row.get("nombre_proyecto_legacy") or "",
         "timestamp": ts.isoformat() if hasattr(ts, "isoformat") else (ts or ""),
         "email": row.get("email") or "",
         "nombre_proyecto": row.get("nombre_proyecto_legacy") or "",
@@ -831,7 +839,7 @@ async def _obtener_historial(email: str) -> list:
                 # Caer a Sheets para no devolver vacío.
         except Exception as e:
             print(f"[HISTORIAL] Postgres falló, fallback a Sheets: {e}")
-    return await _obtener_historial(email)
+    return await _obtener_historial_sheets(email)
 
 
 async def _get_user_for_auth(email: str) -> dict | None:
@@ -1382,6 +1390,7 @@ async def get_proyecto_detalle(request: Request, proyecto_id: str):
                 "fue_util": v.get("fue_util") or "",
                 "comentario": v.get("comentario") or "",
                 "feedback_real": v.get("feedback_real") or "",
+                "genero_custom": v.get("genero_custom") or "",
             })
         return {
             "proyecto": _serialize_proyecto(proyecto),
@@ -1560,12 +1569,30 @@ async def post_etiqueta_version(request: Request, analisis_id: str, data: dict):
 @app.get("/api/ideas")
 @limiter.limit("30/minute")
 async def get_ideas(request: Request):
-    """Obtiene todas las ideas ordenadas por votos."""
+    """Obtiene todas las ideas ordenadas por votos. Postgres primary,
+    Sheets fallback si Postgres está caído."""
+    if _pg_available():
+        try:
+            from db import get_pool
+            import repositories as repo
+            pool = get_pool()
+            rows = await repo.list_ideas(pool)
+            ideas = [{
+                "id": str(r["id"]),
+                "nombre": r.get("nombre") or "",
+                "titulo": r.get("titulo") or "",
+                "descripcion": r.get("descripcion") or "",
+                "fecha": r["fecha"].strftime("%d %b %Y") if r.get("fecha") else "",
+                "votos": int(r.get("votos") or 0),
+            } for r in rows]
+            return {"ideas": ideas}
+        except Exception as e:
+            print(f"[IDEAS GET] Postgres falló, fallback Sheets: {e}")
+    # Fallback Sheets
     result = await _sheets_get({"action": "get_ideas"})
     if result.get("_connection_error"):
         return JSONResponse(status_code=503, content={"error": "Error de conexión"})
     ideas = result.get("ideas", [])
-    # Ordenar por votos descendente
     ideas.sort(key=lambda x: x.get("votos", 0), reverse=True)
     return {"ideas": ideas}
 
@@ -1573,7 +1600,7 @@ async def get_ideas(request: Request):
 @app.post("/api/ideas")
 @limiter.limit("5/minute")
 async def create_idea(request: Request, data: dict):
-    """Crea una nueva idea."""
+    """Crea una nueva idea. Postgres primary + mirror best-effort a Sheets."""
     nombre = (data.get("nombre") or "").strip()
     titulo = (data.get("titulo") or "").strip()
     descripcion = (data.get("descripcion") or "").strip()
@@ -1585,33 +1612,76 @@ async def create_idea(request: Request, data: dict):
     if len(descripcion) > 500:
         return JSONResponse(status_code=400, content={"error": "La descripción no puede superar 500 caracteres"})
 
-    idea_id = str(uuid.uuid4())[:8]
-    payload = {
-        "action": "create_idea",
-        "id": idea_id,
-        "nombre": nombre,
-        "titulo": titulo,
-        "descripcion": descripcion,
-        "fecha": datetime.now(timezone.utc).strftime("%d %b %Y"),
-        "votos": 0,
-    }
-    result = await _sheets_get(payload)
-    if result.get("_connection_error"):
-        return JSONResponse(status_code=503, content={"error": "Error de conexión"})
-    return {"ok": True, "id": idea_id}
+    new_id = None
+    # Postgres primary
+    if _pg_available():
+        try:
+            from db import get_pool
+            import repositories as repo
+            pool = get_pool()
+            row = await repo.create_idea(pool, nombre=nombre, titulo=titulo, descripcion=descripcion)
+            new_id = str(row["id"])
+        except Exception as e:
+            print(f"[IDEAS CREATE] Postgres falló: {e}")
+
+    # Mirror Sheets (best-effort, ID corto para legibilidad en Sheet).
+    if SHEETS_WEBHOOK:
+        sheets_id = (new_id[:8] if new_id else str(uuid.uuid4())[:8])
+        try:
+            await _sheets_post({
+                "action": "create_idea",
+                "id": sheets_id,
+                "nombre": nombre,
+                "titulo": titulo,
+                "descripcion": descripcion,
+                "fecha": datetime.now(timezone.utc).strftime("%d %b %Y"),
+                "votos": 0,
+            })
+            if new_id is None:
+                new_id = sheets_id
+        except Exception as e:
+            print(f"[IDEAS CREATE] Mirror Sheets falló: {e}")
+
+    if new_id is None:
+        return JSONResponse(status_code=503, content={"error": "No se pudo guardar la idea"})
+    return {"ok": True, "id": new_id}
 
 
 @app.post("/api/ideas/{idea_id}/vote")
 @limiter.limit("20/minute")
 async def vote_idea(request: Request, idea_id: str, data: dict):
-    """Vota una idea (up o down)."""
+    """Vota una idea. Si el ID es UUID, se vota en Postgres; si no, se asume
+    ID corto de Sheets y se vota allí (compat con ideas pre-migración)."""
     delta = data.get("delta")
     if delta is None:
         voto = data.get("voto", "")
         if voto not in ("up", "down"):
             return JSONResponse(status_code=400, content={"error": "Voto debe ser 'up' o 'down'"})
         delta = 1 if voto == "up" else -1
-    delta = max(-2, min(2, int(delta)))  # Limitar a [-2, 2]
+    try:
+        delta = max(-2, min(2, int(delta)))
+    except (TypeError, ValueError):
+        return JSONResponse(status_code=400, content={"error": "Delta inválido"})
+
+    # Si el ID parece UUID, votamos en Postgres.
+    try:
+        from uuid import UUID as _UUID
+        idea_uuid = _UUID(idea_id)
+    except (ValueError, TypeError):
+        idea_uuid = None
+
+    if idea_uuid is not None and _pg_available():
+        try:
+            from db import get_pool
+            import repositories as repo
+            pool = get_pool()
+            new_votos = await repo.vote_idea(pool, idea_uuid, delta)
+            if new_votos is not None:
+                return {"ok": True, "votos": new_votos}
+        except Exception as e:
+            print(f"[IDEAS VOTE] Postgres falló: {e}")
+
+    # Fallback Sheets (IDs cortos legacy o UUID no encontrado).
     result = await _sheets_get({"action": "vote_idea", "id": idea_id, "delta": delta})
     if result.get("_connection_error"):
         return JSONResponse(status_code=503, content={"error": "Error de conexión"})

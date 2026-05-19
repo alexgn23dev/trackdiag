@@ -23,7 +23,7 @@ def _get_dsn() -> str:
 
 
 async def _init_conn(conn: asyncpg.Connection):
-    """Configura cada conexión nueva del pool: codec para JSONB → dict."""
+    """Configura cada conexión NUEVA del pool: codecs JSONB."""
     await conn.set_type_codec(
         "jsonb",
         encoder=json.dumps,
@@ -38,17 +38,41 @@ async def _init_conn(conn: asyncpg.Connection):
     )
 
 
+async def _setup_conn(conn: asyncpg.Connection):
+    """Se ejecuta en CADA acquire(): valida que la conexión está viva.
+    Si el ping falla, asyncpg descarta la conexión y crea una nueva.
+    Necesario porque el proxy TCP de Railway corta conexiones idle sin
+    avisar al cliente — sin este check, la primera query falla con
+    'connection was closed in the middle of operation'."""
+    await conn.fetchval("SELECT 1")
+
+
 async def init_pool() -> asyncpg.Pool:
-    """Crea el pool global. Llamar al arrancar la app."""
+    """Crea el pool global. Llamar al arrancar la app.
+
+    Configuración para Railway: el proxy TCP de la URL pública corta
+    conexiones idle agresivamente. Mitigamos con:
+    - max_inactive_connection_lifetime=60s: pool recicla conexiones
+      antes que Railway las mate.
+    - setup ping en cada acquire: valida que la conexión está viva antes
+      de devolverla; si está muerta, el pool la descarta y crea otra.
+    - min_size=0: no mantiene conexiones idle entre peticiones.
+    """
     global _pool
     if _pool is not None:
         return _pool
+    # ssl='prefer': intenta SSL primero (necesario en Railway proxy público).
+    # Si el servidor no lo soporta, cae a TCP plano. En la URL interna de
+    # Railway el TCP plano funciona y prefer lo respeta.
     _pool = await asyncpg.create_pool(
         dsn=_get_dsn(),
-        min_size=1,
+        min_size=0,
         max_size=10,
         command_timeout=15,
+        max_inactive_connection_lifetime=30.0,
         init=_init_conn,
+        setup=_setup_conn,
+        ssl="prefer",
     )
     return _pool
 
