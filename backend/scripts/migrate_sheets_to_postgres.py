@@ -53,19 +53,23 @@ def read_from_csv(path: str) -> dict:
 
 def read_from_webhook(url: str) -> dict:
     """Llama al Apps Script con action=list (análisis), action=get_all sobre
-    pestaña usuarios (vía workaround) y action=get_ideas."""
+    pestaña usuarios (vía workaround) y action=get_ideas.
+    Apps Script devuelve 302 al endpoint script.googleusercontent.com — hay que
+    seguir redirects automáticamente."""
     import httpx
+    client = httpx.Client(timeout=60.0, follow_redirects=True)
     # 1) análisis (pestaña principal)
-    r = httpx.get(url, params={"action": "list"}, timeout=60.0)
+    r = client.get(url, params={"action": "list"})
     r.raise_for_status()
     analisis = r.json()
     if not isinstance(analisis, list):
         raise RuntimeError(f"action=list devolvió formato inesperado: {type(analisis)}")
     # 2) ideas
-    r = httpx.post(url, json={"action": "get_ideas"}, timeout=60.0)
+    r = client.post(url, json={"action": "get_ideas"})
     r.raise_for_status()
     ideas_resp = r.json()
     ideas = ideas_resp.get("ideas", []) if isinstance(ideas_resp, dict) else []
+    client.close()
     # 3) usuarios — el Apps Script actual no expone listado masivo de usuarios
     #    por seguridad (tiene get_user/get_user_by_identifier por email/username).
     #    Devolvemos vacío y los usuarios se "inferirán" de los emails que aparecen
