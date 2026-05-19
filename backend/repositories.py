@@ -555,7 +555,11 @@ async def update_analisis_feedback_real(
 
 @with_retry()
 async def list_all_analisis(pool: asyncpg.Pool, limit: int = 10000) -> list[dict]:
-    """Lista todos los análisis (admin/dashboard). Usar con cuidado al escalar."""
+    """Lista todos los análisis (admin/dashboard). Usar con cuidado al escalar.
+
+    Orden ASC para preservar el contrato legacy: el dashboard espera filas
+    en orden cronológico ascendente (oldest first) y luego hace .reverse()
+    para mostrar las más recientes primero. Era el orden natural de Sheets."""
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """SELECT id, usuario_id, proyecto_id, version_num, version_etiqueta,
@@ -566,7 +570,7 @@ async def list_all_analisis(pool: asyncpg.Pool, limit: int = 10000) -> list[dict
                       tutoriales_sugeridos, tutorial_clickado,
                       genero_custom
                FROM analisis
-               ORDER BY timestamp DESC
+               ORDER BY timestamp ASC
                LIMIT $1""",
             limit,
         )
