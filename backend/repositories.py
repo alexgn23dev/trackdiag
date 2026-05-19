@@ -126,6 +126,58 @@ async def list_proyectos_usuario(
     return [dict(r) for r in rows]
 
 
+async def list_proyectos_con_resumen(
+    pool: asyncpg.Pool, usuario_id: UUID, include_archivados: bool = False
+) -> list[dict]:
+    """Lista proyectos del usuario con conteo de versiones y fecha de última.
+    Útil para la vista de cards del panel."""
+    where_archivado = "" if include_archivados else "AND NOT p.archivado"
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            f"""SELECT p.id, p.nombre, p.fecha_creacion, p.archivado,
+                       COUNT(a.id) AS n_versiones,
+                       MAX(a.timestamp) AS fecha_ultima_version
+                FROM proyectos p
+                LEFT JOIN analisis a ON a.proyecto_id = p.id
+                WHERE p.usuario_id = $1 {where_archivado}
+                GROUP BY p.id
+                ORDER BY COALESCE(MAX(a.timestamp), p.fecha_creacion) DESC""",
+            usuario_id,
+        )
+    return [dict(r) for r in rows]
+
+
+async def get_proyecto(
+    pool: asyncpg.Pool, proyecto_id: UUID, usuario_id: UUID
+) -> Optional[dict]:
+    """Devuelve el proyecto si pertenece al usuario, o None."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """SELECT id, nombre, fecha_creacion, archivado
+               FROM proyectos
+               WHERE id = $1 AND usuario_id = $2""",
+            proyecto_id, usuario_id,
+        )
+    return dict(row) if row else None
+
+
+async def find_proyecto_by_nombre(
+    pool: asyncpg.Pool, usuario_id: UUID, nombre: str
+) -> Optional[dict]:
+    """Busca un proyecto por nombre exact-match case-insensitive del usuario."""
+    nombre = (nombre or "").strip()
+    if not nombre:
+        return None
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """SELECT id, nombre, fecha_creacion, archivado
+               FROM proyectos
+               WHERE usuario_id = $1 AND LOWER(TRIM(nombre)) = LOWER(TRIM($2))""",
+            usuario_id, nombre,
+        )
+    return dict(row) if row else None
+
+
 async def create_proyecto(
     pool: asyncpg.Pool, usuario_id: UUID, nombre: str
 ) -> dict:
@@ -137,6 +189,80 @@ async def create_proyecto(
             usuario_id, nombre.strip(),
         )
     return dict(row)
+
+
+async def get_or_create_proyecto(
+    pool: asyncpg.Pool, usuario_id: UUID, nombre: str
+) -> dict:
+    """Atomicidad: busca por nombre exact, si no existe crea."""
+    existing = await find_proyecto_by_nombre(pool, usuario_id, nombre)
+    if existing:
+        return existing
+    return await create_proyecto(pool, usuario_id, nombre)
+
+
+async def list_analisis_sueltos_usuario(
+    pool: asyncpg.Pool, usuario_id: UUID, limit: int = 200
+) -> list[dict]:
+    """Análisis del usuario sin proyecto asignado (legacy o aún no reasignados)."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """SELECT id, timestamp, nombre_proyecto_legacy,
+                      formulario, diagnostico, senales
+               FROM analisis
+               WHERE usuario_id = $1 AND proyecto_id IS NULL
+               ORDER BY timestamp DESC
+               LIMIT $2""",
+            usuario_id, limit,
+        )
+    return [dict(r) for r in rows]
+
+
+async def asignar_analisis_a_proyecto(
+    pool: asyncpg.Pool, analisis_id: UUID, proyecto_id: UUID, usuario_id: UUID
+) -> bool:
+    """Reasigna un análisis suelto a un proyecto, calculando version_num
+    siguiente automáticamente. Atómico bajo una sola conexión."""
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            # Verificar ownership en ambos lados
+            owner = await conn.fetchval(
+                """SELECT 1 FROM analisis a
+                   WHERE a.id = $1 AND a.usuario_id = $2 AND a.proyecto_id IS NULL""",
+                analisis_id, usuario_id,
+            )
+            if not owner:
+                return False
+            proyecto_owner = await conn.fetchval(
+                "SELECT 1 FROM proyectos WHERE id = $1 AND usuario_id = $2",
+                proyecto_id, usuario_id,
+            )
+            if not proyecto_owner:
+                return False
+            next_v = await conn.fetchval(
+                "SELECT COALESCE(MAX(version_num), 0) + 1 FROM analisis WHERE proyecto_id = $1",
+                proyecto_id,
+            )
+            await conn.execute(
+                """UPDATE analisis
+                   SET proyecto_id = $1, version_num = $2
+                   WHERE id = $3""",
+                proyecto_id, int(next_v), analisis_id,
+            )
+    return True
+
+
+async def update_version_etiqueta(
+    pool: asyncpg.Pool, analisis_id: UUID, usuario_id: UUID, etiqueta: str
+) -> bool:
+    """Renombrar etiqueta de una versión concreta. Solo el dueño puede."""
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            """UPDATE analisis SET version_etiqueta = $1
+               WHERE id = $2 AND usuario_id = $3""",
+            (etiqueta.strip() or None), analisis_id, usuario_id,
+        )
+    return result.endswith(" 1")
 
 
 async def archivar_proyecto(

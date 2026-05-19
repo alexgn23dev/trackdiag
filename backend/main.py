@@ -500,20 +500,47 @@ async def proxy_sheets_registro(request: Request, data: dict):
         senales_dict = {}
     formulario_dict = _parse_formulario_str_to_dict(formulario_str)
 
+    # Vinculación a proyecto + versionado automático
+    proyecto_id_str = (data.get("proyecto_id") or "").strip()
+    version_etiqueta = (data.get("version_etiqueta") or "").strip()[:80] or None
+
     # Postgres primary
     if _pg_available() and email and "@" in email:
         try:
             from db import get_pool
             import repositories as repo
+            from uuid import UUID
             pool = get_pool()
             user = await repo.get_user_by_email(pool, email)
             usuario_id = user["id"] if user else None
+            proyecto_id = None
+            version_num = None
+
+            if usuario_id:
+                # Modo 1: el frontend pasa proyecto_id explícito (nuevo flujo).
+                if proyecto_id_str:
+                    try:
+                        pid = UUID(proyecto_id_str)
+                        proyecto_chk = await repo.get_proyecto(pool, pid, usuario_id)
+                        if proyecto_chk:
+                            proyecto_id = pid
+                    except (ValueError, TypeError):
+                        pass
+                # Modo 2: legacy — frontend pasa nombre_proyecto string. Buscamos
+                # un proyecto con ese nombre exact-match o creamos uno nuevo.
+                elif nombre_proyecto:
+                    proyecto = await repo.get_or_create_proyecto(pool, usuario_id, nombre_proyecto)
+                    proyecto_id = proyecto["id"]
+
+                if proyecto_id:
+                    version_num = await repo.next_version_num(pool, proyecto_id)
+
             await repo.create_analisis(
                 pool,
                 usuario_id=usuario_id,
-                proyecto_id=None,                # feature proyectos llegará en Fase 5
-                version_num=None,
-                version_etiqueta=None,
+                proyecto_id=proyecto_id,
+                version_num=version_num,
+                version_etiqueta=version_etiqueta,
                 timestamp=timestamp,
                 email=email,
                 nombre_proyecto_legacy=(nombre_proyecto or None),
@@ -1222,6 +1249,308 @@ async def obtener_historial(request: Request, data: dict):
 
     historial = await _obtener_historial(token_email)
     return {"ok": True, "historial": historial}
+
+
+# =========================================================================
+# Proyectos — agrupación de análisis por canción
+# =========================================================================
+
+def _require_auth_user(request: Request) -> tuple[str | None, JSONResponse | None]:
+    """Devuelve (email_token, None) si todo OK, o (None, JSONResponse) con error.
+    Endpoints de proyectos requieren login obligatorio."""
+    token = _get_token_from_request(request)
+    if not token:
+        return None, JSONResponse(status_code=401, content={"error": "Token requerido"})
+    email = _verify_token(token)
+    if not email:
+        return None, JSONResponse(status_code=401, content={"error": "Token inválido o expirado"})
+    return email, None
+
+
+async def _get_usuario_id_from_email(email: str):
+    """Resuelve usuario_id desde un email. Requiere Postgres disponible."""
+    from db import get_pool
+    import repositories as repo
+    pool = get_pool()
+    user = await repo.get_user_by_email(pool, email)
+    return (user["id"] if user else None), pool
+
+
+def _serialize_proyecto(p: dict) -> dict:
+    return {
+        "id": str(p["id"]),
+        "nombre": p["nombre"],
+        "fecha_creacion": p["fecha_creacion"].isoformat() if p.get("fecha_creacion") else None,
+        "archivado": bool(p.get("archivado", False)),
+        "n_versiones": int(p.get("n_versiones", 0)) if "n_versiones" in p else None,
+        "fecha_ultima_version": (
+            p["fecha_ultima_version"].isoformat()
+            if p.get("fecha_ultima_version") else None
+        ),
+    }
+
+
+@app.get("/api/proyectos")
+@limiter.limit("30/minute")
+async def get_proyectos(request: Request):
+    """Lista los proyectos del usuario logueado con resumen mínimo
+    (id, nombre, n_versiones, fecha de última versión, archivado).
+    Soporta ?archivados=1 para incluir los archivados."""
+    email, err = _require_auth_user(request)
+    if err:
+        return err
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Base de datos no disponible"})
+    try:
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+        user = await repo.get_user_by_email(pool, email)
+        if not user:
+            return {"proyectos": []}
+        include_archivados = request.query_params.get("archivados") in ("1", "true")
+        rows = await repo.list_proyectos_con_resumen(pool, user["id"], include_archivados)
+        return {"proyectos": [_serialize_proyecto(p) for p in rows]}
+    except Exception as e:
+        print(f"[PROYECTOS GET] {e}")
+        return JSONResponse(status_code=500, content={"error": "Error obteniendo proyectos"})
+
+
+@app.post("/api/proyectos")
+@limiter.limit("10/minute")
+async def post_proyecto(request: Request, data: dict):
+    """Crea un proyecto nuevo. Body: {nombre}.
+    Si ya existe uno con el mismo nombre (case-insensitive), devuelve el existente."""
+    email, err = _require_auth_user(request)
+    if err:
+        return err
+    nombre = (data.get("nombre") or "").strip()[:120]
+    if not nombre:
+        return JSONResponse(status_code=400, content={"error": "Nombre requerido"})
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Base de datos no disponible"})
+    try:
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+        user = await repo.get_user_by_email(pool, email)
+        if not user:
+            return JSONResponse(status_code=404, content={"error": "Usuario no encontrado"})
+        proyecto = await repo.get_or_create_proyecto(pool, user["id"], nombre)
+        return {"ok": True, "proyecto": _serialize_proyecto(proyecto)}
+    except Exception as e:
+        print(f"[PROYECTOS POST] {e}")
+        return JSONResponse(status_code=500, content={"error": "Error creando proyecto"})
+
+
+@app.get("/api/proyectos/{proyecto_id}")
+@limiter.limit("30/minute")
+async def get_proyecto_detalle(request: Request, proyecto_id: str):
+    """Detalle de un proyecto + sus versiones (análisis) ordenadas."""
+    email, err = _require_auth_user(request)
+    if err:
+        return err
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Base de datos no disponible"})
+    try:
+        from uuid import UUID
+        pid = UUID(proyecto_id)
+    except (ValueError, TypeError):
+        return JSONResponse(status_code=400, content={"error": "ID inválido"})
+    try:
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+        user = await repo.get_user_by_email(pool, email)
+        if not user:
+            return JSONResponse(status_code=404, content={"error": "Usuario no encontrado"})
+        proyecto = await repo.get_proyecto(pool, pid, user["id"])
+        if not proyecto:
+            return JSONResponse(status_code=404, content={"error": "Proyecto no encontrado"})
+        versiones = await repo.list_analisis_proyecto(pool, pid)
+        # Serializar versiones en formato accesible al frontend
+        versiones_out = []
+        for v in versiones:
+            versiones_out.append({
+                "id": str(v["id"]),
+                "version_num": v.get("version_num"),
+                "version_etiqueta": v.get("version_etiqueta") or "",
+                "timestamp": v["timestamp"].isoformat() if v.get("timestamp") else None,
+                "formulario": v.get("formulario") or {},
+                "diagnostico": v.get("diagnostico") or "",
+                "senales": v.get("senales") or {},
+                "fue_util": v.get("fue_util") or "",
+                "comentario": v.get("comentario") or "",
+                "feedback_real": v.get("feedback_real") or "",
+            })
+        return {
+            "proyecto": _serialize_proyecto(proyecto),
+            "versiones": versiones_out,
+        }
+    except Exception as e:
+        print(f"[PROYECTO DETALLE] {e}")
+        return JSONResponse(status_code=500, content={"error": "Error obteniendo proyecto"})
+
+
+@app.post("/api/proyectos/{proyecto_id}/archivar")
+@limiter.limit("10/minute")
+async def post_archivar_proyecto(request: Request, proyecto_id: str, data: dict):
+    """Archiva o desarchiva un proyecto. Body opcional: {archivar: true/false}.
+    Por defecto archiva (true)."""
+    email, err = _require_auth_user(request)
+    if err:
+        return err
+    try:
+        from uuid import UUID
+        pid = UUID(proyecto_id)
+    except (ValueError, TypeError):
+        return JSONResponse(status_code=400, content={"error": "ID inválido"})
+    archivar = bool(data.get("archivar", True))
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Base de datos no disponible"})
+    try:
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+        user = await repo.get_user_by_email(pool, email)
+        if not user:
+            return JSONResponse(status_code=404, content={"error": "Usuario no encontrado"})
+        ok = await repo.archivar_proyecto(pool, pid, user["id"], archivar)
+        if not ok:
+            return JSONResponse(status_code=404, content={"error": "Proyecto no encontrado"})
+        return {"ok": True, "archivado": archivar}
+    except Exception as e:
+        print(f"[PROYECTOS ARCHIVAR] {e}")
+        return JSONResponse(status_code=500, content={"error": "Error archivando proyecto"})
+
+
+@app.post("/api/proyectos/{proyecto_id}/renombrar")
+@limiter.limit("10/minute")
+async def post_renombrar_proyecto(request: Request, proyecto_id: str, data: dict):
+    """Renombra un proyecto. Body: {nombre}."""
+    email, err = _require_auth_user(request)
+    if err:
+        return err
+    nuevo = (data.get("nombre") or "").strip()[:120]
+    if not nuevo:
+        return JSONResponse(status_code=400, content={"error": "Nombre requerido"})
+    try:
+        from uuid import UUID
+        pid = UUID(proyecto_id)
+    except (ValueError, TypeError):
+        return JSONResponse(status_code=400, content={"error": "ID inválido"})
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Base de datos no disponible"})
+    try:
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+        user = await repo.get_user_by_email(pool, email)
+        if not user:
+            return JSONResponse(status_code=404, content={"error": "Usuario no encontrado"})
+        ok = await repo.renombrar_proyecto(pool, pid, user["id"], nuevo)
+        if not ok:
+            return JSONResponse(status_code=404, content={"error": "Proyecto no encontrado"})
+        return {"ok": True, "nombre": nuevo}
+    except Exception as e:
+        print(f"[PROYECTOS RENOMBRAR] {e}")
+        return JSONResponse(status_code=500, content={"error": "Error renombrando proyecto"})
+
+
+@app.get("/api/analisis-sueltos")
+@limiter.limit("30/minute")
+async def get_analisis_sueltos(request: Request):
+    """Lista los análisis del usuario sin proyecto asignado, para reasignar."""
+    email, err = _require_auth_user(request)
+    if err:
+        return err
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Base de datos no disponible"})
+    try:
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+        user = await repo.get_user_by_email(pool, email)
+        if not user:
+            return {"analisis": []}
+        rows = await repo.list_analisis_sueltos_usuario(pool, user["id"])
+        out = []
+        for a in rows:
+            out.append({
+                "id": str(a["id"]),
+                "timestamp": a["timestamp"].isoformat() if a.get("timestamp") else None,
+                "nombre_proyecto_legacy": a.get("nombre_proyecto_legacy") or "",
+                "diagnostico": (a.get("diagnostico") or "")[:300],  # truncado para listado
+            })
+        return {"analisis": out}
+    except Exception as e:
+        print(f"[ANALISIS SUELTOS] {e}")
+        return JSONResponse(status_code=500, content={"error": "Error obteniendo análisis"})
+
+
+@app.post("/api/analisis/{analisis_id}/asignar-proyecto")
+@limiter.limit("10/minute")
+async def post_asignar_analisis(request: Request, analisis_id: str, data: dict):
+    """Asigna un análisis suelto a un proyecto. Body: {proyecto_id}.
+    Calcula version_num automático."""
+    email, err = _require_auth_user(request)
+    if err:
+        return err
+    proyecto_id_str = data.get("proyecto_id", "")
+    try:
+        from uuid import UUID
+        aid = UUID(analisis_id)
+        pid = UUID(proyecto_id_str)
+    except (ValueError, TypeError):
+        return JSONResponse(status_code=400, content={"error": "ID inválido"})
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Base de datos no disponible"})
+    try:
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+        user = await repo.get_user_by_email(pool, email)
+        if not user:
+            return JSONResponse(status_code=404, content={"error": "Usuario no encontrado"})
+        ok = await repo.asignar_analisis_a_proyecto(pool, aid, pid, user["id"])
+        if not ok:
+            return JSONResponse(status_code=404, content={"error": "Análisis o proyecto no encontrado"})
+        return {"ok": True}
+    except Exception as e:
+        print(f"[ASIGNAR ANALISIS] {e}")
+        return JSONResponse(status_code=500, content={"error": "Error asignando análisis"})
+
+
+@app.post("/api/analisis/{analisis_id}/etiqueta")
+@limiter.limit("10/minute")
+async def post_etiqueta_version(request: Request, analisis_id: str, data: dict):
+    """Renombra la etiqueta de una versión (campo version_etiqueta).
+    Body: {etiqueta}. Pasa vacío para borrar la etiqueta."""
+    email, err = _require_auth_user(request)
+    if err:
+        return err
+    etiqueta = (data.get("etiqueta") or "").strip()[:80]
+    try:
+        from uuid import UUID
+        aid = UUID(analisis_id)
+    except (ValueError, TypeError):
+        return JSONResponse(status_code=400, content={"error": "ID inválido"})
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Base de datos no disponible"})
+    try:
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+        user = await repo.get_user_by_email(pool, email)
+        if not user:
+            return JSONResponse(status_code=404, content={"error": "Usuario no encontrado"})
+        ok = await repo.update_version_etiqueta(pool, aid, user["id"], etiqueta)
+        if not ok:
+            return JSONResponse(status_code=404, content={"error": "Análisis no encontrado"})
+        return {"ok": True, "etiqueta": etiqueta}
+    except Exception as e:
+        print(f"[ETIQUETA VERSION] {e}")
+        return JSONResponse(status_code=500, content={"error": "Error actualizando etiqueta"})
 
 
 # =========================================================================
