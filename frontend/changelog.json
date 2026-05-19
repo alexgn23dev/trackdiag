@@ -1,6 +1,19 @@
 {
   "entries": [
     {
+      "version": "0.5.3",
+      "date": "2026-05-19",
+      "title": "Proyectos y versiones — Mentotrack como diario de mezcla",
+      "changes": [
+        "Nuevo concepto: cada track es un proyecto y cada análisis una versión numerada (v1, v2…). Al subir un track puedes elegir continuar un proyecto existente o crear uno nuevo, y poner una etiqueta opcional para recordar qué cambiaste.",
+        "Al iterar sobre un proyecto, género, objetivo y \"qué te cuesta\" se prerrellenan desde la versión anterior (en morado, como ya seleccionados) y editables. Fase, bloqueo y experiencia se piden de nuevo porque cambian entre versiones.",
+        "Panel \"Mi panel\" unificado: una sola lista con todos los análisis. Cada uno muestra su proyecto y versión, o un selector inline para asignar a un proyecto si está suelto.",
+        "Detalle de proyecto con la misma tarjeta rica del panel principal: semáforo, diagnóstico, prioridades, datos y feedback (no más bloque de texto crudo).",
+        "Nueva sección \"Avance del proyecto\" con barra 0-100% de \"listo para sello\" por cada versión, y debajo los cambios audibles en lenguaje de escucha (\"menos brillo agresivo\", \"más dinámica\", \"problemas resueltos\"…). Adiós a LUFS y harshness pct en el avance.",
+        "Migración de Google Sheets a PostgreSQL como fuente primaria de datos. Mismo comportamiento de cara al usuario, pero con respuestas más rápidas y sin los cortes intermitentes de Apps Script."
+      ]
+    },
+    {
       "version": "0.5.2",
       "date": "2026-05-18",
       "title": "Razones del diagnóstico más precisas y consejos por pista",
