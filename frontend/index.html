@@ -1621,6 +1621,9 @@
         const [panelProyectoActivo, setPanelProyectoActivo] = useState(null); // {proyecto, versiones} o null
         const [panelView, setPanelView] = useState('proyectos'); // 'proyectos' | 'detalle'
         const [panelExpandedVersion, setPanelExpandedVersion] = useState(null);
+        const [panelAnalisisSueltos, setPanelAnalisisSueltos] = useState([]);
+        const [asignandoId, setAsignandoId] = useState(null); // id de análisis siendo asignado
+        const [proyectoTarget, setProyectoTarget] = useState({}); // {analisisId: proyectoId}
         // Acción pendiente tras un auth exitoso (p.ej. arrancar análisis tras login)
         const [pendingAfterAuth, setPendingAfterAuth] = useState(null); // null | 'analyze'
         const [nombreProyecto, setNombreProyecto] = useState('');
@@ -1711,14 +1714,38 @@
             setContexto(prev => ({ ...prev, [name]: value }));
         };
 
-        // Fetch lista de proyectos cuando se entra al panel.
-        useEffect(() => {
-            if (screen !== 'panel' || !panelAuth) return;
+        // Fetch lista de proyectos + análisis sueltos cuando se entra al panel.
+        const refreshPanelProyectos = () => {
             fetch(`${API_URL}/api/proyectos`, { headers: authHeaders() })
                 .then(r => r.ok ? r.json() : { proyectos: [] })
                 .then(data => setPanelProyectos((data && data.proyectos) || []))
                 .catch(() => setPanelProyectos([]));
+            fetch(`${API_URL}/api/analisis-sueltos`, { headers: authHeaders() })
+                .then(r => r.ok ? r.json() : { analisis: [] })
+                .then(data => setPanelAnalisisSueltos((data && data.analisis) || []))
+                .catch(() => setPanelAnalisisSueltos([]));
+        };
+
+        useEffect(() => {
+            if (screen !== 'panel' || !panelAuth) return;
+            refreshPanelProyectos();
         }, [screen, panelAuth]);
+
+        const asignarAnalisisAProyecto = async (analisisId) => {
+            const proyectoId = proyectoTarget[analisisId];
+            if (!proyectoId) return;
+            setAsignandoId(analisisId);
+            try {
+                const r = await fetch(`${API_URL}/api/analisis/${analisisId}/asignar-proyecto`, {
+                    method: 'POST',
+                    headers: authHeaders(),
+                    body: JSON.stringify({ proyecto_id: proyectoId }),
+                });
+                if (r.ok) refreshPanelProyectos();
+            } finally {
+                setAsignandoId(null);
+            }
+        };
 
         const loadProyectoDetalle = (proyectoId) => {
             setPanelView('detalle');
@@ -2575,6 +2602,54 @@
                                                 </div>
                                             </div>
                                         ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* === ANÁLISIS SUELTOS (sin proyecto) === */}
+                            {panelView === 'proyectos' && panelAnalisisSueltos.length > 0 && (
+                                <div className="mb-8">
+                                    <h3 className="text-sm font-bold text-white mb-1">Análisis sin proyecto</h3>
+                                    <p className="text-xs text-gray-500 mb-3">
+                                        {panelAnalisisSueltos.length} {panelAnalisisSueltos.length === 1 ? 'análisis' : 'análisis'} que aún no tienen proyecto asignado. Puedes vincularlos al proyecto que les corresponda.
+                                    </p>
+                                    <div className="space-y-2">
+                                        {panelAnalisisSueltos.map(a => {
+                                            const dpMatch = (a.diagnostico || '').match(/DIAGN[ÓO]STICO PRINCIPAL:\s*(.+)/i);
+                                            const diagPrincipal = dpMatch ? dpMatch[1].trim().replace(/\s*\([^)]*\)\s*$/, '') : 'Sin diagnóstico';
+                                            const ts = a.timestamp ? new Date(a.timestamp).toLocaleDateString('es-ES', {day:'numeric',month:'short',year:'numeric'}) : '';
+                                            const isAsignando = asignandoId === a.id;
+                                            return (
+                                                <div key={a.id} className="card p-3" style={{borderLeft: '3px solid #555'}}>
+                                                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="text-xs text-gray-500">{ts} {a.nombre_proyecto_legacy && <>· nombre original: "{a.nombre_proyecto_legacy}"</>}</div>
+                                                            <div className="text-sm text-gray-300 mt-1 truncate" title={diagPrincipal}>{diagPrincipal}</div>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <select
+                                                                value={proyectoTarget[a.id] || ''}
+                                                                onChange={(e) => setProyectoTarget(prev => ({...prev, [a.id]: e.target.value}))}
+                                                                className="px-2 py-1.5 rounded text-xs input-field"
+                                                                style={{minWidth: '180px'}}
+                                                            >
+                                                                <option value="">— Asignar a proyecto —</option>
+                                                                {panelProyectos.map(p => (
+                                                                    <option key={p.id} value={p.id}>{p.nombre}</option>
+                                                                ))}
+                                                            </select>
+                                                            <button
+                                                                onClick={() => asignarAnalisisAProyecto(a.id)}
+                                                                disabled={!proyectoTarget[a.id] || isAsignando}
+                                                                className="px-3 py-1.5 btn-primary rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            >
+                                                                {isAsignando ? '...' : 'Asignar'}
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             )}
