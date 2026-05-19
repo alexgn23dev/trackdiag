@@ -202,11 +202,11 @@ async def create_analisis(
                 usuario_id, proyecto_id, version_num, version_etiqueta,
                 timestamp, email, nombre_proyecto_legacy,
                 formulario, diagnostico, senales, genero_custom
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb, $11)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             RETURNING id, timestamp, version_num""",
             usuario_id, proyecto_id, version_num, version_etiqueta,
             timestamp, email.strip().lower(), nombre_proyecto_legacy,
-            json.dumps(formulario), diagnostico, json.dumps(senales), genero_custom,
+            formulario, diagnostico, senales, genero_custom,
         )
     return dict(row)
 

@@ -592,6 +592,115 @@ async def _obtener_historial_sheets(email: str) -> list:
     return [r for r in all_rows if (r.get("email") or "").strip().lower() == email]
 
 
+# -------------------------------------------------------------------------
+# Helpers de Postgres con fallback a Sheets
+# -------------------------------------------------------------------------
+
+def _pg_available() -> bool:
+    """True si DATABASE_URL está configurada (en producción siempre, en local
+    solo si el dev lo ha pasado explícitamente)."""
+    return bool(os.environ.get("DATABASE_URL"))
+
+
+def _pg_row_to_legacy_format(row: dict) -> dict:
+    """Convierte una fila de la tabla analisis al mismo formato que devuelve
+    el Apps Script (action=get_all), para que el frontend no note el cambio.
+
+    Frontend espera claves planas con los nombres del Sheet:
+      timestamp, email, nombre_proyecto, formulario (string), diagnostico,
+      senales_json (string), fue_util, comentario, feedback_real,
+      revision_alex, nota_alex, tutoriales_sugeridos, tutorial_clickado,
+      genero_custom.
+    """
+    formulario = row.get("formulario") or {}
+    senales = row.get("senales") or {}
+    # formulario en Postgres es dict (JSONB), pero el frontend lo recibe como
+    # string "Género | Fase | Objetivo | Experiencia | Dificultad | Bloqueo: ...".
+    if isinstance(formulario, str):
+        formulario_str = formulario
+    else:
+        partes = [
+            formulario.get("genero", ""),
+            formulario.get("fase", ""),
+            formulario.get("objetivo", ""),
+            formulario.get("experiencia", ""),
+            formulario.get("dificultad_habitual", ""),
+        ]
+        bloqueo = formulario.get("bloqueo", "")
+        if bloqueo:
+            partes.append(f"Bloqueo: {bloqueo}")
+        formulario_str = " | ".join(p for p in partes if p)
+    # senales en Postgres es dict (JSONB), el frontend espera el JSON serializado
+    if isinstance(senales, str):
+        senales_str = senales
+    else:
+        senales_str = json.dumps(senales, ensure_ascii=False)
+    ts = row.get("timestamp")
+    return {
+        "timestamp": ts.isoformat() if hasattr(ts, "isoformat") else (ts or ""),
+        "email": row.get("email") or "",
+        "nombre_proyecto": row.get("nombre_proyecto_legacy") or "",
+        "formulario": formulario_str,
+        "diagnostico": row.get("diagnostico") or "",
+        "senales_json": senales_str,
+        "fue_util": row.get("fue_util") or "",
+        "comentario": row.get("comentario") or "",
+        "feedback_real": row.get("feedback_real") or "",
+        "genero_custom": row.get("genero_custom") or "",
+    }
+
+
+async def _obtener_historial(email: str) -> list:
+    """Devuelve historial del usuario priorizando Postgres, con fallback a Sheets.
+    Garantiza el formato legacy esperado por el frontend."""
+    if _pg_available():
+        try:
+            from db import get_pool
+            import repositories as repo
+            pool = get_pool()
+            user = await repo.get_user_by_email(pool, email)
+            if user:
+                rows = await repo.list_analisis_usuario(pool, user["id"])
+                if rows:
+                    return [_pg_row_to_legacy_format(r) for r in rows]
+                # Usuario existe en Postgres pero sin análisis ahí (puede pasar
+                # si el usuario es nuevo y aún no se ha hecho doble escritura).
+                # Caer a Sheets para no devolver vacío.
+        except Exception as e:
+            print(f"[HISTORIAL] Postgres falló, fallback a Sheets: {e}")
+    return await _obtener_historial(email)
+
+
+async def _get_user_for_auth(email: str) -> dict | None:
+    """Busca usuario para autenticación. Postgres primero, fallback Sheets.
+    Devuelve dict con keys: found, email, password_hash, username (compatible
+    con el formato de Apps Script)."""
+    if _pg_available():
+        try:
+            from db import get_pool
+            import repositories as repo
+            pool = get_pool()
+            u = await repo.get_user_by_email(pool, email)
+            if u:
+                return {
+                    "found": True,
+                    "email": u["email"],
+                    "password_hash": u["password_hash"],
+                    "username": u.get("username") or "",
+                    "_from": "postgres",
+                }
+        except Exception as e:
+            print(f"[AUTH] Postgres get_user falló, fallback Sheets: {e}")
+    # Fallback Sheets
+    if not SHEETS_WEBHOOK:
+        return None
+    sheets_resp = await _sheets_get({"action": "get_user", "email": email})
+    if sheets_resp.get("found"):
+        sheets_resp["_from"] = "sheets"
+        return sheets_resp
+    return None
+
+
 _USERNAME_REGEX = re.compile(r"^[a-zA-Z0-9_-]{3,20}$")
 
 
@@ -618,10 +727,7 @@ async def auth_login(request: Request, data: dict):
     if len(password) < 8:
         return JSONResponse(status_code=400, content={"error": "La contraseña debe tener al menos 8 caracteres"})
 
-    if not SHEETS_WEBHOOK:
-        return JSONResponse(status_code=503, content={"error": "Servicio no configurado."})
-
-    # Normalizar identifier: si es email, lowercase; si es username, validar formato
+    # Normalizar identifier
     is_email = _looks_like_email(identifier)
     if is_email:
         identifier = identifier.lower()
@@ -630,20 +736,52 @@ async def auth_login(request: Request, data: dict):
         if not _valid_username(identifier):
             return JSONResponse(status_code=400, content={"error": "Nombre de usuario inválido"})
 
-    user_data = await _sheets_get({"action": "get_user_by_identifier", "identifier": identifier})
-    if user_data.get("_connection_error"):
-        return JSONResponse(status_code=503, content={"error": "No se pudo conectar con la base de datos."})
+    # Postgres primary
+    user_data = None
+    if _pg_available():
+        try:
+            from db import get_pool
+            import repositories as repo
+            pool = get_pool()
+            u = await repo.get_user_by_identifier(pool, identifier)
+            if u:
+                user_data = {
+                    "found": True,
+                    "email": u["email"],
+                    "password_hash": u["password_hash"],
+                    "username": u.get("username") or "",
+                }
+        except Exception as e:
+            print(f"[LOGIN] Postgres falló, intentando Sheets: {e}")
 
-    if not user_data.get("found"):
-        # Mensaje genérico para no revelar si existe o no
+    # Fallback / hash placeholder → Sheets
+    if (user_data is None or user_data.get("password_hash") == "__MIGRATED__") and SHEETS_WEBHOOK:
+        sheets_resp = await _sheets_get({"action": "get_user_by_identifier", "identifier": identifier})
+        if sheets_resp.get("_connection_error") and user_data is None:
+            return JSONResponse(status_code=503, content={"error": "No se pudo conectar con la base de datos."})
+        if sheets_resp.get("found"):
+            sheets_hash = sheets_resp.get("password_hash", "")
+            if user_data is None:
+                user_data = {
+                    "found": True,
+                    "email": sheets_resp.get("email", "").strip().lower(),
+                    "password_hash": sheets_hash,
+                    "username": sheets_resp.get("username", ""),
+                }
+            else:
+                # Postgres tenía placeholder: usar el hash real y auto-migrar
+                user_data["password_hash"] = sheets_hash
+                user_data["username"] = user_data["username"] or sheets_resp.get("username", "")
+                await _heal_postgres_user_password(user_data["email"], sheets_hash)
+
+    if not user_data or not user_data.get("found"):
         return JSONResponse(status_code=401, content={"error": "Credenciales incorrectas"})
-
     if not _verify_password(password, user_data.get("password_hash", "")):
         return JSONResponse(status_code=401, content={"error": "Credenciales incorrectas"})
 
     email = user_data.get("email", "").strip().lower()
     username = (user_data.get("username") or "").strip()
-    historial = await _obtener_historial_sheets(email)
+    historial = await _obtener_historial(email)
     token = _create_token(email)
     return {
         "ok": True,
@@ -651,7 +789,7 @@ async def auth_login(request: Request, data: dict):
         "username": username,
         "token": token,
         "historial": historial,
-        "needs_username": not bool(username),  # migración: usuario sin username
+        "needs_username": not bool(username),
     }
 
 
@@ -674,27 +812,46 @@ async def auth_register(request: Request, data: dict):
     if len(password) < 8:
         return JSONResponse(status_code=400, content={"error": "La contraseña debe tener al menos 8 caracteres"})
 
-    if not SHEETS_WEBHOOK:
-        return JSONResponse(status_code=503, content={"error": "Servicio no configurado."})
-
     hashed = _hash_password(password)
-    result = await _sheets_get({
-        "action": "register",
-        "email": email,
-        "username": username,
-        "hash": hashed,
-    })
 
-    if result.get("_connection_error"):
-        return JSONResponse(status_code=503, content={"error": "No se pudo conectar con la base de datos."})
+    # Postgres primary
+    if _pg_available():
+        try:
+            from db import get_pool
+            import repositories as repo
+            pool = get_pool()
+            # Comprobar email duplicado
+            existing_email = await repo.get_user_by_email(pool, email)
+            if existing_email and existing_email["password_hash"] != "__MIGRATED__":
+                return JSONResponse(status_code=409, content={"error": "Ese email ya está registrado."})
+            # Comprobar username duplicado
+            existing_username = await repo.get_user_by_username(pool, username)
+            if existing_username and (not existing_email or existing_username["id"] != existing_email["id"]):
+                return JSONResponse(status_code=409, content={"error": "Ese nombre de usuario ya está cogido."})
+            if existing_email and existing_email["password_hash"] == "__MIGRATED__":
+                # Usuario migrado completando registro: actualizamos hash y username
+                await repo.update_user_password(pool, existing_email["id"], hashed)
+                if username:
+                    await repo.update_user_username(pool, existing_email["id"], username)
+            else:
+                await repo.create_user(pool, email, hashed, username)
+        except Exception as e:
+            print(f"[REGISTER] Postgres falló, intentando Sheets: {e}")
 
-    if not result.get("ok"):
-        err = result.get("error", "")
-        if err == "El usuario ya existe":
-            return JSONResponse(status_code=409, content={"error": "Ese email ya está registrado."})
-        if err == "Username no disponible":
-            return JSONResponse(status_code=409, content={"error": "Ese nombre de usuario ya está cogido."})
-        return JSONResponse(status_code=400, content={"error": err or "No se pudo registrar"})
+    # Sheets mirror (best-effort)
+    if SHEETS_WEBHOOK:
+        result = await _sheets_get({
+            "action": "register", "email": email, "username": username, "hash": hashed,
+        })
+        if result.get("_connection_error") and not _pg_available():
+            return JSONResponse(status_code=503, content={"error": "No se pudo conectar con la base de datos."})
+        if not result.get("ok") and not _pg_available():
+            err = result.get("error", "")
+            if err == "El usuario ya existe":
+                return JSONResponse(status_code=409, content={"error": "Ese email ya está registrado."})
+            if err == "Username no disponible":
+                return JSONResponse(status_code=409, content={"error": "Ese nombre de usuario ya está cogido."})
+            return JSONResponse(status_code=400, content={"error": err or "No se pudo registrar"})
 
     token = _create_token(email)
     return {
@@ -777,16 +934,60 @@ async def auth_forgot(request: Request, data: dict):
     }
 
 
+async def _heal_postgres_user_password(email: str, real_hash: str) -> None:
+    """Si Postgres tiene un hash placeholder, sobrescribirlo con el hash real
+    obtenido de Sheets. Self-healing progresivo de la migración inicial."""
+    if not _pg_available():
+        return
+    try:
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+        u = await repo.get_user_by_email(pool, email)
+        if u:
+            await repo.update_user_password(pool, u["id"], real_hash)
+    except Exception as e:
+        print(f"[AUTH] heal_postgres falló: {e}")
+
+
+async def _create_user_dual(email: str, password_hash: str) -> tuple[bool, str | None]:
+    """Crea usuario en Postgres (primary) y en Sheets (mirror, best-effort).
+    Devuelve (ok, error_msg). 'El usuario ya existe' si choca en cualquiera."""
+    email = (email or "").strip().lower()
+    # Postgres primary
+    if _pg_available():
+        try:
+            from db import get_pool
+            import repositories as repo
+            pool = get_pool()
+            existing = await repo.get_user_by_email(pool, email)
+            if existing and existing["password_hash"] != "__MIGRATED__":
+                return False, "El usuario ya existe"
+            if existing and existing["password_hash"] == "__MIGRATED__":
+                # Usuario migrado sin hash real: actualizamos en lugar de crear
+                await repo.update_user_password(pool, existing["id"], password_hash)
+            else:
+                await repo.create_user(pool, email, password_hash)
+        except Exception as e:
+            print(f"[AUTH] Postgres create_user falló: {e}")
+            # No bloqueamos por esto: caemos a Sheets-only para no perder el registro
+    # Sheets mirror (best-effort, no bloqueante en caso de error)
+    if SHEETS_WEBHOOK:
+        try:
+            await _sheets_get({"action": "register", "email": email, "hash": password_hash})
+        except Exception as e:
+            print(f"[AUTH] Sheets register falló (mirror): {e}")
+    return True, None
+
+
 @app.post("/api/auth/acceder")
 @limiter.limit("5/minute")
 async def acceder(request: Request, data: dict):
     """
-    DEPRECATED: endpoint unificado login/registro original.
-    Mantenido para compatibilidad con frontend antiguo. Nuevos clientes deben usar
-    /api/auth/login y /api/auth/register.
-
-    - Si el email existe → verifica contraseña → devuelve historial
-    - Si el email no existe → registra con la contraseña → devuelve historial vacío
+    Endpoint unificado login/registro.
+    - Postgres primary con fallback a Sheets para usuarios migrados.
+    - Cuando un usuario migrado autentica correctamente vía Sheets, su hash
+      real se copia a Postgres (self-healing progresivo).
     """
     email = (data.get("email") or "").strip().lower()
     password = (data.get("password") or "").strip()
@@ -796,42 +997,35 @@ async def acceder(request: Request, data: dict):
     if len(password) < 8:
         return JSONResponse(status_code=400, content={"error": "La contraseña debe tener al menos 8 caracteres"})
 
-    # Buscar si el usuario existe en el Sheet
-    if not SHEETS_WEBHOOK:
-        print("[ERROR] acceder: SHEETS_WEBHOOK no configurado")
-        return JSONResponse(status_code=503, content={
-            "error": "Servicio no configurado. Contacta al administrador."
-        })
+    user_data = await _get_user_for_auth(email)
+    if user_data and user_data.get("password_hash") == "__MIGRATED__":
+        # Usuario migrado con hash placeholder: la auth real está en Sheets.
+        if SHEETS_WEBHOOK:
+            sheets_user = await _sheets_get({"action": "get_user", "email": email})
+            if sheets_user.get("_connection_error"):
+                return JSONResponse(status_code=503, content={
+                    "error": "No se pudo conectar con la base de datos. Inténtalo de nuevo en unos segundos."
+                })
+            if sheets_user.get("found") and sheets_user.get("password_hash"):
+                user_data["password_hash"] = sheets_user["password_hash"]
+                # Auto-migración: actualizamos Postgres con el hash real
+                await _heal_postgres_user_password(email, sheets_user["password_hash"])
 
-    user_data = await _sheets_get({"action": "get_user", "email": email})
-    # Distinguir errores de conexión vs respuestas válidas del Apps Script
-    # El Apps Script puede devolver {"found": false, "error": "No existe la pestaña usuarios"}
-    # — eso no es un error de conexión, es que la pestaña aún no se ha creado
-    if user_data.get("_connection_error"):
-        print(f"[ERROR] acceder: Connection error = {user_data['_connection_error']}")
-        return JSONResponse(status_code=503, content={
-            "error": "No se pudo conectar con la base de datos. Inténtalo de nuevo en unos segundos."
-        })
-
-    if user_data.get("found"):
-        # Usuario existe → verificar contraseña
+    if user_data:
         if not _verify_password(password, user_data.get("password_hash", "")):
             return JSONResponse(status_code=401, content={"error": "Contraseña incorrecta"})
-
-        historial = await _obtener_historial_sheets(email)
+        historial = await _obtener_historial(email)
         token = _create_token(email)
         return {"ok": True, "email": email, "token": token, "historial": historial, "nuevo": False}
-    else:
-        # Usuario nuevo → registrar
-        hashed = _hash_password(password)
-        result = await _sheets_get({"action": "register", "email": email, "hash": hashed})
 
-        if not result.get("ok") and result.get("error") == "El usuario ya existe":
-            return JSONResponse(status_code=409, content={"error": "El email ya está registrado. Prueba con tu contraseña."})
-
-        historial = await _obtener_historial_sheets(email)
-        token = _create_token(email)
-        return {"ok": True, "email": email, "token": token, "historial": historial, "nuevo": True}
+    # Usuario nuevo → registrar (Postgres primary + Sheets mirror)
+    hashed = _hash_password(password)
+    ok, err = await _create_user_dual(email, hashed)
+    if not ok and err == "El usuario ya existe":
+        return JSONResponse(status_code=409, content={"error": "El email ya está registrado. Prueba con tu contraseña."})
+    historial = await _obtener_historial(email)
+    token = _create_token(email)
+    return {"ok": True, "email": email, "token": token, "historial": historial, "nuevo": True}
 
 
 @app.post("/api/auth/historial")
@@ -851,7 +1045,7 @@ async def obtener_historial(request: Request, data: dict):
     if email and email != token_email:
         return JSONResponse(status_code=403, content={"error": "No autorizado"})
 
-    historial = await _obtener_historial_sheets(token_email)
+    historial = await _obtener_historial(token_email)
     return {"ok": True, "historial": historial}
 
 
