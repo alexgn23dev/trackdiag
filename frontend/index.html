@@ -472,7 +472,21 @@
         );
     }
 
-    function QuestionnaireScreen({ opciones, contexto, onChange, onSubmit, isValid, nombreProyecto, onNombreChange }) {
+    function QuestionnaireScreen({
+        opciones, contexto, onChange, onSubmit, isValid,
+        nombreProyecto, onNombreChange,
+        proyectosPrevios, proyectoMode, onProyectoModeChange,
+        proyectoSeleccionadoId, onProyectoSeleccionadoChange,
+        versionEtiqueta, onVersionEtiquetaChange,
+    }) {
+        const tieneProyectos = (proyectosPrevios || []).length > 0;
+        const proyectoSeleccionado = tieneProyectos && proyectoMode === 'select'
+            ? proyectosPrevios.find(p => p.id === proyectoSeleccionadoId)
+            : null;
+        const versionPrevista = proyectoSeleccionado
+            ? (proyectoSeleccionado.n_versiones || 0) + 1
+            : 1;
+
         return (
             <div className="min-h-screen flex flex-col items-center py-12 px-6 fade-in">
                 <div className="max-w-lg w-full">
@@ -481,15 +495,83 @@
                         Esto nos ayuda a no interpretar el audio a ciegas.
                     </p>
 
+                    {/* === Proyecto === */}
                     <div className="mb-5">
-                        <label className="block text-sm font-medium mb-2" style={{color: 'var(--po-light)'}}>Nombre del proyecto</label>
+                        <label className="block text-sm font-medium mb-2" style={{color: 'var(--po-light)'}}>Proyecto</label>
+                        {tieneProyectos && (
+                            <div className="flex gap-2 mb-2 text-xs">
+                                <button
+                                    type="button"
+                                    onClick={() => onProyectoModeChange('select')}
+                                    className="px-3 py-1.5 rounded-md transition-colors"
+                                    style={{
+                                        background: proyectoMode === 'select' ? 'var(--po-purple)' : 'transparent',
+                                        color: proyectoMode === 'select' ? 'white' : 'var(--po-light)',
+                                        border: '1px solid ' + (proyectoMode === 'select' ? 'var(--po-purple)' : '#333'),
+                                    }}>
+                                    Continuar uno existente
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => onProyectoModeChange('new')}
+                                    className="px-3 py-1.5 rounded-md transition-colors"
+                                    style={{
+                                        background: proyectoMode === 'new' ? 'var(--po-purple)' : 'transparent',
+                                        color: proyectoMode === 'new' ? 'white' : 'var(--po-light)',
+                                        border: '1px solid ' + (proyectoMode === 'new' ? 'var(--po-purple)' : '#333'),
+                                    }}>
+                                    + Crear nuevo
+                                </button>
+                            </div>
+                        )}
+                        {tieneProyectos && proyectoMode === 'select' ? (
+                            <select
+                                value={proyectoSeleccionadoId || ''}
+                                onChange={(e) => onProyectoSeleccionadoChange(e.target.value)}
+                                className="w-full px-4 py-3 rounded-lg text-sm input-field"
+                            >
+                                <option value="">— Selecciona un proyecto —</option>
+                                {proyectosPrevios.map(p => (
+                                    <option key={p.id} value={p.id}>
+                                        {p.nombre} ({p.n_versiones || 0} versiones)
+                                    </option>
+                                ))}
+                            </select>
+                        ) : (
+                            <input
+                                type="text"
+                                value={nombreProyecto}
+                                onChange={(e) => onNombreChange(e.target.value)}
+                                placeholder="Ej.: Track de tech house, Edit para sello X..."
+                                className="w-full px-4 py-3 rounded-lg text-sm input-field"
+                            />
+                        )}
+                        <p className="text-xs mt-1.5" style={{color: 'var(--po-light)', opacity: 0.65}}>
+                            {tieneProyectos
+                                ? 'Un proyecto agrupa todas las versiones de una misma canción. Si trabajas en algo nuevo crea uno; si iteras sobre algo anterior, escógelo.'
+                                : 'El proyecto es la canción. Cada análisis suyo es una versión. Empieza poniéndole un nombre.'}
+                        </p>
+                    </div>
+
+                    {/* === Versión === */}
+                    <div className="mb-5">
+                        <label className="block text-sm font-medium mb-2" style={{color: 'var(--po-light)'}}>
+                            Versión{' '}
+                            <span style={{color: 'var(--po-purple)', fontWeight: 700}}>
+                                v{versionPrevista}
+                            </span>
+                        </label>
                         <input
                             type="text"
-                            value={nombreProyecto}
-                            onChange={(e) => onNombreChange(e.target.value)}
-                            placeholder="Ej.: El nombre de tu track v1"
+                            value={versionEtiqueta || ''}
+                            onChange={(e) => onVersionEtiquetaChange(e.target.value)}
+                            placeholder="Etiqueta opcional (ej: tras bajar charles, master final...)"
+                            maxLength={80}
                             className="w-full px-4 py-3 rounded-lg text-sm input-field"
                         />
+                        <p className="text-xs mt-1.5" style={{color: 'var(--po-light)', opacity: 0.65}}>
+                            El número se asigna automáticamente. La etiqueta te ayuda a recordar qué cambiaste en esta versión.
+                        </p>
                     </div>
 
                     <SelectField
@@ -1537,6 +1619,10 @@
         // Acción pendiente tras un auth exitoso (p.ej. arrancar análisis tras login)
         const [pendingAfterAuth, setPendingAfterAuth] = useState(null); // null | 'analyze'
         const [nombreProyecto, setNombreProyecto] = useState('');
+        const [proyectosPrevios, setProyectosPrevios] = useState([]);
+        const [proyectoMode, setProyectoMode] = useState('select');  // 'select' | 'new'
+        const [proyectoSeleccionadoId, setProyectoSeleccionadoId] = useState('');
+        const [versionEtiqueta, setVersionEtiqueta] = useState('');
         const [contexto, setContexto] = useState({
             genero: '', genero_custom: '', fase: '', objetivo: '',
             bloqueo_percibido: '', experiencia: '',
@@ -1619,6 +1705,31 @@
         const handleContextoChange = (name, value) => {
             setContexto(prev => ({ ...prev, [name]: value }));
         };
+
+        // Fetch proyectos previos del usuario cuando se entra al cuestionario.
+        // Lazy: no bloquea el render, si llega tarde el selector aparece tras él.
+        useEffect(() => {
+            if (screen !== 'questionnaire') return;
+            const { token } = getAuth();
+            if (!token) {
+                setProyectosPrevios([]);
+                setProyectoMode('new');
+                return;
+            }
+            fetch(`${API_URL}/api/proyectos`, { headers: authHeaders() })
+                .then(r => r.ok ? r.json() : { proyectos: [] })
+                .then(data => {
+                    const proys = (data && data.proyectos) || [];
+                    setProyectosPrevios(proys);
+                    // Si no tiene proyectos, modo "new" por defecto (input texto).
+                    // Si tiene, modo "select" pero sin seleccionar nada todavía.
+                    setProyectoMode(proys.length > 0 ? 'select' : 'new');
+                })
+                .catch(() => {
+                    setProyectosPrevios([]);
+                    setProyectoMode('new');
+                });
+        }, [screen]);
 
         const isQuestionnaireValid = contexto.genero && contexto.fase && contexto.objetivo && contexto.experiencia && contexto.dificultad_habitual;
 
@@ -1828,14 +1939,25 @@
                     estado: dx.estado_track,
                 };
 
-                // Enviar registro a Google Sheets via backend proxy
+                // Determinar proyecto/versión: si el usuario seleccionó uno existente,
+                // pasamos proyecto_id. Si está creando uno nuevo, pasamos nombre_proyecto
+                // (el backend hará get_or_create). Si por algún motivo ambos van vacíos,
+                // el análisis queda como "suelto" (proyecto_id NULL).
+                const usingExisting = proyectoMode === 'select' && proyectoSeleccionadoId;
+                const proyectoNombrePayload = usingExisting
+                    ? ''
+                    : (nombreProyecto || '').trim();
+
+                // Enviar registro: Postgres como source of truth + Sheets mirror (cutover B)
                 fetch(`${API_URL}/api/sheets/registro`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
                         timestamp: new Date().toISOString(),
                         email: sessionEmail,
-                        nombre_proyecto: nombreProyecto,
+                        nombre_proyecto: proyectoNombrePayload,
+                        proyecto_id: usingExisting ? proyectoSeleccionadoId : '',
+                        version_etiqueta: (versionEtiqueta || '').trim(),
                         formulario: formularioTexto,
                         diagnostico: informe,
                         senales_json: JSON.stringify(senales),
@@ -2095,6 +2217,13 @@
                         isValid={isQuestionnaireValid}
                         nombreProyecto={nombreProyecto}
                         onNombreChange={setNombreProyecto}
+                        proyectosPrevios={proyectosPrevios}
+                        proyectoMode={proyectoMode}
+                        onProyectoModeChange={setProyectoMode}
+                        proyectoSeleccionadoId={proyectoSeleccionadoId}
+                        onProyectoSeleccionadoChange={setProyectoSeleccionadoId}
+                        versionEtiqueta={versionEtiqueta}
+                        onVersionEtiquetaChange={setVersionEtiqueta}
                     />
                 )}
                 {/* (screen 'email' eliminada — la auth ahora pasa por el AuthModal) */}
