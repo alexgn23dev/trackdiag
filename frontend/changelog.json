@@ -1,6 +1,17 @@
 {
   "entries": [
     {
+      "version": "0.5.7",
+      "date": "2026-05-20",
+      "title": "Dos detectores nuevos de arreglo: break sin payoff y track largo repetitivo",
+      "changes": [
+        "Nuevo diagnóstico 'break_sin_payoff': cuando el break más largo del track no recupera energía en el drop posterior (es decir, post ≈ pre o por debajo), el motor lo señala como anticipación fallida. Sale con consejos específicos para subir el techo del drop posterior o bajar el suelo de lo que viene antes del break para que el contraste se sienta.",
+        "Nuevo diagnóstico 'arreglo_repetitivo': tracks de más de 5 minutos con muy pocas transiciones de energía significativas (2 o menos) se diagnostican como 'la duración no se justifica con la información musical'. Consejos para añadir variación cada 32-64 compases o recortar el track. Suprimido en géneros estáticos (ambient, minimal, dub techno) donde la repetición es lenguaje.",
+        "Ambos nuevos diagnósticos entran en la regla de jerarquía 'estructura antes que mezcla': si están activos, ganan al diagnóstico principal de mezcla/espectro y lo relegan a secundario.",
+        "Pendiente para futuro: detector de monotonía percusiva real (requiere onset detection en banda alta + análisis temporal del groove). No incluido en esta versión por complejidad."
+      ]
+    },
+    {
       "version": "0.5.6",
       "date": "2026-05-20",
       "title": "Fix del cálculo de rango de loudness (LRA)",

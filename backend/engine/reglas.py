@@ -337,6 +337,89 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     scores["track_verde"] = score
     detalles["track_verde"] = razones
 
+    # --- 6b: Break sin payoff ---
+    # Detecta cuando el break más largo del track no recupera energía después,
+    # es decir, la sección que viene tras el break no es más intensa que la
+    # que la precedía. Para el oyente: "el break no paga". Añadido tras
+    # feedback de Alex (insight 4, 2026-05).
+    score, razones = 0, []
+    if dist.get("break_sin_payoff"):
+        ratio = dist.get("ratio_payoff", 1.0)
+        score += 3
+        razones.append(
+            f"El break más largo no recupera energía al volver: tras el break la energía es "
+            f"{ratio:.2f}× la de antes — el drop posterior se siente como continuación, no como liberación"
+        )
+        # Cruce: si encima el break es desproporcionado, doble problema
+        if dist.get("break_desproporcionado"):
+            score += 1
+            razones.append("El break es desproporcionadamente largo además de no pagar — la anticipación se desinfla")
+        # Cruce: si el usuario menciona el problema
+        if any(p in bloqueo for p in ["break", "parón", "paron", "subida", "drop", "anticipa", "intensidad", "engancha", "engancha"]):
+            score += 1
+            razones.append("El usuario percibe falta de intensidad/anticipación")
+    # Si el track es muy corto o la fase es muy temprana, este diagnóstico no aplica
+    if senales["duracion_seg"] < 120:
+        score -= 3
+    if senales["madurez_estimada"] == "verde":
+        score -= 2
+    scores["break_sin_payoff"] = score
+    detalles["break_sin_payoff"] = razones
+
+    # --- 6c: Arreglo repetitivo (track largo con pocas variaciones) ---
+    # Distinto de poco_contraste (que mira solo contraste energético) y de
+    # problema_arreglo (que mira la distribución de secciones). Apunta al
+    # caso "track de 6 minutos con la misma idea durante 4 sin variación".
+    score, razones = 0, []
+    duracion = senales["duracion_seg"]
+    cambios = senales.get("cambios_significativos", 0)
+    if duracion > 300:  # >5 min
+        if cambios <= 2:
+            score += 4
+            razones.append(
+                f"Track de {senales['duracion_fmt']} con solo {cambios} transición(es) de energía significativa(s) — "
+                "la duración no se justifica con la información musical"
+            )
+        elif cambios <= 4:
+            score += 2
+            razones.append(
+                f"Track de {senales['duracion_fmt']} con solo {cambios} transiciones — "
+                "podría aprovechar más variación para no sentirse repetitivo"
+            )
+    elif duracion > 240:  # 4-5 min
+        if cambios <= 2:
+            score += 2
+            razones.append(
+                f"Track de {senales['duracion_fmt']} con solo {cambios} transición(es) — empieza a sentirse repetitivo"
+            )
+    # Boost si el usuario menciona repetición
+    palabras_repe = ["repetitivo", "repite", "monóton", "monoton", "aburrido", "largo",
+                      "no engancha", "demasiado largo", "se hace pesado"]
+    if any(p in bloqueo for p in palabras_repe):
+        score += 2
+        razones.append("El usuario percibe el track como repetitivo o demasiado largo")
+    # Descuento: si el género es ambient/minimal/dub_techno, la repetición es lenguaje
+    _g_local = contexto.get("genero", "")
+    _gc_local = (contexto.get("genero_custom") or "").lower()
+    _arm_local = senales.get("armonia", {}) or {}
+    _estatico_local2 = (
+        _g_local in ["minimal", "ambient", "drone", "downtempo", "dub_techno"]
+        or any(k in _gc_local for k in ["ambient", "drone", "downtempo", "dub techno", "dub_techno", "atmosfer"])
+        or (_g_local == "otro"
+            and _arm_local.get("ratio_tonal_percusivo", 1.0) > 2.5
+            and _arm_local.get("contenido_tonal", 0.5) > 0.55)
+    )
+    if _estatico_local2:
+        if score > 0:
+            score = 0
+        razones.append("(−) En géneros estáticos (minimal, ambient, dub techno…), la repetición prolongada es parte del lenguaje")
+    # Si hay desarrollo y muchas transiciones, descartar
+    if cambios >= 6:
+        score -= 3
+        razones.append(f"(−) {cambios} transiciones detectadas — el track varía suficiente")
+    scores["arreglo_repetitivo"] = score
+    detalles["arreglo_repetitivo"] = razones
+
     # --- 7: Carencia espectral ---
     # Ponderado por género: no todo género necesita el mismo brillo o cuerpo en medios
     score, razones = 0, []
@@ -664,13 +747,23 @@ def aplicar_jerarquia(scores: dict, senales: dict, contexto: dict) -> tuple:
     secundario_id = ranking[1][0] if len(ranking) > 1 else None
 
     # Regla 1: estructura antes que mezcla/espectro/armonía
-    problemas_estructura = scores.get("problema_arreglo", 0) > 3 or scores.get("poco_contraste", 0) > 3
+    problemas_estructura = (
+        scores.get("problema_arreglo", 0) > 3
+        or scores.get("poco_contraste", 0) > 3
+        or scores.get("break_sin_payoff", 0) > 3
+        or scores.get("arreglo_repetitivo", 0) > 3
+    )
     if principal_id in ["exceso_lowend", "exceso_densidad", "conflicto_armonico", "pobreza_armonica", "harshness_mezcla", "enmascaramiento_bajo"] and problemas_estructura:
-        if scores.get("problema_arreglo", 0) >= scores.get("poco_contraste", 0):
-            principal_id = "problema_arreglo"
-        else:
-            principal_id = "poco_contraste"
-        secundario_id = ranking[0][0]
+        # Promueve al estructural con mayor score (incluyendo los nuevos).
+        candidatos_estructura = [
+            ("problema_arreglo", scores.get("problema_arreglo", 0)),
+            ("poco_contraste", scores.get("poco_contraste", 0)),
+            ("break_sin_payoff", scores.get("break_sin_payoff", 0)),
+            ("arreglo_repetitivo", scores.get("arreglo_repetitivo", 0)),
+        ]
+        principal_id_anterior = principal_id
+        principal_id = max(candidatos_estructura, key=lambda x: x[1])[0]
+        secundario_id = principal_id_anterior
 
     # Regla 2: error de foco
     error_de_foco = False
@@ -680,7 +773,8 @@ def aplicar_jerarquia(scores: dict, senales: dict, contexto: dict) -> tuple:
     palabras_mezcla = ["mezcla", "mix", "eq", "ecualiz", "compres", "volumen", "master"]
 
     if (fase in ["ajustando_mezcla", "casi_listo"] or any(p in bloqueo for p in palabras_mezcla)):
-        if principal_id in ["problema_arreglo", "poco_contraste", "track_verde"]:
+        if principal_id in ["problema_arreglo", "poco_contraste", "track_verde",
+                            "break_sin_payoff", "arreglo_repetitivo"]:
             error_de_foco = True
             error_foco_msg = ("Mencionas estar enfocado en la mezcla, pero el diagnóstico principal "
                             "apunta a un problema más fundamental de estructura o desarrollo. "
