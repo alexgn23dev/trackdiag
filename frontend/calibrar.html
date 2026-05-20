@@ -109,6 +109,183 @@
         });
     }
 
+    function parseDiagnostico(diag) {
+        const out = {
+            estado: '', diagPrincipal: '', explicacion: '', prioridades: [],
+            notaContextual: '', motivacion: '', tipObjetivo: '',
+            siguienteSesion: '', referenciaTemporal: '',
+            balanceGrave: '', densidad: '', loudness: '', monoCompat: '', harshness: '',
+            bpm: '', duracion: '', lufs: '', noTocar: [], diagSecundario: '',
+        };
+        if (!diag) return out;
+        const line = (label) => {
+            const re = new RegExp('^' + label + ':\\s*(.+)$', 'im');
+            const m = diag.match(re);
+            return m ? m[1].trim() : '';
+        };
+        out.estado = line('ESTADO');
+        const dpRaw = line('DIAGN[ÓO]STICO PRINCIPAL');
+        out.diagPrincipal = dpRaw.replace(/\s*\([^)]*\)\s*$/, '');
+        out.diagSecundario = line('DIAGN[ÓO]STICO SECUNDARIO').replace(/\s*\([^)]*\)\s*$/, '');
+        out.explicacion = line('Explicación');
+        const prioRaw = line('PRIORIDADES');
+        out.prioridades = prioRaw
+            ? prioRaw.split(' | ').map(p => p.replace(/^\d+\.\s*/, '').trim()).filter(Boolean)
+            : [];
+        const noTocarRaw = line('NO TOCAR AÚN');
+        out.noTocar = noTocarRaw
+            ? noTocarRaw.split(' | ').map(s => s.trim()).filter(Boolean)
+            : [];
+        out.notaContextual = line('NOTA CONTEXTUAL');
+        out.motivacion = line('MOTIVACIÓN');
+        out.tipObjetivo = line('TIP OBJETIVO');
+        out.siguienteSesion = line('SIGUIENTE SESIÓN');
+        out.referenciaTemporal = line('REFERENCIA TEMPORAL');
+        out.balanceGrave = line('Balance grave');
+        out.densidad = line('Densidad');
+        out.loudness = line('Loudness');
+        out.monoCompat = line('Mono compat');
+        out.harshness = line('Harshness');
+        const bpmMatch = diag.match(/BPM:\s*(\d+)/);
+        out.bpm = bpmMatch ? bpmMatch[1] : '';
+        const durMatch = diag.match(/Duración:\s*(.+)/);
+        out.duracion = durMatch ? durMatch[1].trim().split(/\s*\|\s*|\n/)[0] : '';
+        const lufsMatch = diag.match(/([-\d.]+)\s*LUFS/);
+        out.lufs = lufsMatch ? lufsMatch[1] : '';
+        return out;
+    }
+
+    function estadoVisual(estadoTexto) {
+        const e = (estadoTexto || '').toLowerCase();
+        if (e.includes('construc') || e.includes('temprana') || e.includes('iteraci') || e.includes('prematura') || e.includes('buena base')) {
+            return { color: '#f87171', bg: 'rgba(248,113,113,0.08)', border: 'rgba(248,113,113,0.25)', dot: '#f87171' };
+        }
+        if (e.includes('lista') && !e.includes('casi')) {
+            return { color: '#4ade80', bg: 'rgba(74,222,128,0.08)', border: 'rgba(74,222,128,0.25)', dot: '#4ade80' };
+        }
+        return { color: '#facc15', bg: 'rgba(250,204,21,0.08)', border: 'rgba(250,204,21,0.25)', dot: '#facc15' };
+    }
+
+    function metricColor(val, good, warn) {
+        const v = (val || '').toLowerCase();
+        if (good.some(g => v.includes(g))) return '#4ade80';
+        if (warn.some(w => v.includes(w))) return '#facc15';
+        return '#f87171';
+    }
+
+    function DiagnosticoVisual({ diagnostico }) {
+        const p = parseDiagnostico(diagnostico);
+        const sem = estadoVisual(p.estado);
+        const tieneMetricas = p.bpm || p.duracion || p.balanceGrave || p.densidad || p.loudness || p.monoCompat || p.harshness;
+        return (
+            <div className="space-y-2.5">
+                {p.estado && (
+                    <div className="rounded-lg px-3 py-2"
+                         style={{ background: sem.bg, border: `1px solid ${sem.border}` }}>
+                        <span className="inline-block rounded-full mr-2" style={{ width: 8, height: 8, background: sem.dot, verticalAlign: 'middle' }} />
+                        <span className="text-sm" style={{ color: sem.color }}>{p.estado}</span>
+                    </div>
+                )}
+
+                {p.diagPrincipal && (
+                    <div className="rounded-lg p-3" style={{ background: 'rgba(249,115,22,0.08)', border: '1px solid rgba(249,115,22,0.18)' }}>
+                        <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Diagnóstico principal</div>
+                        <div className="text-sm font-medium" style={{ color: '#fb923c' }}>{p.diagPrincipal}</div>
+                        {p.explicacion && <div className="text-xs text-gray-300 mt-1.5 leading-relaxed">{p.explicacion}</div>}
+                        {p.diagSecundario && (
+                            <div className="text-xs text-gray-400 mt-2">
+                                <span className="text-gray-500">Secundario:</span> {p.diagSecundario}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {(p.motivacion || p.notaContextual || p.referenciaTemporal) && (
+                    <div className="rounded-lg p-3" style={{ background: 'rgba(139,92,246,0.06)', borderLeft: '3px solid #8b5cf6' }}>
+                        {p.motivacion && <div className="text-sm font-medium mb-1.5" style={{ color: '#c4b5fd' }}>{p.motivacion}</div>}
+                        {p.notaContextual && <div className="text-xs text-gray-300 leading-relaxed">{p.notaContextual}</div>}
+                        {p.referenciaTemporal && <div className="text-[11px] text-gray-500 mt-1.5">{p.referenciaTemporal}</div>}
+                    </div>
+                )}
+
+                {p.prioridades.length > 0 && (
+                    <div className="rounded-lg p-3" style={{ background: 'rgba(74,222,128,0.05)', border: '1px solid rgba(74,222,128,0.15)' }}>
+                        <div className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: '#4ade80' }}>Prioridades sugeridas</div>
+                        <ol className="space-y-1.5">
+                            {p.prioridades.map((pr, i) => (
+                                <li key={i} className="flex gap-2 items-start text-xs text-gray-200 leading-relaxed">
+                                    <span className="flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center font-bold mt-0.5"
+                                          style={{ background: 'rgba(74,222,128,0.2)', color: '#4ade80', fontSize: 10 }}>{i+1}</span>
+                                    <span>{pr}</span>
+                                </li>
+                            ))}
+                        </ol>
+                    </div>
+                )}
+
+                {p.noTocar.length > 0 && (
+                    <div className="rounded-lg p-3" style={{ background: 'rgba(75,85,99,0.15)', border: '1px solid rgba(75,85,99,0.3)' }}>
+                        <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-2">No tocar aún</div>
+                        <ul className="space-y-1">
+                            {p.noTocar.map((n, i) => (
+                                <li key={i} className="text-xs text-gray-400 leading-relaxed">— {n}</li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
+
+                {p.tipObjetivo && (
+                    <div className="rounded-lg p-3" style={{ background: 'rgba(245,158,11,0.06)', borderLeft: '3px solid #f59e0b' }}>
+                        <div className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: '#facc15' }}>Según tu objetivo</div>
+                        <div className="text-xs text-gray-300 leading-relaxed">{p.tipObjetivo}</div>
+                    </div>
+                )}
+
+                {p.siguienteSesion && (
+                    <div className="rounded-lg p-3" style={{ background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.2)' }}>
+                        <div className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: '#c4b5fd' }}>Próxima sesión sugerida</div>
+                        <div className="text-xs text-white leading-relaxed">{p.siguienteSesion}</div>
+                    </div>
+                )}
+
+                {tieneMetricas && (
+                    <div className="rounded-lg p-3" style={{ background: '#0a0a0a', border: '1px solid #222' }}>
+                        <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Métricas de mezcla</div>
+                        {(p.bpm || p.duracion) && (
+                            <div className="flex flex-wrap gap-1.5 mb-2">
+                                {p.bpm && <span className="px-2 py-0.5 rounded text-[11px]" style={{ background: '#1f2937', color: '#d4d4d8' }}>{p.bpm} BPM</span>}
+                                {p.duracion && <span className="px-2 py-0.5 rounded text-[11px]" style={{ background: '#1f2937', color: '#d4d4d8' }}>{p.duracion}</span>}
+                                {p.lufs && <span className="px-2 py-0.5 rounded text-[11px]" style={{ background: '#1f2937', color: '#d4d4d8' }}>{p.lufs} LUFS</span>}
+                            </div>
+                        )}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
+                            {p.balanceGrave && (
+                                <div className="flex justify-between"><span className="text-gray-500">Balance grave</span>
+                                    <span style={{ color: metricColor(p.balanceGrave, ['normal'], ['elevado']) }}>{p.balanceGrave}</span></div>
+                            )}
+                            {p.densidad && (
+                                <div className="flex justify-between"><span className="text-gray-500">Densidad</span>
+                                    <span style={{ color: metricColor(p.densidad, ['baja','media'], ['alta']) }}>{p.densidad}</span></div>
+                            )}
+                            {p.loudness && (
+                                <div className="flex justify-between"><span className="text-gray-500">Loudness</span>
+                                    <span className="text-gray-300">{p.loudness}</span></div>
+                            )}
+                            {p.monoCompat && (
+                                <div className="flex justify-between"><span className="text-gray-500">Mono compat</span>
+                                    <span className="text-gray-300">{p.monoCompat}</span></div>
+                            )}
+                            {p.harshness && (
+                                <div className="flex justify-between"><span className="text-gray-500">Harshness</span>
+                                    <span className="text-gray-300">{p.harshness}</span></div>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
     function parseFormulario(formularioObj) {
         if (!formularioObj || typeof formularioObj !== 'object') return [];
         const out = [];
@@ -217,18 +394,24 @@
                 </div>
 
                 <div className="mb-4">
-                    <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Diagnóstico del motor</span>
                         <button
                             onClick={() => setDiagExpandido(d => !d)}
                             className="text-xs text-purple-400 hover:text-purple-300"
                         >
-                            {diagExpandido ? 'Plegar ▴' : 'Ver completo ▾'}
+                            {diagExpandido ? 'Ocultar texto crudo ▴' : 'Ver texto crudo ▾'}
                         </button>
                     </div>
-                    <div className={`diag-block ${diagExpandido ? 'expanded' : ''}`}>
-                        {track.diagnostico || '(sin diagnóstico guardado)'}
-                    </div>
+                    {track.diagnostico
+                        ? <DiagnosticoVisual diagnostico={track.diagnostico} />
+                        : <div className="text-xs text-gray-500">(sin diagnóstico guardado)</div>
+                    }
+                    {diagExpandido && (
+                        <div className="diag-block expanded mt-3">
+                            {track.diagnostico || '(sin diagnóstico guardado)'}
+                        </div>
+                    )}
                 </div>
 
                 <div className="mb-3">
