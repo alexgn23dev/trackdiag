@@ -488,22 +488,41 @@ def _analizar_loudness(audio_path: str, y_preloaded=None, sr_preloaded=None,
 
         if lufs_blocks:
             resultado["lufs_short_term_max"] = round(float(max(lufs_blocks)), 1)
-            # LRA según EBU R-128 (versión simplificada):
-            # 1) Gate absoluto: descartar bloques < -70 LUFS (ya hecho arriba)
-            # 2) Gate relativo: descartar bloques > 20 LU por debajo del LUFS integrado
-            #    (esto elimina silencios largos al inicio/final que falseaban el rango)
-            # 3) LRA = percentil 95 − percentil 10 de los bloques que quedan
+            # LRA según EBU R-128 (versión robustecida tras feedback de Alex, 2026-05):
+            # El cálculo anterior producía rangos irreales (30-60 LU) en tracks
+            # con tramos muy silenciosos pasando la puerta absoluta (-70 LUFS) o
+            # bloques con loudness inestable por la naturaleza de calcular
+            # integrated_loudness sobre ventanas de 3s.
+            # Procedimiento corregido:
+            # 1) Gate absoluto endurecido: descartar bloques < -50 LUFS (antes -70).
+            #    Bloques bajo -50 LUFS son prácticamente silencio musical y suelen
+            #    venir de fades/transiciones donde integrated_loudness es inestable.
+            # 2) Gate relativo según ungated mean de los bloques supervivientes
+            #    (no según lufs_i, que puede estar sesgado por silencios).
+            # 3) LRA = percentil 95 − percentil 10 de los bloques que quedan.
+            # 4) Cap defensivo a 25 LU para protegernos de outliers persistentes:
+            #    en música producida un LRA > 25 LU es prácticamente imposible y
+            #    casi seguro un artefacto. Logueamos cuando aplica.
             lufs_arr = np.array(lufs_blocks)
-            if lufs_i > -70:
-                lufs_arr = lufs_arr[lufs_arr > (lufs_i - 20)]
+            lufs_arr = lufs_arr[lufs_arr > -50]
             if len(lufs_arr) >= 2:
-                p95 = float(np.percentile(lufs_arr, 95))
-                p10 = float(np.percentile(lufs_arr, 10))
-                resultado["rango_loudness"] = round(p95 - p10, 1)
+                ungated_mean = float(np.mean(lufs_arr))
+                lufs_arr_g = lufs_arr[lufs_arr > (ungated_mean - 20)]
+                if len(lufs_arr_g) >= 2:
+                    p95 = float(np.percentile(lufs_arr_g, 95))
+                    p10 = float(np.percentile(lufs_arr_g, 10))
+                    lra_raw = p95 - p10
+                else:
+                    lra_raw = float(max(lufs_arr) - min(lufs_arr))
+            elif len(lufs_arr) == 1:
+                lra_raw = 0.0
             else:
-                resultado["rango_loudness"] = round(
-                    float(max(lufs_blocks) - min(lufs_blocks)), 1
-                )
+                lra_raw = 0.0
+
+            if lra_raw > 25:
+                print(f"[LRA] valor anómalo capeado: {lra_raw:.1f} → 25.0 LU")
+                lra_raw = 25.0
+            resultado["rango_loudness"] = round(float(lra_raw), 1)
 
         # Clasificación de nivel
         lufs = resultado["lufs_integrado"]

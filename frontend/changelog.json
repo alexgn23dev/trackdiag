@@ -1,6 +1,14 @@
 {
   "entries": [
     {
+      "version": "0.5.6",
+      "date": "2026-05-20",
+      "title": "Fix del cálculo de rango de loudness (LRA)",
+      "changes": [
+        "El cálculo del LRA producía valores irreales (30-60 LU) en algunos tracks por inestabilidad del integrated_loudness sobre ventanas cortas con tramos casi silenciosos. Procedimiento corregido: gate absoluto endurecido (−50 LUFS en lugar de −70), gate relativo basado en la media ungated de los bloques supervivientes (en vez de en el LUFS integrado del track), y cap defensivo a 25 LU para outliers persistentes. Métrica no expuesta al usuario directamente pero alimentaba avisos de saturación dinámica."
+      ]
+    },
+    {
       "version": "0.5.5",
       "date": "2026-05-20",
       "title": "Géneros estáticos respetados + nuevo diagnóstico de enmascaramiento bajo↔kick",
