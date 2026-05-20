@@ -645,10 +645,10 @@ async def list_analisis_con_feedback_real(
     pool: asyncpg.Pool, etiquetador_email: str, limit: int = 200
 ) -> list[dict]:
     """Lista análisis con feedback_real no vacío, joinea con etiquetas del
-    etiquetador para saber cuáles ya están etiquetados.
+    etiquetador para saber cuáles ya están etiquetados o descartados.
 
     Devuelve la fila del análisis + (etiqueta_id, veredicto, comentario,
-    fecha_etiqueta) cuando existe."""
+    descartado, fecha_etiqueta) cuando existe."""
     email = (etiquetador_email or "").strip().lower()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
@@ -660,6 +660,7 @@ async def list_analisis_con_feedback_real(
                    c.id AS etiqueta_id,
                    c.veredicto,
                    c.comentario,
+                   c.descartado,
                    c.timestamp AS fecha_etiqueta
                FROM analisis a
                LEFT JOIN calibracion_etiquetas c
@@ -680,6 +681,7 @@ async def upsert_etiqueta_calibracion(
     etiquetador_email: str,
     veredicto: Optional[str],
     comentario: Optional[str],
+    descartado: bool = False,
 ) -> dict:
     """Inserta o actualiza la etiqueta de calibración del etiquetador para
     ese análisis. Único por (analisis_id, etiquetador_email)."""
@@ -687,15 +689,16 @@ async def upsert_etiqueta_calibracion(
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """INSERT INTO calibracion_etiquetas
-                   (analisis_id, etiquetador_email, veredicto, comentario)
-               VALUES ($1, $2, $3, $4)
+                   (analisis_id, etiquetador_email, veredicto, comentario, descartado)
+               VALUES ($1, $2, $3, $4, $5)
                ON CONFLICT (analisis_id, etiquetador_email) DO UPDATE
                    SET veredicto = EXCLUDED.veredicto,
                        comentario = EXCLUDED.comentario,
+                       descartado = EXCLUDED.descartado,
                        timestamp = now()
                RETURNING id, analisis_id, etiquetador_email,
-                         veredicto, comentario, timestamp""",
-            analisis_id, email, veredicto, comentario,
+                         veredicto, comentario, descartado, timestamp""",
+            analisis_id, email, veredicto, comentario, descartado,
         )
     return dict(row)
 
@@ -724,7 +727,7 @@ async def get_stats_calibracion_raw(
     email = (etiquetador_email or "").strip().lower()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
-            """SELECT c.veredicto, c.comentario, a.diagnostico
+            """SELECT c.veredicto, c.comentario, c.descartado, a.diagnostico
                FROM calibracion_etiquetas c
                JOIN analisis a ON c.analisis_id = a.id
                WHERE LOWER(c.etiquetador_email) = $1""",
