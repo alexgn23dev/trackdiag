@@ -415,6 +415,8 @@ def _analizar_loudness(audio_path: str, y_preloaded=None, sr_preloaded=None,
         "consejo_master": "",         # texto accionable según nivel
         "saturacion_dinamica": "",    # "ok"|"moderada"|"elevada"|"extrema"
         "aviso_saturacion": "",       # texto solo cuando saturación elevada/extrema
+        "nivel_true_peak": "",        # "ok"|"streaming"|"clipping" según severidad
+        "aviso_true_peak": "",        # texto accionable cuando excede umbrales
     }
 
     try:
@@ -472,6 +474,33 @@ def _analizar_loudness(audio_path: str, y_preloaded=None, sr_preloaded=None,
             peak_lin = float(np.max(np.abs(data)))
             if peak_lin > 1e-9:
                 resultado["true_peak_dbtp"] = round(20.0 * float(np.log10(peak_lin)), 1)
+
+        # Aviso de true peak según severidad. Umbrales basados en estándares
+        # de industria, no en datos de Mentotrack (no necesitan calibrado).
+        # - > 0 dBTP: clipping digital real, peor caso. Distorsión audible en
+        #   cualquier reproducción que use bit depth fijo.
+        # - > -1 dBTP: por encima del ceiling recomendado para streaming. Los
+        #   codecs lossy (AAC, MP3, Opus) generan inter-sample peaks adicionales
+        #   al comprimir y pueden saturar el reproductor del oyente.
+        # - <= -1 dBTP: zona segura para streaming.
+        tp_val = resultado["true_peak_dbtp"]
+        if tp_val > 0.0:
+            resultado["nivel_true_peak"] = "clipping"
+            resultado["aviso_true_peak"] = (
+                f"True peak en {tp_val:+.1f} dBTP — el master clipea digitalmente. "
+                "Habrá distorsión audible en cualquier sistema de reproducción. "
+                "Baja el ceiling del limiter del master a -1 dBTP y reanaliza."
+            )
+        elif tp_val > -1.0:
+            resultado["nivel_true_peak"] = "streaming"
+            resultado["aviso_true_peak"] = (
+                f"True peak en {tp_val:+.1f} dBTP — por encima del ceiling recomendado para streaming. "
+                "Spotify, YouTube y Apple Music aplican normalización + recodificación lossy que "
+                "puede generar inter-sample peaks adicionales y meter distorsión audible. "
+                "Pon el ceiling del limiter de master a -1 dBTP como margen de seguridad."
+            )
+        elif tp_val > -99.0:
+            resultado["nivel_true_peak"] = "ok"
 
         # Short-term loudness (ventanas de 3 segundos) para encontrar el pico
         block_size = int(rate * 3)  # 3 segundos

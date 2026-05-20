@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "version": "0.5.8",
+      "date": "2026-05-20",
+      "title": "Aviso de true peak + Dub Techno como género propio",
+      "changes": [
+        "Aviso de true peak accionable: cuando el master pasa de 0 dBTP (clipping digital real) o de −1 dBTP (ceiling recomendado para streaming), aparece un recuadro en el diagnóstico con el valor exacto y el consejo concreto (bajar el ceiling del limiter). El motor ya extraía el true peak con oversampling 4× según ITU-R BS.1770; ahora simplemente se expone como aviso.",
+        "Nuevo género explícito: Dub Techno. Se añade al cuestionario, al motor de reglas (descuento por género en harshness, exceso de graves, estructura repetitiva y diagnósticos estructurales — mismo trato que minimal/ambient), al contextualizador (LUFS target −11, duración 6–9 minutos, descripción de estructura típica) y al mapeo de labels. Resuelve casos como el de los usuarios que marcaban 'House' para tracks que en realidad eran dub techno y recibían diagnósticos inadecuados.",
+        "Minimal ya estaba como género desde antes; ahora con Dub Techno el catálogo cubre los géneros 'estáticos' donde la repetición prolongada y el bajo contraste son lenguaje del género."
+      ]
+    },
+    {
       "version": "0.5.7",
       "date": "2026-05-20",
       "title": "Dos detectores nuevos de arreglo: break sin payoff y track largo repetitivo",

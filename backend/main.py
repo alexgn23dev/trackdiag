@@ -48,7 +48,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.7")
+app = FastAPI(title="Mentotrack API", version="0.5.8")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -195,7 +195,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.7"}
+    return {"status": "ok", "version": "0.5.8"}
 
 
 @app.post("/api/diagnostico")
@@ -357,6 +357,7 @@ def opciones():
             {"value": "techno_acido", "label": "Techno ácido"},
             {"value": "hard_techno", "label": "Hard Techno"},
             {"value": "minimal", "label": "Minimal"},
+            {"value": "dub_techno", "label": "Dub Techno"},
             {"value": "progressive_house", "label": "Progressive House"},
             {"value": "trance", "label": "Trance"},
             {"value": "psytrance", "label": "Psytrance"},

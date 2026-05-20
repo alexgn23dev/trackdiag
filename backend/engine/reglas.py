@@ -238,7 +238,7 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     # tras feedback de Alex (2026-05): en estos géneros el bajo prominente forma
     # parte del lenguaje y no debe penalizarse como "exceso".
     generos_kick_protagonista = ["techno", "techno_acido", "tech_house", "hard_techno",
-                                  "minimal", "deep_house", "afro_house"]
+                                  "minimal", "deep_house", "afro_house", "dub_techno"]
     if genero in generos_kick_protagonista:
         if senales["balance_grave"] == "elevado":
             score -= 2; razones.append(f"(−) En {genero} el kick es protagonista — cierta dominancia grave es esperable")
@@ -648,7 +648,7 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
         # el peso del diagnóstico salvo que sea severo (real). El usuario aún
         # puede ver la métrica si la mira, pero no se levanta como bloqueo.
         generos_agresivos_aceptados = ["tech_house", "techno", "techno_acido",
-                                        "hard_techno", "minimal", "psytrance"]
+                                        "hard_techno", "minimal", "psytrance", "dub_techno"]
         if genero in generos_agresivos_aceptados and harshness.get("tiene_harshness"):
             if harshness.get("nivel") == "leve":
                 score -= 2

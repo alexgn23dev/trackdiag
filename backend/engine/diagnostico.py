@@ -125,6 +125,8 @@ def generar_diagnostico(senales: dict, contexto: dict) -> dict:
                 "referencia_genero": feedback_ctx.get("referencia_lufs_genero", ""),
                 "saturacion_dinamica": senales["loudness"].get("saturacion_dinamica", ""),
                 "aviso_saturacion": senales["loudness"].get("aviso_saturacion", ""),
+                "nivel_true_peak": senales["loudness"].get("nivel_true_peak", ""),
+                "aviso_true_peak": senales["loudness"].get("aviso_true_peak", ""),
             },
             "mono_compat": {
                 "es_stereo": senales["mono_compat"]["es_stereo"],
