@@ -131,8 +131,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://www.googletagmanager.com; "
             "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com; "
-            "img-src 'self' data: https://www.googletagmanager.com https://img.youtube.com https://i.ytimg.com https://i3.ytimg.com; "
+            "img-src 'self' data: https://www.googletagmanager.com https://img.youtube.com https://i.ytimg.com https://i3.ytimg.com https://i1.sndcdn.com https://i2.sndcdn.com https://i3.sndcdn.com https://i4.sndcdn.com; "
             "connect-src 'self' https://www.google-analytics.com https://analytics.google.com https://*.google-analytics.com https://*.analytics.google.com; "
+            "frame-src https://w.soundcloud.com https://www.youtube.com https://www.youtube-nocookie.com; "
             "frame-ancestors 'none';"
         )
         # HSTS solo en producción (cuando hay HTTPS)
