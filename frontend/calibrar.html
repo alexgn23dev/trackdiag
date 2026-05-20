@@ -60,6 +60,7 @@
         if (u.includes('wetransfer.com')) return 'wetransfer';
         if (u.includes('spotify.com')) return 'spotify';
         if (u.includes('youtube.com') || u.includes('youtu.be')) return 'youtube';
+        if (u.includes('music.apple.com')) return 'apple';
         return 'otro';
     }
 
@@ -80,23 +81,26 @@
 
     function PlayerExterno({ url }) {
         const plataforma = detectarPlataforma(url);
-        const labels = {
+        const etiquetaPlataforma = {
             soundcloud: 'SoundCloud',
             dropbox: 'Dropbox',
             drive: 'Google Drive',
             wetransfer: 'WeTransfer',
             spotify: 'Spotify',
             youtube: 'YouTube',
-            otro: 'Enlace externo',
-        };
+            apple: 'Apple Music',
+            otro: 'externo',
+        }[plataforma] || 'externo';
         return (
             <a
                 href={url}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 text-sm text-purple-400 hover:text-purple-300 underline"
+                title={url}
             >
-                ▶ Escuchar en {labels[plataforma] || 'externo'}
+                ▶ Enlace externo a la canción
+                <span className="text-xs text-gray-500">({etiquetaPlataforma})</span>
             </a>
         );
     }
@@ -313,9 +317,8 @@
         const [guardando, setGuardando] = useState(false);
         const [mensaje, setMensaje] = useState('');
         const [diagRawOpen, setDiagRawOpen] = useState(false);
-        // Audio y diagnóstico se pliegan independientemente, ambos cerrados por
-        // defecto, para que la lista sea escaneable de un vistazo.
-        const [audioOpen, setAudioOpen] = useState(false);
+        // El diagnóstico se pliega para que la lista sea escaneable de un vistazo.
+        // El enlace a la canción es siempre visible (link externo, sin embed).
         const [diagOpen, setDiagOpen] = useState(false);
         // Descartado vive en el server; espejo local para feedback inmediato.
         const descartado = !!inicial.descartado;
@@ -369,7 +372,6 @@
 
         const formularioEntries = parseFormulario(track.formulario);
         const urlEmbed = track.feedback_real_resuelto || track.feedback_real || '';
-        const plataforma = detectarPlataforma(urlEmbed);
 
         return (
             <div className={`card p-5 ${descartado ? 'card-descartado' : ''}`}>
@@ -407,31 +409,10 @@
                 )}
 
                 <div className="mb-3">
-                    <button
-                        onClick={() => setAudioOpen(o => !o)}
-                        className="w-full flex items-center justify-between text-left text-xs font-semibold text-gray-400 uppercase tracking-wide py-1 hover:text-gray-200"
-                    >
-                        <span>
-                            <span className="mr-2 text-gray-500">{audioOpen ? '▾' : '▸'}</span>
-                            Canción
-                            {!urlEmbed && <span className="ml-2 text-gray-600 normal-case font-normal">(sin enlace)</span>}
-                            {plataforma && plataforma !== 'soundcloud' && urlEmbed && (
-                                <span className="ml-2 text-gray-600 normal-case font-normal">(enlace externo)</span>
-                            )}
-                        </span>
-                    </button>
-                    {audioOpen && (
-                        <div className="mt-2">
-                            {urlEmbed ? (
-                                plataforma === 'soundcloud' ? (
-                                    <SoundCloudEmbed url={urlEmbed} />
-                                ) : (
-                                    <PlayerExterno url={urlEmbed} />
-                                )
-                            ) : (
-                                <span className="text-xs text-gray-500">Sin enlace de audio</span>
-                            )}
-                        </div>
+                    {urlEmbed ? (
+                        <PlayerExterno url={urlEmbed} />
+                    ) : (
+                        <span className="text-xs text-gray-500">Sin enlace de audio</span>
                     )}
                 </div>
 
