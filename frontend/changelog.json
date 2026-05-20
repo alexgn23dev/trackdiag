@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "version": "0.5.5",
+      "date": "2026-05-20",
+      "title": "Géneros estáticos respetados + nuevo diagnóstico de enmascaramiento bajo↔kick",
+      "changes": [
+        "Géneros estáticos (minimal, ambient, dub techno, drone, downtempo) y tracks atmosféricos: poco desarrollo, bajo contraste y loops continuos ya no se diagnostican como 'mezcla prematura', 'problema de arreglo' o 'poco contraste'. Son lenguaje del género, no fallos. Detección por género explícito, por palabras en 'Otro' (ambient, dub techno…) o por heurística (ratio tonal/percusivo alto con contenido tonal alto).",
+        "Nuevo diagnóstico 'enmascaramiento_bajo': detecta cuando el bajo se come al kick o a los graves-medios — el caso típico donde un bajo prominente crea un agujero en 200-800 Hz, las percusiones suenan amagadas y el kick pierde transient. Cruza la diferencia de energía entre bandas (60-200 vs 200-800 Hz) con la dominancia del sub. Sale como diagnóstico independiente del exceso de graves global.",
+        "Pequeña limitación conocida: cuando un usuario marca 'Tech House' pero el track es realmente minimal, el motor no puede inferirlo y puede seguir disparando diagnósticos de estructura. Si se da, marcar el track con su género real ayuda."
+      ]
+    },
+    {
       "version": "0.5.4",
       "date": "2026-05-20",
       "title": "Recalibrado del motor con feedback experto sobre 19 tracks reales",

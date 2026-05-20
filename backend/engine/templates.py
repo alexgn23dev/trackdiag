@@ -188,6 +188,23 @@ TEMPLATES = {
             "(Q alto) entre 2-6kHz y barre hasta encontrar la zona que molesta, luego recorta 2-4dB."
         ),
     },
+    "enmascaramiento_bajo": {
+        "titulo": "El bajo está enmascarando al kick o a los graves medios.",
+        "prioridades": [
+            "Identifica qué frecuencias ocupa tu bajo: probablemente está empujando entre 80 y 200 Hz por encima de lo que debería. Aplica un corte sustractivo en esa zona del bajo (1-3 dB) y vuelve a comparar contra el kick.",
+            "Revisa la relación kick ↔ bajo: si están en zonas similares, usa sidechain compression (4-6 ms attack, 80-120 ms release) para que el bajo se aparte cuando entra el kick.",
+            "Si tras esto los medios siguen apagados, sube ligeramente el bus de percusión o de medios (no del master) para recuperar presencia sin tocar el bajo.",
+        ],
+        "no_tocar": [
+            "No subas el kick para compensar — el problema es de espacio, no de volumen. Subir el kick solo empeora la pelea con el bajo.",
+            "No apliques un EQ ancho a la banda 80-200 Hz del master — afectarás también al kick. Trabaja siempre sobre el canal del bajo individualmente.",
+        ],
+        "siguiente_sesion": (
+            "En tu próxima sesión, solea kick + bajo y escucha el patrón rítmico. Si el kick se 'apaga' cuando entra el bajo, "
+            "tienes enmascaramiento. Prueba un EQ dinámico en el bajo que se reduzca solo en la banda del kick "
+            "(60-100 Hz) o un sidechain rápido. Vuelve a comprobar con el resto de la mezcla activada."
+        ),
+    },
     "sin_diagnostico": {
         "titulo": "No se detectan bloqueos evidentes en este track.",
         "prioridades": [

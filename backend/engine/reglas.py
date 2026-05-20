@@ -43,6 +43,26 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     # Track con buen contraste y desarrollo: descontar puntos de estructura
     if senales["contraste_energetico"] in ["medio", "alto"] and senales["tiene_desarrollo"] and not dist["estructura_problematica"]:
         score -= 3; razones.append("(−) El track muestra buen contraste, desarrollo y distribución")
+    # Gatekeeper por género estático (minimal, ambient, dub techno, etc.):
+    # contraste bajo y poco desarrollo son lenguaje del género, no problema.
+    # Se aplica el mismo criterio que en mezcla_prematura — calculado al inicio
+    # de esa rama. Para no duplicar, lo recalculamos local aquí.
+    _genero_local = contexto.get("genero", "")
+    _custom_local = (contexto.get("genero_custom") or "").lower()
+    _armonia_local = senales.get("armonia", {}) or {}
+    _es_estatico_local = (
+        _genero_local in ["minimal", "ambient", "drone", "downtempo", "dub_techno"]
+        or any(k in _custom_local for k in ["ambient", "drone", "downtempo", "dub techno", "dub_techno", "atmosfer"])
+        or (_genero_local == "otro"
+            and _armonia_local.get("ratio_tonal_percusivo", 1.0) > 2.5
+            and _armonia_local.get("contenido_tonal", 0.5) > 0.55)
+    )
+    if _es_estatico_local and not dist["estructura_problematica"]:
+        # Capping a 0 — conservamos el diagnóstico solo si la distribución de
+        # secciones está realmente rota (señal específica, no global).
+        if score > 0:
+            score = 0
+        razones.append("(−) En géneros estáticos (minimal, ambient, dub techno…), poco contraste y bajo desarrollo son intencionales")
     scores["problema_arreglo"] = score
     detalles["problema_arreglo"] = razones
 
@@ -67,6 +87,25 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     # Si hay desarrollo y contraste, descartar este diagnóstico
     if senales["tiene_desarrollo"] and senales["contraste_energetico"] in ["medio", "alto"]:
         score -= 3; razones.append("(−) El track tiene desarrollo y variación de energía")
+    # Gatekeeper género estático: en ambient/minimal/dub techno, "loop continuo
+    # sin desarrollo" es lenguaje del género. Si el usuario no se queja de
+    # repetitividad, no diagnosticar.
+    _g = contexto.get("genero", "")
+    _gc = (contexto.get("genero_custom") or "").lower()
+    _arm = senales.get("armonia", {}) or {}
+    _estatico = (
+        _g in ["minimal", "ambient", "drone", "downtempo", "dub_techno"]
+        or any(k in _gc for k in ["ambient", "drone", "downtempo", "dub techno", "dub_techno", "atmosfer"])
+        or (_g == "otro"
+            and _arm.get("ratio_tonal_percusivo", 1.0) > 2.5
+            and _arm.get("contenido_tonal", 0.5) > 0.55)
+    )
+    _usuario_se_queja_repe = any(p in bloqueo for p in
+                                  ["repetitivo", "repite", "loop", "monóton", "monoton", "aburrido", "igual"])
+    if _estatico and not _usuario_se_queja_repe:
+        if score > 0:
+            score = 0
+        razones.append("(−) En géneros estáticos (minimal, ambient, dub techno…), un loop continuo es lenguaje del género")
     scores["poco_contraste"] = score
     detalles["poco_contraste"] = razones
 
@@ -105,6 +144,29 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     estructura_rota = bool(dist["estructura_problematica"])
     problemas_estructura = sin_desarrollo or contraste_bajo or estructura_rota
 
+    # Gatekeeper por género (añadido 2026-05 tras feedback de Alex):
+    # En géneros donde poco desarrollo y bajo contraste son lenguaje del género
+    # (minimal, ambient, dub techno, drone, downtempo), las señales de
+    # problemas_estructura son falsos positivos sistemáticos.
+    genero_actual = contexto.get("genero", "")
+    genero_custom_lower = (contexto.get("genero_custom") or "").lower()
+    generos_estaticos = ["minimal", "ambient", "drone", "downtempo", "dub_techno"]
+    palabras_custom_estatico = ["ambient", "drone", "downtempo", "dub techno",
+                                 "dub_techno", "atmosfer", "ambiente"]
+    armonia_local = senales.get("armonia", {}) or {}
+    # Heurística para "Otro": predominantemente tonal y poco percusivo →
+    # probablemente ambient/atmosférico, no apto para diagnóstico estructural.
+    parece_atmosferico = (
+        genero_actual == "otro"
+        and armonia_local.get("ratio_tonal_percusivo", 1.0) > 2.5
+        and armonia_local.get("contenido_tonal", 0.5) > 0.55
+    )
+    es_genero_estatico = (
+        genero_actual in generos_estaticos
+        or any(k in genero_custom_lower for k in palabras_custom_estatico)
+        or parece_atmosferico
+    )
+
     def _motivo_estructura():
         """Devuelve el texto preciso según qué señal disparó."""
         if estructura_rota:
@@ -133,6 +195,17 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     loudness = senales.get("loudness", {})
     if loudness.get("nivel") in ["alto", "muy_alto"] and track_no_maduro:
         score += 2; razones.append("Loudness alto en un track inmaduro — parece que se ha masterizado antes de cerrar el arreglo")
+    # Gatekeeper final: en géneros estáticos / atmosféricos, neutralizar los
+    # positivos derivados de problemas_estructura. Si el usuario aún declara
+    # estar mezclando un track verde (madurez), eso se mantiene como señal real.
+    # Capping a 0 — no a un valor negativo arbitrario — para evitar que se
+    # combine raro con otros descuentos.
+    if es_genero_estatico and problemas_estructura and senales["madurez_estimada"] != "verde":
+        if score > 0:
+            score = 0
+        etiqueta_gen = (genero_actual if genero_actual in generos_estaticos
+                        else "track atmosférico/ambient")
+        razones.append(f"(−) En {etiqueta_gen}, poco desarrollo y bajo contraste suelen ser intencionales — no se diagnostica como mezcla prematura")
     scores["mezcla_prematura"] = score
     detalles["mezcla_prematura"] = razones
 
@@ -503,6 +576,72 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     scores["harshness_mezcla"] = score
     detalles["harshness_mezcla"] = razones
 
+    # --- 11: Enmascaramiento bajo↔kick / bajo↔graves-medios ---
+    # Detecta cuando el bajo (60-200 Hz) está alto y crea un "agujero" en
+    # graves-medios (200-800 Hz), o cuando el sub (0-60 Hz) domina sobre los
+    # graves audibles. Síntoma típico: el kick pierde transient, los medios
+    # bajos quedan amagados, el bajo "se come" el espacio.
+    # Distinto de exceso_lowend, que mira el balance grave→medio global.
+    score, razones = 0, []
+    bandas = senales.get("espectro_bandas", {}) or {}
+    db_graves_b = bandas.get("graves", -80)
+    db_low_mid_b = bandas.get("low_mid", -80)
+    diff_sub_low = senales.get("diff_sub_low", 0)
+    diff_graves_lowmid = db_graves_b - db_low_mid_b
+
+    # Solo aplica si NO es ya un caso claro de exceso_lowend (que tiene su
+    # propio diagnóstico). El masking es más sutil: graves dominantes pero el
+    # balance global no llega a "excesivo".
+    if senales["balance_grave"] != "excesivo":
+        if diff_graves_lowmid > 12:
+            score += 2
+            razones.append(
+                f"Los graves audibles (60-200 Hz) están {diff_graves_lowmid:.1f} dB por encima de los graves-medios (200-800 Hz) — "
+                "señal típica de un bajo prominente comiéndose el espacio del kick y los medios bajos"
+            )
+        elif diff_graves_lowmid > 8:
+            score += 1
+            razones.append(
+                f"Diferencia notable entre graves (60-200 Hz) y graves-medios (200-800 Hz): {diff_graves_lowmid:.1f} dB"
+            )
+        if diff_sub_low > 4:
+            score += 1
+            razones.append(
+                f"El sub (0-60 Hz) está {diff_sub_low:.1f} dB por encima de los graves audibles — posible rumble o sub descontrolado"
+            )
+
+    # Boost si el usuario describe el problema con palabras del campo léxico
+    palabras_masking = ["kick", "bombo", "bajo", "bass", "enmasc", "barro", "mud",
+                         "turbio", "se come", "pierde el kick", "kick perdido", "low end"]
+    if any(p in bloqueo for p in palabras_masking):
+        score += 2
+        razones.append("El usuario percibe problemas con el kick o el bajo")
+
+    # Cruce: enmascaramiento + densidad baja = no es densidad, es masking
+    if senales["densidad_global"] == "baja" and diff_graves_lowmid > 10:
+        score += 1
+        razones.append("Densidad baja con graves dominantes — el bajo ocupa espacio que debería ser de otros elementos")
+
+    # Cruce: harshness severo simultáneo puede ser por barro de graves-medios
+    # (caso típico: el motor lee chirrido porque los low-mids están aplastados).
+    # Empuja al enmascaramiento como hipótesis alternativa.
+    if (harshness.get("nivel") == "severo"
+            and diff_graves_lowmid > 8
+            and senales["balance_grave"] != "excesivo"):
+        score += 1
+        razones.append(
+            "Harshness severo simultáneo — el barro de graves-medios puede estar amplificando la lectura de aspereza"
+        )
+
+    # Si exceso_lowend ya es claro, este diagnóstico no aporta — penalizar para
+    # evitar doble diagnóstico del mismo problema.
+    if senales["balance_grave"] == "excesivo":
+        score -= 2
+        razones.append("(−) Hay exceso_lowend más claro — se diagnostica eso en su lugar")
+
+    scores["enmascaramiento_bajo"] = score
+    detalles["enmascaramiento_bajo"] = razones
+
     return scores, detalles
 
 
@@ -526,7 +665,7 @@ def aplicar_jerarquia(scores: dict, senales: dict, contexto: dict) -> tuple:
 
     # Regla 1: estructura antes que mezcla/espectro/armonía
     problemas_estructura = scores.get("problema_arreglo", 0) > 3 or scores.get("poco_contraste", 0) > 3
-    if principal_id in ["exceso_lowend", "exceso_densidad", "conflicto_armonico", "pobreza_armonica", "harshness_mezcla"] and problemas_estructura:
+    if principal_id in ["exceso_lowend", "exceso_densidad", "conflicto_armonico", "pobreza_armonica", "harshness_mezcla", "enmascaramiento_bajo"] and problemas_estructura:
         if scores.get("problema_arreglo", 0) >= scores.get("poco_contraste", 0):
             principal_id = "problema_arreglo"
         else:

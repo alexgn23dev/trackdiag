@@ -151,6 +151,7 @@ def generar_diagnostico(senales: dict, contexto: dict) -> dict:
             "db_media": senales.get("db_media"),
             "db_aguda": senales.get("db_aguda"),
             "diff_grave_media": senales.get("diff_grave_media"),
+            "diff_sub_low": senales.get("diff_sub_low"),
             "densidad_espectral": senales.get("densidad_espectral"),
             "varianza_energia": senales.get("varianza_energia"),
             "rango_dinamico": senales.get("rango_dinamico"),
