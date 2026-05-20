@@ -1737,6 +1737,40 @@ def _admin_email_from_cookie(request: Request):
     return _ADMIN_EMAIL_CANONICO
 
 
+# Cache en memoria de URLs cortas → canónicas. Se llena al primer acceso al
+# endpoint /api/calibrar/tracks y persiste hasta que el contenedor reinicia.
+_SC_RESOLVED_CACHE: dict[str, str] = {}
+
+
+async def _resolver_url_audio(url: str) -> str:
+    """Convierte URLs cortas de SoundCloud (on.soundcloud.com/XYZ) a su forma
+    canónica, que es la que entiende el widget oficial. También limpia los
+    tracking params (?si=…, ?utm_*). Si no es SoundCloud o falla la
+    resolución, devuelve la URL original."""
+    if not url:
+        return ""
+    if url in _SC_RESOLVED_CACHE:
+        return _SC_RESOLVED_CACHE[url]
+
+    resolved = url
+    try:
+        if url.startswith("https://on.soundcloud.com/"):
+            async with httpx.AsyncClient(follow_redirects=False, timeout=3.0) as client:
+                resp = await client.head(url)
+                location = resp.headers.get("location") or ""
+                if "soundcloud.com/" in location:
+                    resolved = location.split("?", 1)[0]
+        elif "soundcloud.com/" in url:
+            # Strip tracking params para SC normales
+            resolved = url.split("?", 1)[0]
+    except Exception as e:
+        print(f"[CALIBRAR] resolución de URL falló para {url}: {e}")
+        resolved = url
+
+    _SC_RESOLVED_CACHE[url] = resolved
+    return resolved
+
+
 def _serializar_track_calibracion(row: dict) -> dict:
     """Serializa una fila de list_analisis_con_feedback_real a JSON."""
     ts = row.get("timestamp")
@@ -1750,6 +1784,7 @@ def _serializar_track_calibracion(row: dict) -> dict:
         "diagnostico": row.get("diagnostico") or "",
         "senales": row.get("senales") or {},
         "feedback_real": row.get("feedback_real") or "",
+        "feedback_real_resuelto": row.get("feedback_real_resuelto") or row.get("feedback_real") or "",
         "genero_custom": row.get("genero_custom"),
         "proyecto_id": str(row["proyecto_id"]) if row.get("proyecto_id") else None,
         "version_num": row.get("version_num"),
@@ -1766,10 +1801,116 @@ def _serializar_track_calibracion(row: dict) -> dict:
     }
 
 
+# Stopwords ES + EN básicas para análisis de palabras frecuentes en comentarios.
+_STOPWORDS_CALIBRAR = {
+    # ES
+    "para","como","pero","esta","este","esto","esos","esas","muy","más","mas","sin",
+    "sobre","entre","cuando","donde","porque","aunque","desde","hasta","mientras",
+    "todo","toda","todos","todas","otro","otra","otros","otras","cada","algún","alguna",
+    "algunos","algunas","mucho","mucha","muchos","muchas","poco","poca","pocos","pocas",
+    "siempre","nunca","tambien","también","solo","sólo","mismo","misma","mismos","mismas",
+    "puede","pueden","tiene","tienen","hace","hacer","hecho","hace","tan","tanto",
+    "según","aquí","ahí","allí","ahora","luego","antes","despues","después",
+    "hola","creo","veo","oigo","suena","track","tema","mezcla","master","máster","mix",
+    # EN
+    "the","and","with","this","that","from","into","over","under","just","very",
+    "have","has","had","not","but","for","you","your","its","not",
+}
+
+
+def _palabras_significativas(texto: str) -> list[str]:
+    """Extrae palabras de un comentario, en minúsculas, sin stopwords, len>=4."""
+    if not texto:
+        return []
+    # Sustituye signos por espacios para no juntar palabras
+    limpio = re.sub(r"[^a-záéíóúñü0-9\s-]", " ", texto.lower())
+    return [
+        w for w in limpio.split()
+        if len(w) >= 4 and w not in _STOPWORDS_CALIBRAR
+    ]
+
+
+def _color_motor_desde_diagnostico(diagnostico: str) -> str:
+    """Mapea el estado libre del motor a verde/amarillo/rojo. Heurístico:
+    listo/lista → verde; casi/pendiente → amarillo; iteración/construcción/
+    prematura/necesita → rojo. Lo desconocido se etiqueta como 'desconocido'."""
+    if not diagnostico:
+        return "desconocido"
+    m = re.search(r"ESTADO:\s*(.+)", diagnostico, re.IGNORECASE)
+    if not m:
+        return "desconocido"
+    estado = m.group(1).strip().lower()
+    if any(s in estado for s in ("construc", "iteración", "iteracion", "prematura", "necesita iter", "buena base")):
+        return "rojo"
+    if any(s in estado for s in ("casi", "pendiente", "punto")):
+        return "amarillo"
+    if "listo" in estado or "lista" in estado:
+        return "verde"
+    return "desconocido"
+
+
+def _calcular_stats_calibracion(etiquetas: list[dict], total_disponibles: int) -> dict:
+    """Construye distribución, matriz de concordancia motor→admin y palabras
+    frecuentes por veredicto a partir de la lista de etiquetas con su
+    diagnóstico asociado."""
+    from collections import Counter
+
+    total_etiquetados = len(etiquetas)
+    pendientes = max(total_disponibles - total_etiquetados, 0)
+
+    distribucion = {"verde": 0, "amarillo": 0, "rojo": 0, "sin_veredicto": 0}
+    colores_motor = ("verde", "amarillo", "rojo", "desconocido")
+    matriz = {
+        c: {"verde": 0, "amarillo": 0, "rojo": 0, "sin_veredicto": 0}
+        for c in colores_motor
+    }
+    palabras_por_veredicto: dict[str, Counter] = {
+        "verde": Counter(), "amarillo": Counter(), "rojo": Counter(),
+    }
+    longitudes = {"verde": [], "amarillo": [], "rojo": [], "sin_veredicto": []}
+
+    for e in etiquetas:
+        mio = (e.get("veredicto") or "").strip().lower()
+        if mio not in ("verde", "amarillo", "rojo"):
+            mio = "sin_veredicto"
+        distribucion[mio] += 1
+
+        motor = _color_motor_desde_diagnostico(e.get("diagnostico") or "")
+        matriz[motor][mio] += 1
+
+        comentario = (e.get("comentario") or "")
+        longitudes[mio].append(len(comentario))
+        if mio in palabras_por_veredicto:
+            for w in _palabras_significativas(comentario):
+                palabras_por_veredicto[mio][w] += 1
+
+    top_palabras = {
+        v: [{"palabra": p, "n": n} for p, n in c.most_common(8)]
+        for v, c in palabras_por_veredicto.items()
+    }
+    longitud_media = {
+        v: (sum(ls) // len(ls)) if ls else 0
+        for v, ls in longitudes.items()
+    }
+
+    return {
+        "total_disponibles": total_disponibles,
+        "total_etiquetados": total_etiquetados,
+        "pendientes": pendientes,
+        "distribucion_admin": distribucion,
+        "matriz_concordancia": matriz,
+        "palabras_frecuentes": top_palabras,
+        "longitud_media_comentario": longitud_media,
+    }
+
+
 @app.get("/api/calibrar/tracks")
 @limiter.limit("30/minute")
 async def calibrar_listar_tracks(request: Request):
-    """Lista análisis con feedback_real y, si existe, la etiqueta del admin."""
+    """Lista análisis con feedback_real y, si existe, la etiqueta del admin.
+    Resuelve en paralelo las URLs cortas de SoundCloud para que el widget
+    pueda embeber el reproductor (las short URLs `on.soundcloud.com/...` no
+    son aceptadas directamente por el widget)."""
     email = _admin_email_from_cookie(request)
     if not email:
         return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
@@ -1780,10 +1921,36 @@ async def calibrar_listar_tracks(request: Request):
         import repositories as repo
         pool = get_pool()
         rows = await repo.list_analisis_con_feedback_real(pool, email, limit=500)
+        urls = [r.get("feedback_real") or "" for r in rows]
+        resueltas = await asyncio.gather(*(_resolver_url_audio(u) for u in urls))
+        for r, ru in zip(rows, resueltas):
+            r["feedback_real_resuelto"] = ru
         return {"ok": True, "tracks": [_serializar_track_calibracion(r) for r in rows]}
     except Exception as e:
         print(f"[CALIBRAR] error listando tracks: {e}")
         return JSONResponse(status_code=503, content={"error": "Error consultando DB"})
+
+
+@app.get("/api/calibrar/stats")
+@limiter.limit("30/minute")
+async def calibrar_obtener_stats(request: Request):
+    """Estadísticas de calibración del admin: distribución, matriz de
+    concordancia motor↔admin y palabras frecuentes por veredicto."""
+    email = _admin_email_from_cookie(request)
+    if not email:
+        return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Postgres no disponible"})
+    try:
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+        raw = await repo.get_stats_calibracion_raw(pool, email)
+        stats = _calcular_stats_calibracion(raw["etiquetas"], raw["total_disponibles"])
+        return {"ok": True, **stats}
+    except Exception as e:
+        print(f"[CALIBRAR] error calculando stats: {e}")
+        return JSONResponse(status_code=503, content={"error": "Error calculando estadísticas"})
 
 
 @app.post("/api/calibrar/etiqueta")
