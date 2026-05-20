@@ -171,9 +171,11 @@ Sin `DATABASE_URL` la mayoría de endpoints caen a Sheets (más lento, sin proye
 ```bash
 cd backend
 DATABASE_URL="..." alembic revision --autogenerate -m "descripción"
-DATABASE_URL="..." alembic upgrade head
+DATABASE_URL="..." alembic upgrade head   # opcional en local, prod lo hace solo al desplegar
 ```
 Revisar la migración generada antes de aplicarla — `autogenerate` no detecta cambios de datos.
+
+**En producción la migración corre sola al arrancar la app** (`_run_alembic_upgrade` en `main.py` ejecuta `alembic upgrade head` en el startup event). Por tanto basta con mergear a `main`: Railway despliega → la app arranca → si hay migraciones pendientes se aplican antes de inicializar el pool. Si la migración falla, se logea y la app sigue arrancando con la DB desactualizada.
 
 ### Deploy
 - Trabajo en `dev`, merge a `main` cuando esté revisado.

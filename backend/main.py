@@ -53,13 +53,36 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
+def _run_alembic_upgrade() -> None:
+    """Aplica las migraciones pendientes con `alembic upgrade head`.
+
+    Se ejecuta al arrancar la app para que las tablas nuevas estén creadas
+    antes de aceptar peticiones. Si la DB ya está al día, no hace nada.
+    Si falla, lo logueamos pero seguimos arrancando: la app puede vivir
+    con la DB desactualizada (los endpoints que necesiten lo nuevo darán
+    503), preferible a no arrancar."""
+    try:
+        from alembic.config import Config
+        from alembic import command
+        backend_dir = Path(__file__).resolve().parent
+        cfg = Config(str(backend_dir / "alembic.ini"))
+        command.upgrade(cfg, "head")
+        print("[STARTUP] alembic upgrade head: OK")
+    except Exception as e:
+        print(f"[STARTUP] alembic upgrade FALLÓ (la app sigue arrancando): {e}")
+
+
 @app.on_event("startup")
 async def _startup_db():
     """Inicializa el pool de Postgres si DATABASE_URL está disponible.
+    Aplica migraciones pendientes antes de abrir el pool, para que las
+    tablas nuevas existan al recibir la primera petición.
     En local sin DATABASE_URL, la app sigue arrancando (el motor de análisis
     no depende de la BD; los endpoints que sí dependan fallarán explícitos).
     """
     if os.environ.get("DATABASE_URL"):
+        # Migraciones primero (sync, rápido si no hay nada que aplicar).
+        await asyncio.to_thread(_run_alembic_upgrade)
         from db import init_pool
         await init_pool()
 
