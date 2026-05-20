@@ -310,7 +310,11 @@
         const [comentario, setComentario] = useState(inicial.comentario || '');
         const [guardando, setGuardando] = useState(false);
         const [mensaje, setMensaje] = useState('');
-        const [diagExpandido, setDiagExpandido] = useState(false);
+        const [diagRawOpen, setDiagRawOpen] = useState(false);
+        // Audio y diagnóstico se pliegan independientemente, ambos cerrados por
+        // defecto, para que la lista sea escaneable de un vistazo.
+        const [audioOpen, setAudioOpen] = useState(false);
+        const [diagOpen, setDiagOpen] = useState(false);
 
         const dirty = (veredicto !== (inicial.veredicto || '')) || (comentario !== (inicial.comentario || ''));
         const yaEtiquetado = !!track.etiqueta;
@@ -382,34 +386,63 @@
                 )}
 
                 <div className="mb-3">
-                    {urlEmbed ? (
-                        plataforma === 'soundcloud' ? (
-                            <SoundCloudEmbed url={urlEmbed} />
-                        ) : (
-                            <PlayerExterno url={urlEmbed} />
-                        )
-                    ) : (
-                        <span className="text-xs text-gray-500">Sin enlace de audio</span>
+                    <button
+                        onClick={() => setAudioOpen(o => !o)}
+                        className="w-full flex items-center justify-between text-left text-xs font-semibold text-gray-400 uppercase tracking-wide py-1 hover:text-gray-200"
+                    >
+                        <span>
+                            <span className="mr-2 text-gray-500">{audioOpen ? '▾' : '▸'}</span>
+                            Canción
+                            {!urlEmbed && <span className="ml-2 text-gray-600 normal-case font-normal">(sin enlace)</span>}
+                            {plataforma && plataforma !== 'soundcloud' && urlEmbed && (
+                                <span className="ml-2 text-gray-600 normal-case font-normal">(enlace externo)</span>
+                            )}
+                        </span>
+                    </button>
+                    {audioOpen && (
+                        <div className="mt-2">
+                            {urlEmbed ? (
+                                plataforma === 'soundcloud' ? (
+                                    <SoundCloudEmbed url={urlEmbed} />
+                                ) : (
+                                    <PlayerExterno url={urlEmbed} />
+                                )
+                            ) : (
+                                <span className="text-xs text-gray-500">Sin enlace de audio</span>
+                            )}
+                        </div>
                     )}
                 </div>
 
                 <div className="mb-4">
-                    <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Diagnóstico del motor</span>
-                        <button
-                            onClick={() => setDiagExpandido(d => !d)}
-                            className="text-xs text-purple-400 hover:text-purple-300"
-                        >
-                            {diagExpandido ? 'Ocultar texto crudo ▴' : 'Ver texto crudo ▾'}
-                        </button>
-                    </div>
-                    {track.diagnostico
-                        ? <DiagnosticoVisual diagnostico={track.diagnostico} />
-                        : <div className="text-xs text-gray-500">(sin diagnóstico guardado)</div>
-                    }
-                    {diagExpandido && (
-                        <div className="diag-block expanded mt-3">
-                            {track.diagnostico || '(sin diagnóstico guardado)'}
+                    <button
+                        onClick={() => setDiagOpen(o => !o)}
+                        className="w-full flex items-center justify-between text-left text-xs font-semibold text-gray-400 uppercase tracking-wide py-1 hover:text-gray-200"
+                    >
+                        <span>
+                            <span className="mr-2 text-gray-500">{diagOpen ? '▾' : '▸'}</span>
+                            Diagnóstico del motor
+                        </span>
+                    </button>
+                    {diagOpen && (
+                        <div className="mt-2">
+                            <div className="flex items-center justify-end mb-2">
+                                <button
+                                    onClick={() => setDiagRawOpen(d => !d)}
+                                    className="text-xs text-purple-400 hover:text-purple-300"
+                                >
+                                    {diagRawOpen ? 'Ocultar texto crudo ▴' : 'Ver texto crudo ▾'}
+                                </button>
+                            </div>
+                            {track.diagnostico
+                                ? <DiagnosticoVisual diagnostico={track.diagnostico} />
+                                : <div className="text-xs text-gray-500">(sin diagnóstico guardado)</div>
+                            }
+                            {diagRawOpen && (
+                                <div className="diag-block expanded mt-3">
+                                    {track.diagnostico || '(sin diagnóstico guardado)'}
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
