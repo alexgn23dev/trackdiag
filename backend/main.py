@@ -1852,64 +1852,52 @@ def _color_motor_desde_diagnostico(diagnostico: str) -> str:
 
 
 def _calcular_stats_calibracion(etiquetas: list[dict], total_disponibles: int) -> dict:
-    """Construye distribución, matriz de concordancia motor→admin y palabras
-    frecuentes por veredicto a partir de la lista de etiquetas con su
-    diagnóstico asociado. Los descartados se cuentan aparte y no entran en
-    la matriz ni en palabras frecuentes (no son veredictos evaluados)."""
+    """Stats sobre los comentarios libres del admin. Sin veredicto color
+    (decisión: el admin escribe texto libre, no marca color, para no sesgar
+    el análisis posterior). Las palabras frecuentes se bucketean por color
+    que sacó el MOTOR — así se ven divergencias estilo \"en tracks que el
+    motor llamó verde, en tus comentarios aparece N veces 'harshness'\"."""
     from collections import Counter
 
-    distribucion = {"verde": 0, "amarillo": 0, "rojo": 0, "sin_veredicto": 0}
-    colores_motor = ("verde", "amarillo", "rojo", "desconocido")
-    matriz = {
-        c: {"verde": 0, "amarillo": 0, "rojo": 0, "sin_veredicto": 0}
-        for c in colores_motor
-    }
-    palabras_por_veredicto: dict[str, Counter] = {
+    palabras_por_motor: dict[str, Counter] = {
         "verde": Counter(), "amarillo": Counter(), "rojo": Counter(),
+        "desconocido": Counter(),
     }
-    longitudes = {"verde": [], "amarillo": [], "rojo": [], "sin_veredicto": []}
-
+    longitudes: list[int] = []
     descartados = 0
-    evaluados = 0  # etiquetas no descartadas con veredicto o comentario
+    comentados = 0  # etiquetas no descartadas con comentario no vacío
+
     for e in etiquetas:
         if bool(e.get("descartado")):
             descartados += 1
             continue
-        evaluados += 1
-        mio = (e.get("veredicto") or "").strip().lower()
-        if mio not in ("verde", "amarillo", "rojo"):
-            mio = "sin_veredicto"
-        distribucion[mio] += 1
+        comentario = (e.get("comentario") or "").strip()
+        if not comentario:
+            continue
+        comentados += 1
+        longitudes.append(len(comentario))
 
         motor = _color_motor_desde_diagnostico(e.get("diagnostico") or "")
-        matriz[motor][mio] += 1
+        if motor not in palabras_por_motor:
+            motor = "desconocido"
+        for w in _palabras_significativas(comentario):
+            palabras_por_motor[motor][w] += 1
 
-        comentario = (e.get("comentario") or "")
-        longitudes[mio].append(len(comentario))
-        if mio in palabras_por_veredicto:
-            for w in _palabras_significativas(comentario):
-                palabras_por_veredicto[mio][w] += 1
+    pendientes = max(total_disponibles - comentados - descartados, 0)
+    longitud_media = (sum(longitudes) // len(longitudes)) if longitudes else 0
 
-    pendientes = max(total_disponibles - evaluados - descartados, 0)
-
-    top_palabras = {
-        v: [{"palabra": p, "n": n} for p, n in c.most_common(8)]
-        for v, c in palabras_por_veredicto.items()
-    }
-    longitud_media = {
-        v: (sum(ls) // len(ls)) if ls else 0
-        for v, ls in longitudes.items()
+    top_palabras_por_motor = {
+        c: [{"palabra": p, "n": n} for p, n in cnt.most_common(10)]
+        for c, cnt in palabras_por_motor.items()
     }
 
     return {
         "total_disponibles": total_disponibles,
-        "total_etiquetados": evaluados,
+        "total_etiquetados": comentados,
         "descartados": descartados,
         "pendientes": pendientes,
-        "distribucion_admin": distribucion,
-        "matriz_concordancia": matriz,
-        "palabras_frecuentes": top_palabras,
         "longitud_media_comentario": longitud_media,
+        "palabras_por_color_motor": top_palabras_por_motor,
     }
 
 
