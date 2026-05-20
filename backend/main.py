@@ -1794,6 +1794,7 @@ def _serializar_track_calibracion(row: dict) -> dict:
                 "id": str(row["etiqueta_id"]),
                 "veredicto": row.get("veredicto"),
                 "comentario": row.get("comentario"),
+                "descartado": bool(row.get("descartado")),
                 "fecha": fecha_etiqueta.isoformat() if fecha_etiqueta else None,
             }
             if row.get("etiqueta_id")
@@ -1853,11 +1854,9 @@ def _color_motor_desde_diagnostico(diagnostico: str) -> str:
 def _calcular_stats_calibracion(etiquetas: list[dict], total_disponibles: int) -> dict:
     """Construye distribución, matriz de concordancia motor→admin y palabras
     frecuentes por veredicto a partir de la lista de etiquetas con su
-    diagnóstico asociado."""
+    diagnóstico asociado. Los descartados se cuentan aparte y no entran en
+    la matriz ni en palabras frecuentes (no son veredictos evaluados)."""
     from collections import Counter
-
-    total_etiquetados = len(etiquetas)
-    pendientes = max(total_disponibles - total_etiquetados, 0)
 
     distribucion = {"verde": 0, "amarillo": 0, "rojo": 0, "sin_veredicto": 0}
     colores_motor = ("verde", "amarillo", "rojo", "desconocido")
@@ -1870,7 +1869,13 @@ def _calcular_stats_calibracion(etiquetas: list[dict], total_disponibles: int) -
     }
     longitudes = {"verde": [], "amarillo": [], "rojo": [], "sin_veredicto": []}
 
+    descartados = 0
+    evaluados = 0  # etiquetas no descartadas con veredicto o comentario
     for e in etiquetas:
+        if bool(e.get("descartado")):
+            descartados += 1
+            continue
+        evaluados += 1
         mio = (e.get("veredicto") or "").strip().lower()
         if mio not in ("verde", "amarillo", "rojo"):
             mio = "sin_veredicto"
@@ -1885,6 +1890,8 @@ def _calcular_stats_calibracion(etiquetas: list[dict], total_disponibles: int) -
             for w in _palabras_significativas(comentario):
                 palabras_por_veredicto[mio][w] += 1
 
+    pendientes = max(total_disponibles - evaluados - descartados, 0)
+
     top_palabras = {
         v: [{"palabra": p, "n": n} for p, n in c.most_common(8)]
         for v, c in palabras_por_veredicto.items()
@@ -1896,7 +1903,8 @@ def _calcular_stats_calibracion(etiquetas: list[dict], total_disponibles: int) -
 
     return {
         "total_disponibles": total_disponibles,
-        "total_etiquetados": total_etiquetados,
+        "total_etiquetados": evaluados,
+        "descartados": descartados,
         "pendientes": pendientes,
         "distribucion_admin": distribucion,
         "matriz_concordancia": matriz,
@@ -1958,13 +1966,15 @@ async def calibrar_obtener_stats(request: Request):
 @limiter.limit("60/minute")
 async def calibrar_guardar_etiqueta(request: Request, data: dict):
     """Upsert de una etiqueta del admin sobre un análisis.
-    Si veredicto y comentario quedan ambos vacíos, borra la etiqueta."""
+    Si veredicto, comentario y descartado quedan todos vacíos/False,
+    borra la etiqueta."""
     email = _admin_email_from_cookie(request)
     if not email:
         return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
     analisis_id_raw = (data.get("analisis_id") or "").strip()
     veredicto = (data.get("veredicto") or "").strip().lower() or None
     comentario = (data.get("comentario") or "").strip() or None
+    descartado = bool(data.get("descartado"))
     if veredicto and veredicto not in ("verde", "amarillo", "rojo"):
         return JSONResponse(status_code=400, content={"error": "Veredicto inválido"})
     if comentario and len(comentario) > 5000:
@@ -1979,7 +1989,7 @@ async def calibrar_guardar_etiqueta(request: Request, data: dict):
         from db import get_pool
         import repositories as repo
         pool = get_pool()
-        if not veredicto and not comentario:
+        if not veredicto and not comentario and not descartado:
             ok = await repo.delete_etiqueta_calibracion(pool, analisis_id, email)
             return {"ok": True, "deleted": ok}
         etiqueta_row = await repo.upsert_etiqueta_calibracion(
@@ -1988,6 +1998,7 @@ async def calibrar_guardar_etiqueta(request: Request, data: dict):
             etiquetador_email=email,
             veredicto=veredicto,
             comentario=comentario,
+            descartado=descartado,
         )
         ts = etiqueta_row.get("timestamp")
         return {
@@ -1996,6 +2007,7 @@ async def calibrar_guardar_etiqueta(request: Request, data: dict):
                 "id": str(etiqueta_row["id"]),
                 "veredicto": etiqueta_row.get("veredicto"),
                 "comentario": etiqueta_row.get("comentario"),
+                "descartado": bool(etiqueta_row.get("descartado")),
                 "fecha": ts.isoformat() if ts else None,
             },
         }
