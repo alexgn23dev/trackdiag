@@ -161,7 +161,11 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     # "elevado" → -2 (suficiente para neutralizar el +1 de balance y los +1/+1 de
     # carencias, evitando que se acumule a falso positivo).
     # "excesivo" → -1 (suaviza pero no anula — si pasa de 28dB hay algo real).
-    generos_kick_protagonista = ["techno", "techno_acido", "tech_house", "hard_techno", "minimal"]
+    # Géneros donde el kick/bajo es protagonista. deep_house y afro_house añadidos
+    # tras feedback de Alex (2026-05): en estos géneros el bajo prominente forma
+    # parte del lenguaje y no debe penalizarse como "exceso".
+    generos_kick_protagonista = ["techno", "techno_acido", "tech_house", "hard_techno",
+                                  "minimal", "deep_house", "afro_house"]
     if genero in generos_kick_protagonista:
         if senales["balance_grave"] == "elevado":
             score -= 2; razones.append(f"(−) En {genero} el kick es protagonista — cierta dominancia grave es esperable")
@@ -196,6 +200,12 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     # SOLO se activa si la densidad medida es alta o saturada.
     # Si la densidad es baja o media, este diagnóstico no aplica (evitar incoherencia).
     score, razones = 0, []
+    # Géneros donde la densidad alta es lenguaje del género (kick + percusión
+    # densa + capas saturadas son parte de la firma). Añadido 2026-05 tras
+    # feedback de Alex: penalizar densidad sin co-síntoma generaba falsos
+    # positivos sistemáticos en tech_house/techno/hard_techno.
+    generos_densos_naturales = ["tech_house", "techno", "techno_acido",
+                                 "hard_techno", "minimal", "psytrance"]
     if senales["densidad_global"] in ["alta", "saturada"]:
         if senales["densidad_global"] == "saturada":
             score += 3; razones.append(f"Densidad espectral saturada ({senales['densidad_espectral']:.4f})")
@@ -217,6 +227,17 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
         loudness = senales.get("loudness", {})
         if loudness.get("nivel") in ["alto", "muy_alto"]:
             score += 1; razones.append("Densidad alta combinada con loudness alto — posible over-compression aplastando la mezcla")
+        # Descuento por género: si la densidad alta convive con contraste medio/alto
+        # en un género denso por naturaleza, no es problema — es lenguaje. Exige
+        # un co-síntoma real (contraste bajo, rango dinámico muy reducido o queja
+        # del usuario) para mantener el diagnóstico vivo.
+        if (genero in generos_densos_naturales
+                and senales["densidad_global"] == "alta"
+                and senales["contraste_energetico"] in ["medio", "alto"]
+                and senales["rango_dinamico"] >= 2.5
+                and not any(p in bloqueo for p in ["lleno", "denso", "saturado", "confuso", "empastad", "cargado", "capas"])):
+            score -= 3
+            razones.append(f"(−) En {genero}, densidad alta con buen contraste y rango dinámico es parte del lenguaje del género, no un problema")
     else:
         # Densidad baja/media: solo considerar si el usuario lo percibe explícitamente
         if any(p in bloqueo for p in ["lleno", "denso", "saturado", "confuso", "empastad", "cargado", "capas"]):
@@ -465,6 +486,20 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
         # Contexto usuario
         if any(p in bloqueo for p in ["chirri", "duro", "agresivo", "harsh", "brillante", "molest", "agudo"]):
             score += 2; razones.append("El usuario percibe dureza o exceso en agudos/medios-altos")
+        # Descuento por género (añadido 2026-05 tras feedback de Alex):
+        # en géneros donde hi-hats agresivos, distorsión y rumble son lenguaje
+        # propio (tech house, techno, hard techno, minimal, psytrance), bajar
+        # el peso del diagnóstico salvo que sea severo (real). El usuario aún
+        # puede ver la métrica si la mira, pero no se levanta como bloqueo.
+        generos_agresivos_aceptados = ["tech_house", "techno", "techno_acido",
+                                        "hard_techno", "minimal", "psytrance"]
+        if genero in generos_agresivos_aceptados and harshness.get("tiene_harshness"):
+            if harshness.get("nivel") == "leve":
+                score -= 2
+                razones.append(f"(−) En {genero}, hi-hats agresivos o distorsión moderada son parte del género")
+            elif harshness.get("nivel") == "notable":
+                score -= 1
+                razones.append(f"(−) En {genero} se tolera algo de dureza en medios-altos por el lenguaje del género")
     scores["harshness_mezcla"] = score
     detalles["harshness_mezcla"] = razones
 

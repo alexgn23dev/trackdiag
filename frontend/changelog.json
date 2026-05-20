@@ -1,6 +1,17 @@
 {
   "entries": [
     {
+      "version": "0.5.4",
+      "date": "2026-05-20",
+      "title": "Recalibrado del motor con feedback experto sobre 19 tracks reales",
+      "changes": [
+        "Harshness con umbral más conservador: ya no detecta como problema los hi-hats agresivos o la distorsión moderada propia de tech house, techno y hard techno cuando son intencionales. La detección sigue activa para casos reales (chirrido p95 alto y sostenido en > 35% del track).",
+        "Densidad alta deja de ser bandera roja por sí sola en géneros densos por naturaleza: en tech_house, techno, hard_techno, minimal, techno_acido y psytrance solo se diagnostica como problema si va acompañada de contraste bajo, rango dinámico reducido o queja explícita del usuario.",
+        "Balance grave con descuento ampliado por género: deep house y afro house pasan a tener el mismo trato que techno/tech_house — un bajo prominente es parte del lenguaje y deja de penalizarse cuando se detecta 'elevado'.",
+        "Nueva métrica interna: diferencia sub (0-60 Hz) vs grave audible (60-200 Hz). Sin diagnóstico nuevo todavía, pero queda expuesta para detectar a futuro casos de sub descontrolado que no se ven en el balance general."
+      ]
+    },
+    {
       "version": "0.5.3",
       "date": "2026-05-19",
       "title": "Proyectos y versiones — Mentotrack como diario de mezcla",

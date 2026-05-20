@@ -130,14 +130,22 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None) -> dict:
     # los umbrales 18/24 y 20/26 seguían marcando como exceso tracks correctos
     # de tech_house y techno con kick prominente. Subimos a 22/28 para dar más
     # margen global. Combinado con descuentos por género reforzados en reglas.py,
-    # los géneros con kick fuerte (tech_house, techno, hard_techno, minimal)
-    # tienen triple protección contra falsos positivos.
+    # los géneros con kick fuerte (tech_house, techno, hard_techno, minimal,
+    # deep_house, afro_house) tienen triple protección contra falsos positivos.
     if diff_grave_media > 28:
         balance_grave = "excesivo"
     elif diff_grave_media > 22:
         balance_grave = "elevado"
     else:
         balance_grave = "normal"
+
+    # Sub-grave vs grave audible: si el contenido en sub (0-60 Hz) domina sobre
+    # graves audibles (60-200 Hz), el track puede tener rumble/sub descontrolado
+    # aunque el balance general lea "normal". Se expone como señal informativa;
+    # un diagnóstico que lo use vive en reglas.py si en el futuro lo activamos.
+    db_sub = espectro_bandas.get("sub", -80)
+    db_low_audible = espectro_bandas.get("graves", -80)
+    diff_sub_low = db_sub - db_low_audible
 
     # Umbrales recalibrados con 21 sesiones reales (media=0.032)
     densidad_global = (
@@ -259,6 +267,7 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None) -> dict:
         "db_media": round(db_media, 1),
         "db_aguda": round(db_aguda, 1),
         "diff_grave_media": round(diff_grave_media, 1),
+        "diff_sub_low": round(diff_sub_low, 1),
         "densidad_espectral": round(densidad_espectral, 4),
         "rango_dinamico": round(rango_dinamico, 2),
         "cambios_significativos": cambios_significativos,
@@ -319,33 +328,35 @@ def _analizar_harshness(mel_db: np.ndarray, mel_freqs: np.ndarray) -> dict:
     resultado["pico_p95"] = round(p95, 1)
     resultado["pct_frames_harsh"] = round(pct_mayor, 1)
 
-    # Sistema de puntos para decidir harshness (calibrado con 38 sesiones reales):
-    # Track 23 (chirriante): p95=9.2, pct=33% → debe detectar severo
-    # Track 19 (bien):       p95=5.0, pct=25% → NO debe detectar
-    # Track 10 (bien):       p95=2.3, pct=14% → NO debe detectar
-    # Track 25 (chirriante): p95=2.2, pct=10% → no detectable por espectro (es tímbrico)
-    # Recalibrado con 583 sesiones: bajado pct>20 a pct>18 para capturar tracks
-    # ligeramente chirriantes (p95~5, pct~18) que estaban quedándose en "leve"
-    # cuando el usuario los percibía como "notable".
+    # Sistema de puntos para decidir harshness.
+    # Recalibrado mayo 2026 con 19 tracks etiquetados por Alex: el set anterior
+    # producía falsos positivos sistemáticos en tech house, techno, hard techno
+    # y dub techno cuando había hi-hats/distorsión propios del género (p95~5-7,
+    # pct~25-30). Subimos los puntos de corte para exigir más evidencia.
+    # Tracks que antes disparaban "leve" o "notable" con p95<6.5 o pct<22 ahora
+    # caen por debajo del umbral. El descuento adicional por género se aplica
+    # en reglas.py (harshness_mezcla).
     puntos = 0
-    if p95 > 7:
+    if p95 > 9:
         puntos += 2
-    elif p95 > 5:
+    elif p95 > 6.5:
         puntos += 1
 
-    if pct_mayor > 30:
+    if pct_mayor > 35:
         puntos += 2
-    elif pct_mayor > 18:
+    elif pct_mayor > 22:
         puntos += 1
 
-    if puntos >= 3:
+    # Para clasificar, además de los puntos exigimos que p95 y pct cumplan
+    # un mínimo individual — evita "leve" disparado solo por pct alto con
+    # p95 minúsculo (típico de hats moderados pero no agresivos).
+    if puntos >= 4:
         resultado["tiene_harshness"] = True
         resultado["nivel"] = "severo"
-    elif puntos >= 2:
+    elif puntos >= 3:
         resultado["tiene_harshness"] = True
         resultado["nivel"] = "notable"
-    elif puntos >= 1 and p95 > 4 and pct_mayor > 15:
-        # Solo leve si ambas señales coinciden
+    elif puntos >= 2 and p95 > 6 and pct_mayor > 22:
         resultado["tiene_harshness"] = True
         resultado["nivel"] = "leve"
 
