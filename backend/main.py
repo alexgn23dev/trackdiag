@@ -1697,6 +1697,135 @@ def serve_ideas():
     return FileResponse(ideas_path, headers={"Cache-Control": "no-cache"})
 
 
+# =========================================================================
+# Calibración — Alex etiqueta análisis con feedback_real para calibrar el motor
+# =========================================================================
+
+# Email canónico del único admin actual. Si el día de mañana hay multi-admin
+# se reemplaza por un mapping cookie → email.
+_ADMIN_EMAIL_CANONICO = "alexgn23@gmail.com"
+
+
+def _admin_email_from_cookie(request: Request):
+    """Devuelve el email del admin si la cookie es válida, None si no."""
+    cookie = request.cookies.get("admin_session", "")
+    if not _verify_admin_token(cookie):
+        return None
+    return _ADMIN_EMAIL_CANONICO
+
+
+def _serializar_track_calibracion(row: dict) -> dict:
+    """Serializa una fila de list_analisis_con_feedback_real a JSON."""
+    ts = row.get("timestamp")
+    fecha_etiqueta = row.get("fecha_etiqueta")
+    return {
+        "id": str(row["id"]),
+        "timestamp": ts.isoformat() if ts else None,
+        "email": row.get("email"),
+        "nombre_proyecto_legacy": row.get("nombre_proyecto_legacy"),
+        "formulario": row.get("formulario") or {},
+        "diagnostico": row.get("diagnostico") or "",
+        "senales": row.get("senales") or {},
+        "feedback_real": row.get("feedback_real") or "",
+        "genero_custom": row.get("genero_custom"),
+        "proyecto_id": str(row["proyecto_id"]) if row.get("proyecto_id") else None,
+        "version_num": row.get("version_num"),
+        "etiqueta": (
+            {
+                "id": str(row["etiqueta_id"]),
+                "veredicto": row.get("veredicto"),
+                "comentario": row.get("comentario"),
+                "fecha": fecha_etiqueta.isoformat() if fecha_etiqueta else None,
+            }
+            if row.get("etiqueta_id")
+            else None
+        ),
+    }
+
+
+@app.get("/api/calibrar/tracks")
+@limiter.limit("30/minute")
+async def calibrar_listar_tracks(request: Request):
+    """Lista análisis con feedback_real y, si existe, la etiqueta del admin."""
+    email = _admin_email_from_cookie(request)
+    if not email:
+        return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Postgres no disponible"})
+    try:
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+        rows = await repo.list_analisis_con_feedback_real(pool, email, limit=500)
+        return {"ok": True, "tracks": [_serializar_track_calibracion(r) for r in rows]}
+    except Exception as e:
+        print(f"[CALIBRAR] error listando tracks: {e}")
+        return JSONResponse(status_code=503, content={"error": "Error consultando DB"})
+
+
+@app.post("/api/calibrar/etiqueta")
+@limiter.limit("60/minute")
+async def calibrar_guardar_etiqueta(request: Request, data: dict):
+    """Upsert de una etiqueta del admin sobre un análisis.
+    Si veredicto y comentario quedan ambos vacíos, borra la etiqueta."""
+    email = _admin_email_from_cookie(request)
+    if not email:
+        return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
+    analisis_id_raw = (data.get("analisis_id") or "").strip()
+    veredicto = (data.get("veredicto") or "").strip().lower() or None
+    comentario = (data.get("comentario") or "").strip() or None
+    if veredicto and veredicto not in ("verde", "amarillo", "rojo"):
+        return JSONResponse(status_code=400, content={"error": "Veredicto inválido"})
+    if comentario and len(comentario) > 5000:
+        comentario = comentario[:5000]
+    try:
+        analisis_id = uuid.UUID(analisis_id_raw)
+    except (TypeError, ValueError):
+        return JSONResponse(status_code=400, content={"error": "ID de análisis inválido"})
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Postgres no disponible"})
+    try:
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+        if not veredicto and not comentario:
+            ok = await repo.delete_etiqueta_calibracion(pool, analisis_id, email)
+            return {"ok": True, "deleted": ok}
+        etiqueta_row = await repo.upsert_etiqueta_calibracion(
+            pool,
+            analisis_id=analisis_id,
+            etiquetador_email=email,
+            veredicto=veredicto,
+            comentario=comentario,
+        )
+        ts = etiqueta_row.get("timestamp")
+        return {
+            "ok": True,
+            "etiqueta": {
+                "id": str(etiqueta_row["id"]),
+                "veredicto": etiqueta_row.get("veredicto"),
+                "comentario": etiqueta_row.get("comentario"),
+                "fecha": ts.isoformat() if ts else None,
+            },
+        }
+    except Exception as e:
+        print(f"[CALIBRAR] error guardando etiqueta: {e}")
+        return JSONResponse(status_code=503, content={"error": "Error guardando"})
+
+
+@app.get("/calibrar")
+def serve_calibrar(request: Request):
+    """Página de calibración. Protegida por cookie admin (misma que /dashboard).
+    Si no hay sesión, redirige a /dashboard para que el admin entre con la key."""
+    admin_cookie = request.cookies.get("admin_session", "")
+    if not _verify_admin_token(admin_cookie):
+        return RedirectResponse(url="/dashboard", status_code=303)
+    calibrar_path = FRONTEND_DIR / "calibrar.html"
+    if not calibrar_path.is_file():
+        return JSONResponse(status_code=404, content={"error": "Página no encontrada"})
+    return FileResponse(calibrar_path, headers={"Cache-Control": "no-cache"})
+
+
 # Changelog: HTML lee el JSON y renderiza las entradas en cliente
 @app.get("/changelog")
 def serve_changelog():
@@ -1952,8 +2081,8 @@ def serve_catch_all(full_path: str):
     # Bloquear paths peligrosos (wp-*, etc.)
     if full_path.startswith(('wp-', 'wp/', 'xmlrpc', 'admin', 'phpmyadmin')):
         return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
-    # Proteger acceso directo al archivo dashboard.html
-    if "dashboard" in full_path.lower():
+    # Proteger acceso directo al archivo dashboard.html y calibrar.html
+    if "dashboard" in full_path.lower() or "calibrar" in full_path.lower():
         return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
     file_path = (FRONTEND_DIR / full_path).resolve()
     # Path traversal protection: must stay within frontend dir

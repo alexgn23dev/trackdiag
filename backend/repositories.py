@@ -634,3 +634,81 @@ async def vote_idea(pool: asyncpg.Pool, idea_id: UUID, delta: int) -> Optional[i
             int(delta), idea_id,
         )
     return int(val) if val is not None else None
+
+
+# =============================================================================
+# CALIBRACIÓN — etiquetas de Alex sobre análisis para entrenar el motor
+# =============================================================================
+
+@with_retry()
+async def list_analisis_con_feedback_real(
+    pool: asyncpg.Pool, etiquetador_email: str, limit: int = 200
+) -> list[dict]:
+    """Lista análisis con feedback_real no vacío, joinea con etiquetas del
+    etiquetador para saber cuáles ya están etiquetados.
+
+    Devuelve la fila del análisis + (etiqueta_id, veredicto, comentario,
+    fecha_etiqueta) cuando existe."""
+    email = (etiquetador_email or "").strip().lower()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """SELECT
+                   a.id, a.timestamp, a.email, a.nombre_proyecto_legacy,
+                   a.formulario, a.diagnostico, a.senales,
+                   a.feedback_real, a.genero_custom, a.proyecto_id,
+                   a.version_num,
+                   c.id AS etiqueta_id,
+                   c.veredicto,
+                   c.comentario,
+                   c.timestamp AS fecha_etiqueta
+               FROM analisis a
+               LEFT JOIN calibracion_etiquetas c
+                   ON c.analisis_id = a.id AND LOWER(c.etiquetador_email) = $1
+               WHERE a.feedback_real IS NOT NULL AND a.feedback_real <> ''
+               ORDER BY a.timestamp DESC
+               LIMIT $2""",
+            email, limit,
+        )
+    return [dict(r) for r in rows]
+
+
+@with_retry()
+async def upsert_etiqueta_calibracion(
+    pool: asyncpg.Pool,
+    *,
+    analisis_id: UUID,
+    etiquetador_email: str,
+    veredicto: Optional[str],
+    comentario: Optional[str],
+) -> dict:
+    """Inserta o actualiza la etiqueta de calibración del etiquetador para
+    ese análisis. Único por (analisis_id, etiquetador_email)."""
+    email = (etiquetador_email or "").strip().lower()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """INSERT INTO calibracion_etiquetas
+                   (analisis_id, etiquetador_email, veredicto, comentario)
+               VALUES ($1, $2, $3, $4)
+               ON CONFLICT (analisis_id, etiquetador_email) DO UPDATE
+                   SET veredicto = EXCLUDED.veredicto,
+                       comentario = EXCLUDED.comentario,
+                       timestamp = now()
+               RETURNING id, analisis_id, etiquetador_email,
+                         veredicto, comentario, timestamp""",
+            analisis_id, email, veredicto, comentario,
+        )
+    return dict(row)
+
+
+@with_retry()
+async def delete_etiqueta_calibracion(
+    pool: asyncpg.Pool, analisis_id: UUID, etiquetador_email: str
+) -> bool:
+    email = (etiquetador_email or "").strip().lower()
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            """DELETE FROM calibracion_etiquetas
+               WHERE analisis_id = $1 AND LOWER(etiquetador_email) = $2""",
+            analisis_id, email,
+        )
+    return result.endswith(" 1")

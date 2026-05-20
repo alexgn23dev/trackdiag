@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mentotrack — Calibración</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="theme-color" content="#09090b">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background: #09090b; color: #e5e5e5; margin: 0; }
+        .card { background: #141414; border: 1px solid #222; border-radius: 12px; }
+        .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+        .pill-verde { background: rgba(74, 222, 128, 0.15); color: #4ade80; border: 1px solid rgba(74,222,128,0.3); }
+        .pill-amarillo { background: rgba(250, 204, 21, 0.15); color: #facc15; border: 1px solid rgba(250,204,21,0.3); }
+        .pill-rojo { background: rgba(248, 113, 113, 0.15); color: #f87171; border: 1px solid rgba(248,113,113,0.3); }
+        .pill-gris { background: rgba(75,85,99,0.2); color: #9ca3af; border: 1px solid #333; }
+        .vbtn { padding: 6px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid #333; background: transparent; color: #9ca3af; transition: all 0.15s; }
+        .vbtn:hover { border-color: #555; color: #e5e5e5; }
+        .vbtn.active-verde { background: rgba(74,222,128,0.2); border-color: #4ade80; color: #4ade80; }
+        .vbtn.active-amarillo { background: rgba(250,204,21,0.2); border-color: #facc15; color: #facc15; }
+        .vbtn.active-rojo { background: rgba(248,113,113,0.2); border-color: #f87171; color: #f87171; }
+        textarea, input { background: #0a0a0a; border: 1px solid #333; color: #e5e5e5; border-radius: 8px; padding: 10px; font-family: inherit; font-size: 13px; width: 100%; box-sizing: border-box; }
+        textarea:focus, input:focus { outline: none; border-color: #8b5cf6; }
+        .save-btn { background: #8b5cf6; color: white; border: none; padding: 8px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 13px; }
+        .save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .save-btn:hover:not(:disabled) { background: #7c3aed; }
+        .diag-block { background: #0a0a0a; border: 1px solid #222; border-radius: 8px; padding: 12px; font-size: 12px; line-height: 1.6; color: #d4d4d8; white-space: pre-wrap; max-height: 200px; overflow-y: auto; }
+        .diag-block.expanded { max-height: none; }
+        .spinner { border: 3px solid #222; border-top: 3px solid #8b5cf6; border-radius: 50%; width: 32px; height: 32px; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0a0a0a; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+        .filter-btn { padding: 4px 12px; border-radius: 6px; font-size: 12px; border: 1px solid #333; background: transparent; color: #9ca3af; cursor: pointer; }
+        .filter-btn.active { background: #8b5cf6; border-color: #8b5cf6; color: white; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+    const { useState, useEffect, useMemo } = React;
+
+    const API_URL = window.location.hostname === 'localhost' ? 'http://localhost:8000' : '';
+
+    function detectarPlataforma(url) {
+        if (!url) return null;
+        const u = url.toLowerCase();
+        if (u.includes('soundcloud.com')) return 'soundcloud';
+        if (u.includes('dropbox.com')) return 'dropbox';
+        if (u.includes('drive.google.com')) return 'drive';
+        if (u.includes('wetransfer.com')) return 'wetransfer';
+        if (u.includes('spotify.com')) return 'spotify';
+        if (u.includes('youtube.com') || u.includes('youtu.be')) return 'youtube';
+        return 'otro';
+    }
+
+    function SoundCloudEmbed({ url }) {
+        const src = `https://w.soundcloud.com/player/?url=${encodeURIComponent(url)}&color=%238b5cf6&auto_play=false&hide_related=true&show_comments=false&show_user=true&show_reposts=false&visual=false`;
+        return (
+            <iframe
+                src={src}
+                width="100%"
+                height="120"
+                frameBorder="0"
+                scrolling="no"
+                style={{ borderRadius: 8, background: '#0a0a0a' }}
+                title="SoundCloud player"
+            />
+        );
+    }
+
+    function PlayerExterno({ url }) {
+        const plataforma = detectarPlataforma(url);
+        const labels = {
+            soundcloud: 'SoundCloud',
+            dropbox: 'Dropbox',
+            drive: 'Google Drive',
+            wetransfer: 'WeTransfer',
+            spotify: 'Spotify',
+            youtube: 'YouTube',
+            otro: 'Enlace externo',
+        };
+        return (
+            <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-sm text-purple-400 hover:text-purple-300 underline"
+            >
+                ▶ Escuchar en {labels[plataforma] || 'externo'}
+            </a>
+        );
+    }
+
+    function formatearFecha(iso) {
+        if (!iso) return '';
+        const d = new Date(iso);
+        if (isNaN(d.getTime())) return '';
+        return d.toLocaleString('es-ES', {
+            year: 'numeric', month: 'short', day: '2-digit',
+            hour: '2-digit', minute: '2-digit',
+        });
+    }
+
+    function parseFormulario(formularioObj) {
+        if (!formularioObj || typeof formularioObj !== 'object') return [];
+        const out = [];
+        const orden = ['genero', 'fase', 'objetivo', 'experiencia', 'dificultad', 'bloqueo'];
+        const labels = {
+            genero: 'Género',
+            fase: 'Fase',
+            objetivo: 'Objetivo',
+            experiencia: 'Experiencia',
+            dificultad: 'Qué te cuesta',
+            bloqueo: 'Bloqueo',
+        };
+        for (const k of orden) {
+            if (formularioObj[k]) out.push([labels[k] || k, formularioObj[k]]);
+        }
+        return out;
+    }
+
+    function TrackCard({ track, index, onSave }) {
+        const inicial = track.etiqueta || {};
+        const [veredicto, setVeredicto] = useState(inicial.veredicto || '');
+        const [comentario, setComentario] = useState(inicial.comentario || '');
+        const [guardando, setGuardando] = useState(false);
+        const [mensaje, setMensaje] = useState('');
+        const [diagExpandido, setDiagExpandido] = useState(false);
+
+        const dirty = (veredicto !== (inicial.veredicto || '')) || (comentario !== (inicial.comentario || ''));
+        const yaEtiquetado = !!track.etiqueta;
+
+        async function guardar() {
+            setGuardando(true);
+            setMensaje('');
+            try {
+                const r = await fetch(`${API_URL}/api/calibrar/etiqueta`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        analisis_id: track.id,
+                        veredicto: veredicto || null,
+                        comentario: comentario || null,
+                    }),
+                });
+                const data = await r.json();
+                if (!r.ok || !data.ok) {
+                    setMensaje(data.error || 'Error guardando');
+                } else {
+                    setMensaje('Guardado ✓');
+                    onSave(track.id, data.etiqueta || null, data.deleted);
+                    setTimeout(() => setMensaje(''), 2000);
+                }
+            } catch (e) {
+                setMensaje('Error de red');
+            } finally {
+                setGuardando(false);
+            }
+        }
+
+        const formularioEntries = parseFormulario(track.formulario);
+        const plataforma = detectarPlataforma(track.feedback_real);
+
+        return (
+            <div className="card p-5">
+                <div className="flex items-start justify-between mb-3 gap-3 flex-wrap">
+                    <div className="flex items-baseline gap-3 flex-wrap">
+                        <span className="text-xs text-gray-500 font-mono">#{index + 1}</span>
+                        <span className="text-sm font-semibold text-white">{track.email || 'anónimo'}</span>
+                        <span className="text-xs text-gray-500">{formatearFecha(track.timestamp)}</span>
+                        {track.nombre_proyecto_legacy && (
+                            <span className="text-xs text-gray-400 italic">"{track.nombre_proyecto_legacy}"</span>
+                        )}
+                    </div>
+                    <div>
+                        {yaEtiquetado ? (
+                            <span className={`pill pill-${inicial.veredicto || 'gris'}`}>
+                                {inicial.veredicto || 'sin veredicto'} · etiquetado
+                            </span>
+                        ) : (
+                            <span className="pill pill-gris">pendiente</span>
+                        )}
+                    </div>
+                </div>
+
+                {formularioEntries.length > 0 && (
+                    <div className="text-xs text-gray-400 mb-3 leading-relaxed">
+                        {formularioEntries.map(([k, v], i) => (
+                            <span key={i}>
+                                <span className="text-gray-500">{k}:</span> <span className="text-gray-300">{v}</span>
+                                {i < formularioEntries.length - 1 && <span className="text-gray-600"> · </span>}
+                            </span>
+                        ))}
+                    </div>
+                )}
+
+                <div className="mb-3">
+                    {track.feedback_real ? (
+                        plataforma === 'soundcloud' ? (
+                            <SoundCloudEmbed url={track.feedback_real} />
+                        ) : (
+                            <PlayerExterno url={track.feedback_real} />
+                        )
+                    ) : (
+                        <span className="text-xs text-gray-500">Sin enlace de audio</span>
+                    )}
+                </div>
+
+                <div className="mb-4">
+                    <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Diagnóstico del motor</span>
+                        <button
+                            onClick={() => setDiagExpandido(d => !d)}
+                            className="text-xs text-purple-400 hover:text-purple-300"
+                        >
+                            {diagExpandido ? 'Plegar ▴' : 'Ver completo ▾'}
+                        </button>
+                    </div>
+                    <div className={`diag-block ${diagExpandido ? 'expanded' : ''}`}>
+                        {track.diagnostico || '(sin diagnóstico guardado)'}
+                    </div>
+                </div>
+
+                <div className="mb-3">
+                    <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Tu juicio</div>
+                    <div className="flex gap-2 mb-3">
+                        {['verde', 'amarillo', 'rojo'].map(v => (
+                            <button
+                                key={v}
+                                onClick={() => setVeredicto(veredicto === v ? '' : v)}
+                                className={`vbtn ${veredicto === v ? `active-${v}` : ''}`}
+                            >
+                                {v.charAt(0).toUpperCase() + v.slice(1)}
+                            </button>
+                        ))}
+                    </div>
+                    <textarea
+                        value={comentario}
+                        onChange={e => setComentario(e.target.value)}
+                        placeholder="Qué oyes tú: qué arreglarías, en qué orden, dónde el motor exagera o se queda corto, problemas que no captó…"
+                        rows={5}
+                    />
+                </div>
+
+                <div className="flex items-center justify-between gap-3">
+                    <div className="text-xs text-gray-500">
+                        {yaEtiquetado && (
+                            <span>Guardado el {formatearFecha(inicial.fecha)}</span>
+                        )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                        {mensaje && (
+                            <span className={`text-xs ${mensaje.includes('Error') ? 'text-red-400' : 'text-green-400'}`}>
+                                {mensaje}
+                            </span>
+                        )}
+                        <button
+                            onClick={guardar}
+                            disabled={guardando || !dirty}
+                            className="save-btn"
+                        >
+                            {guardando ? 'Guardando…' : (yaEtiquetado && !veredicto && !comentario ? 'Borrar' : 'Guardar')}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    function App() {
+        const [tracks, setTracks] = useState([]);
+        const [loading, setLoading] = useState(true);
+        const [error, setError] = useState('');
+        const [filtro, setFiltro] = useState('todos');
+
+        useEffect(() => {
+            (async () => {
+                try {
+                    const r = await fetch(`${API_URL}/api/calibrar/tracks`, { credentials: 'include' });
+                    if (r.status === 403) {
+                        window.location.href = '/dashboard';
+                        return;
+                    }
+                    const data = await r.json();
+                    if (!r.ok || !data.ok) {
+                        setError(data.error || 'Error cargando tracks');
+                    } else {
+                        setTracks(data.tracks || []);
+                    }
+                } catch (e) {
+                    setError('Error de red');
+                } finally {
+                    setLoading(false);
+                }
+            })();
+        }, []);
+
+        function handleSave(trackId, etiqueta, deleted) {
+            setTracks(prev => prev.map(t => {
+                if (t.id !== trackId) return t;
+                return { ...t, etiqueta: deleted ? null : etiqueta };
+            }));
+        }
+
+        const filtrados = useMemo(() => {
+            if (filtro === 'pendientes') return tracks.filter(t => !t.etiqueta);
+            if (filtro === 'etiquetados') return tracks.filter(t => !!t.etiqueta);
+            return tracks;
+        }, [tracks, filtro]);
+
+        const stats = useMemo(() => {
+            const total = tracks.length;
+            const etiquetados = tracks.filter(t => !!t.etiqueta).length;
+            const por_veredicto = { verde: 0, amarillo: 0, rojo: 0 };
+            for (const t of tracks) {
+                if (t.etiqueta?.veredicto && por_veredicto[t.etiqueta.veredicto] !== undefined) {
+                    por_veredicto[t.etiqueta.veredicto]++;
+                }
+            }
+            return { total, etiquetados, pendientes: total - etiquetados, por_veredicto };
+        }, [tracks]);
+
+        if (loading) {
+            return (
+                <div className="min-h-screen flex items-center justify-center">
+                    <div className="spinner"></div>
+                </div>
+            );
+        }
+
+        return (
+            <div className="min-h-screen p-6 max-w-4xl mx-auto">
+                <header className="mb-6">
+                    <div className="flex items-baseline justify-between flex-wrap gap-3 mb-2">
+                        <h1 className="text-2xl font-bold text-white">Calibración del motor</h1>
+                        <a href="/dashboard" className="text-xs text-gray-400 hover:text-white">← Dashboard</a>
+                    </div>
+                    <p className="text-sm text-gray-400">
+                        Etiqueta cada análisis con feedback_real. Escucha el track, lee lo que dijo el motor,
+                        y deja tu juicio: qué oyes tú, dónde acierta, dónde exagera o se queda corto.
+                    </p>
+                </header>
+
+                {error && (
+                    <div className="card p-4 mb-4 border-red-900 bg-red-950/30 text-sm text-red-300">
+                        {error}
+                    </div>
+                )}
+
+                <div className="card p-4 mb-5">
+                    <div className="flex items-center justify-between flex-wrap gap-3">
+                        <div className="flex items-baseline gap-6 text-sm">
+                            <span>
+                                <span className="text-2xl font-bold text-white">{stats.etiquetados}</span>
+                                <span className="text-gray-500">/{stats.total}</span>
+                                <span className="text-xs text-gray-400 ml-2">etiquetados</span>
+                            </span>
+                            <span className="text-xs text-gray-500 flex gap-3">
+                                <span><span className="text-green-400">●</span> {stats.por_veredicto.verde}</span>
+                                <span><span className="text-yellow-400">●</span> {stats.por_veredicto.amarillo}</span>
+                                <span><span className="text-red-400">●</span> {stats.por_veredicto.rojo}</span>
+                            </span>
+                        </div>
+                        <div className="flex gap-2">
+                            <button onClick={() => setFiltro('todos')} className={`filter-btn ${filtro === 'todos' ? 'active' : ''}`}>Todos ({stats.total})</button>
+                            <button onClick={() => setFiltro('pendientes')} className={`filter-btn ${filtro === 'pendientes' ? 'active' : ''}`}>Pendientes ({stats.pendientes})</button>
+                            <button onClick={() => setFiltro('etiquetados')} className={`filter-btn ${filtro === 'etiquetados' ? 'active' : ''}`}>Etiquetados ({stats.etiquetados})</button>
+                        </div>
+                    </div>
+                </div>
+
+                {filtrados.length === 0 ? (
+                    <div className="card p-8 text-center text-gray-500 text-sm">
+                        {tracks.length === 0
+                            ? 'No hay tracks con feedback_real.'
+                            : 'Sin tracks para este filtro.'}
+                    </div>
+                ) : (
+                    <div className="space-y-4">
+                        {filtrados.map((t, i) => (
+                            <TrackCard
+                                key={t.id}
+                                track={t}
+                                index={tracks.indexOf(t)}
+                                onSave={handleSave}
+                            />
+                        ))}
+                    </div>
+                )}
+
+                <footer className="mt-8 text-xs text-gray-600 text-center">
+                    Mentotrack admin · página interna
+                </footer>
+            </div>
+        );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+    </script>
+</body>
+</html>
