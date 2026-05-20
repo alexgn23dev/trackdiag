@@ -712,3 +712,29 @@ async def delete_etiqueta_calibracion(
             analisis_id, email,
         )
     return result.endswith(" 1")
+
+
+@with_retry()
+async def get_stats_calibracion_raw(
+    pool: asyncpg.Pool, etiquetador_email: str
+) -> dict:
+    """Devuelve las etiquetas del admin con el diagnóstico del motor asociado
+    y el total de análisis disponibles para etiquetar. La agregación en
+    estadísticas se hace en Python para no acoplar SQL al formato del diag."""
+    email = (etiquetador_email or "").strip().lower()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """SELECT c.veredicto, c.comentario, a.diagnostico
+               FROM calibracion_etiquetas c
+               JOIN analisis a ON c.analisis_id = a.id
+               WHERE LOWER(c.etiquetador_email) = $1""",
+            email,
+        )
+        total = await conn.fetchval(
+            """SELECT COUNT(*) FROM analisis
+               WHERE feedback_real IS NOT NULL AND feedback_real <> ''"""
+        )
+    return {
+        "etiquetas": [dict(r) for r in rows],
+        "total_disponibles": int(total or 0),
+    }
