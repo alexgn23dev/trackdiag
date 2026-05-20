@@ -597,6 +597,10 @@ def _analizar_distribucion(bloques_rms: list) -> dict:
         "max_seccion_baja": 0,
         "max_seccion_alta": 0,
         "estructura_problematica": False,
+        # Añadido 2026-05 (insight 4 de Alex): el break más largo no recupera
+        # energía después, "no paga" la anticipación que generó.
+        "break_sin_payoff": False,
+        "ratio_payoff": 1.0,  # energía después / energía antes del break (alto = ok)
     }
 
     if len(bloques_rms) < 4:
@@ -605,24 +609,27 @@ def _analizar_distribucion(bloques_rms: list) -> dict:
     media_rms = np.mean(bloques_rms)
     clasificacion = ["alto" if b > media_rms else "bajo" for b in bloques_rms]
 
+    # Construir secciones con (tipo, longitud, indice_inicio)
     secciones = []
     current_type = clasificacion[0]
     current_len = 1
+    current_start = 0
     for i in range(1, len(clasificacion)):
         if clasificacion[i] == current_type:
             current_len += 1
         else:
-            secciones.append((current_type, current_len))
+            secciones.append((current_type, current_len, current_start))
             current_type = clasificacion[i]
             current_len = 1
-    secciones.append((current_type, current_len))
+            current_start = i
+    secciones.append((current_type, current_len, current_start))
 
-    secciones_bajas = [s[1] for s in secciones if s[0] == "bajo"]
-    secciones_altas = [s[1] for s in secciones if s[0] == "alto"]
-    n_bloques_bajos = sum(secciones_bajas) if secciones_bajas else 0
-    n_bloques_altos = sum(secciones_altas) if secciones_altas else 0
-    max_baja = max(secciones_bajas) if secciones_bajas else 0
-    max_alta = max(secciones_altas) if secciones_altas else 0
+    secciones_bajas = [(s[1], s[2]) for s in secciones if s[0] == "bajo"]
+    secciones_altas = [(s[1], s[2]) for s in secciones if s[0] == "alto"]
+    n_bloques_bajos = sum(s[0] for s in secciones_bajas) if secciones_bajas else 0
+    n_bloques_altos = sum(s[0] for s in secciones_altas) if secciones_altas else 0
+    max_baja = max((s[0] for s in secciones_bajas), default=0)
+    max_alta = max((s[0] for s in secciones_altas), default=0)
     total_bloques = len(bloques_rms)
 
     distribucion["max_seccion_baja"] = max_baja
@@ -642,13 +649,47 @@ def _analizar_distribucion(bloques_rms: list) -> dict:
     if max_alta > 0 and max_alta < total_bloques * 0.20 and max_baja > max_alta * 1.5:
         distribucion["drop_corto"] = True
 
-    # Estructura problemática: solo por distribución real (break largo o drop corto).
-    # inicio_abrupto + sin_outro NO es problemático por sí solo en electrónica —
-    # muchos tracks bien producidos empiezan y acaban con energía alta (kick/hats
-    # para mezcla DJ). Lo reportamos como dato informativo, no como problema.
+    # Break sin payoff: busca el break (sección baja) más largo y compara la
+    # energía media de la sección alta INMEDIATAMENTE POSTERIOR con la
+    # sección alta INMEDIATAMENTE ANTERIOR. Si la posterior no supera a la
+    # anterior, el break "no paga" — no genera el contraste anticipado.
+    # Sólo aplica si el break es de cierto tamaño (≥2 bloques, ~16 compases).
+    if secciones_bajas:
+        # Encontrar la sección "bajo" más larga
+        idx_max_break = max(
+            range(len(secciones)),
+            key=lambda i: secciones[i][1] if secciones[i][0] == "bajo" else -1
+        )
+        len_break, start_break = secciones[idx_max_break][1], secciones[idx_max_break][2]
+        if len_break >= 2:
+            # Sección alta anterior
+            antes = next(
+                (s for s in reversed(secciones[:idx_max_break]) if s[0] == "alto"),
+                None,
+            )
+            # Sección alta posterior
+            despues = next(
+                (s for s in secciones[idx_max_break + 1:] if s[0] == "alto"),
+                None,
+            )
+            if antes and despues:
+                e_antes = float(np.mean(bloques_rms[antes[2]:antes[2] + antes[1]]))
+                e_despues = float(np.mean(bloques_rms[despues[2]:despues[2] + despues[1]]))
+                ratio = e_despues / (e_antes + 1e-10)
+                distribucion["ratio_payoff"] = round(ratio, 2)
+                # No paga: el post-break NO supera al pre-break en al menos un 5%.
+                # Margen pequeño porque la diferencia de "subir energía después
+                # del break" en electrónica suele ser audible incluso con ratios
+                # de 1.05-1.15.
+                if ratio < 1.05:
+                    distribucion["break_sin_payoff"] = True
+
+    # Estructura problemática: distribución real (break largo o drop corto, o
+    # break sin payoff que es señal de arreglo flojo aunque no esté desproporcionado).
     distribucion["estructura_problematica"] = (
         distribucion["break_desproporcionado"]
         or distribucion["drop_corto"]
+        or distribucion["break_sin_payoff"]
     )
 
     return distribucion

@@ -188,6 +188,40 @@ TEMPLATES = {
             "(Q alto) entre 2-6kHz y barre hasta encontrar la zona que molesta, luego recorta 2-4dB."
         ),
     },
+    "break_sin_payoff": {
+        "titulo": "El break largo no genera el contraste que pide — al volver al drop no se siente subida.",
+        "prioridades": [
+            "Sube ligeramente la energía del drop POSTERIOR al break: añade una capa más (percusión secundaria, una vocal chop, un sub que entre solo ahí, automatización de filtro abriendo) que diferencie ese drop del que iba antes del break.",
+            "Si quieres que la subida funcione, baja también lo de ANTES del break: filtros que se cierran, percusiones que desaparecen, un compás de silencio. Cuanto más bajo el suelo, más alto se siente el techo cuando vuelve a entrar.",
+            "Acorta el break si no aporta variación: si su única función es 'descansar' y luego volvemos a lo mismo, mejor que dure 8 compases que 32. El break necesita o variación interna o un payoff claro al final.",
+        ],
+        "no_tocar": [
+            "No metas más capas DURANTE el break para 'rellenarlo' — un break es por definición un momento de menos. Aporta variación o acórtalo, pero no lo satures.",
+            "No subas el volumen del master en el drop posterior — el limiter se come la dinámica que estás intentando ganar.",
+        ],
+        "siguiente_sesion": (
+            "Coge un track de referencia de tu género que tenga un break que te ponga la piel de gallina al volver al drop. "
+            "Apunta qué cambia entre el drop pre-break y el post-break: ¿qué entra nuevo? ¿qué se queda fuera? "
+            "Aplica la misma diferencia a tu track."
+        ),
+    },
+    "arreglo_repetitivo": {
+        "titulo": "El track es largo pero con pocas variaciones — la estructura no acompaña a la duración.",
+        "prioridades": [
+            "Identifica el bloque más repetitivo de tu track (probablemente el groove principal) y diseña una variación cada 32 ó 64 compases: un fill, un drop de un elemento, un cambio de patrón en la percusión, un giro armónico breve.",
+            "Si el track dura más de 5 minutos, debería tener al menos 4-5 transiciones perceptibles. Crea contrastes: filtros que abren y cierran, capas que entran y salen, mutes intencionales en el kick o en el bajo.",
+            "Plantéate si la duración actual está justificada por la información musical. Si no, recorta — un track de 4 minutos bien contado vale más que uno de 7 minutos repetitivo.",
+        ],
+        "no_tocar": [
+            "No metas elementos nuevos solo para llenar tiempo. La variación tiene que tener intención narrativa, no ser ruido.",
+            "No alargues el track pensando que un set de DJ pide duración: hoy lo habitual son 5-6 minutos extendidos con varias variaciones, no 8 minutos del mismo loop.",
+        ],
+        "siguiente_sesion": (
+            "Haz un mapa de bloques de 32 compases de tu track. En cada bloque, anota qué elementos están sonando "
+            "y qué cambió respecto al bloque anterior. Si dos o más bloques contiguos tienen exactamente lo mismo, "
+            "ahí tienes los huecos donde añadir variación o de donde recortar."
+        ),
+    },
     "enmascaramiento_bajo": {
         "titulo": "El bajo está enmascarando al kick o a los graves medios.",
         "prioridades": [
