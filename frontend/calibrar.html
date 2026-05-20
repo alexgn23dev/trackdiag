@@ -312,7 +312,6 @@
 
     function TrackCard({ track, index, onSave }) {
         const inicial = track.etiqueta || {};
-        const [veredicto, setVeredicto] = useState(inicial.veredicto || '');
         const [comentario, setComentario] = useState(inicial.comentario || '');
         const [guardando, setGuardando] = useState(false);
         const [mensaje, setMensaje] = useState('');
@@ -322,9 +321,11 @@
         const [diagOpen, setDiagOpen] = useState(false);
         // Descartado vive en el server; espejo local para feedback inmediato.
         const descartado = !!inicial.descartado;
+        // Veredicto legacy: preservado en DB si existía, pero ya no se edita.
+        const veredictoLegacy = inicial.veredicto || '';
 
-        const dirty = (veredicto !== (inicial.veredicto || '')) || (comentario !== (inicial.comentario || ''));
-        const yaEtiquetado = !!(inicial.veredicto || inicial.comentario);
+        const dirty = comentario !== (inicial.comentario || '');
+        const yaEtiquetado = !!inicial.comentario;
 
         async function enviarEtiqueta(payload, mensajeExito) {
             setGuardando(true);
@@ -353,18 +354,18 @@
 
         async function guardar() {
             await enviarEtiqueta({
-                veredicto: veredicto || null,
+                veredicto: veredictoLegacy || null,
                 comentario: comentario || null,
                 descartado: descartado,
             }, 'Guardado ✓');
         }
 
         async function toggleDescartado() {
-            // Si pasamos a descartado, mantenemos veredicto/comentario actuales
-            // (preservar trabajo). Al restaurar, también — y el backend borrará
-            // la fila si todo queda vacío.
+            // Si pasamos a descartado, mantenemos comentario actual (preservar
+            // trabajo). Al restaurar, también — y el backend borrará la fila
+            // si todo queda vacío.
             await enviarEtiqueta({
-                veredicto: veredicto || null,
+                veredicto: veredictoLegacy || null,
                 comentario: comentario || null,
                 descartado: !descartado,
             }, descartado ? 'Restaurado ✓' : 'Descartado ✓');
@@ -388,9 +389,7 @@
                         {descartado ? (
                             <span className="pill pill-descartado">descartado · no electrónica</span>
                         ) : yaEtiquetado ? (
-                            <span className={`pill pill-${inicial.veredicto || 'gris'}`}>
-                                {inicial.veredicto || 'sin veredicto'} · etiquetado
-                            </span>
+                            <span className="pill pill-verde">comentado</span>
                         ) : (
                             <span className="pill pill-gris">pendiente</span>
                         )}
@@ -450,23 +449,12 @@
                 </div>
 
                 <div className="mb-3">
-                    <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Tu juicio</div>
-                    <div className="flex gap-2 mb-3">
-                        {['verde', 'amarillo', 'rojo'].map(v => (
-                            <button
-                                key={v}
-                                onClick={() => setVeredicto(veredicto === v ? '' : v)}
-                                className={`vbtn ${veredicto === v ? `active-${v}` : ''}`}
-                            >
-                                {v.charAt(0).toUpperCase() + v.slice(1)}
-                            </button>
-                        ))}
-                    </div>
+                    <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Tu feedback</div>
                     <textarea
                         value={comentario}
                         onChange={e => setComentario(e.target.value)}
-                        placeholder="Qué oyes tú: qué arreglarías, en qué orden, dónde el motor exagera o se queda corto, problemas que no captó…"
-                        rows={5}
+                        placeholder="Qué oyes tú: qué arreglarías y en qué orden, dónde el motor acierta, exagera o se queda corto, problemas que no captó, lenguaje del consejo que no encaja, observaciones de producción/arreglo/estructura/dirección… Escribe libre."
+                        rows={6}
                     />
                 </div>
 
@@ -495,7 +483,7 @@
                             disabled={guardando || !dirty}
                             className="save-btn"
                         >
-                            {guardando ? 'Guardando…' : (yaEtiquetado && !veredicto && !comentario ? 'Borrar' : 'Guardar')}
+                            {guardando ? 'Guardando…' : (yaEtiquetado && !comentario ? 'Borrar' : 'Guardar')}
                         </button>
                     </div>
                 </div>
@@ -532,109 +520,35 @@
             return () => { cancelado = true; };
         }, [open, refreshKey]);
 
-        const ColorBar = ({ dist }) => {
-            const total = (dist?.verde || 0) + (dist?.amarillo || 0) + (dist?.rojo || 0);
-            if (total === 0) return <span className="text-xs text-gray-500">Sin veredictos aún</span>;
-            const seg = (n, c) => n === 0 ? null : (
-                <div key={c} style={{ width: `${(n / total) * 100}%`, background: c, height: 8 }} />
-            );
-            return (
-                <div>
-                    <div className="flex w-full rounded overflow-hidden" style={{ height: 8 }}>
-                        {seg(dist.verde, '#4ade80')}
-                        {seg(dist.amarillo, '#facc15')}
-                        {seg(dist.rojo, '#f87171')}
-                    </div>
-                    <div className="flex gap-4 text-xs text-gray-400 mt-2">
-                        <span><span style={{color:'#4ade80'}}>●</span> Verde {dist.verde}</span>
-                        <span><span style={{color:'#facc15'}}>●</span> Amarillo {dist.amarillo}</span>
-                        <span><span style={{color:'#f87171'}}>●</span> Rojo {dist.rojo}</span>
-                        {dist.sin_veredicto > 0 && (
-                            <span className="text-gray-500">○ Sin veredicto {dist.sin_veredicto}</span>
-                        )}
-                    </div>
-                </div>
-            );
-        };
-
-        const MatrizConcordancia = ({ matriz }) => {
-            const filas = ['verde', 'amarillo', 'rojo', 'desconocido'];
-            const columnas = ['verde', 'amarillo', 'rojo', 'sin_veredicto'];
-            const tieneAlgo = filas.some(f => columnas.some(c => (matriz[f]?.[c] || 0) > 0));
-            if (!tieneAlgo) return <span className="text-xs text-gray-500">Sin datos suficientes</span>;
-            const labelCol = { verde: 'Verde', amarillo: 'Amarillo', rojo: 'Rojo', sin_veredicto: 'Sin v.' };
-            const labelFila = { verde: 'Verde', amarillo: 'Amarillo', rojo: 'Rojo', desconocido: 'Desconocido' };
-            const colorPunto = { verde: '#4ade80', amarillo: '#facc15', rojo: '#f87171', sin_veredicto: '#6b7280', desconocido: '#6b7280' };
-            // Resalta diagonal (concordancia) y off-diagonal verde→rojo (mayor divergencia)
-            const cellStyle = (f, c) => {
-                if (f === c) return { color: '#4ade80', fontWeight: 600 };
-                if ((f === 'verde' && c === 'rojo') || (f === 'rojo' && c === 'verde')) return { color: '#f87171', fontWeight: 600 };
-                return { color: '#d4d4d8' };
-            };
-            return (
-                <div className="overflow-x-auto">
-                    <table className="text-xs border-collapse" style={{ minWidth: 360 }}>
-                        <thead>
-                            <tr>
-                                <th className="text-left text-gray-500 font-normal pb-2 pr-3">motor ↓ / tú →</th>
-                                {columnas.map(c => (
-                                    <th key={c} className="text-center text-gray-400 font-semibold pb-2 px-3">
-                                        <span style={{ color: colorPunto[c] }}>●</span> {labelCol[c]}
-                                    </th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filas.map(f => (
-                                <tr key={f} className="border-t border-gray-800">
-                                    <td className="text-gray-400 py-2 pr-3 whitespace-nowrap">
-                                        <span style={{ color: colorPunto[f] }}>●</span> {labelFila[f]}
-                                    </td>
-                                    {columnas.map(c => (
-                                        <td key={c} className="text-center py-2 px-3" style={cellStyle(f, c)}>
-                                            {matriz[f]?.[c] || 0}
-                                        </td>
-                                    ))}
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                    <div className="text-xs text-gray-500 mt-2 leading-relaxed">
-                        Diagonal verde = coincidencias. Esquinas en rojo (verde↔rojo) = divergencia mayor.
-                        Fila "desconocido" = estados del motor que no se mapean fácil a un color.
-                    </div>
-                </div>
-            );
-        };
-
-        const PalabrasFrecuentes = ({ palabras }) => {
+        // Palabras frecuentes bucketeadas por color que sacó el MOTOR. Un
+        // término que aparece mucho en comentarios sobre tracks que el motor
+        // llamó "verde" sugiere algo que el motor está subestimando.
+        const PalabrasPorMotor = ({ porMotor }) => {
             const buckets = [
-                { key: 'verde', label: 'Comentarios marcados verde', color: '#4ade80' },
-                { key: 'amarillo', label: 'Comentarios marcados amarillo', color: '#facc15' },
-                { key: 'rojo', label: 'Comentarios marcados rojo', color: '#f87171' },
+                { key: 'verde', label: 'Motor lo llamó verde', color: '#4ade80' },
+                { key: 'amarillo', label: 'Motor lo llamó amarillo', color: '#facc15' },
+                { key: 'rojo', label: 'Motor lo llamó rojo', color: '#f87171' },
+                { key: 'desconocido', label: 'Motor sin clasificar', color: '#9ca3af' },
             ];
-            const algo = buckets.some(b => (palabras[b.key] || []).length > 0);
-            if (!algo) return <span className="text-xs text-gray-500">Escribe comentarios para ver patrones de léxico</span>;
+            const algo = buckets.some(b => (porMotor?.[b.key] || []).length > 0);
+            if (!algo) return <span className="text-xs text-gray-500">Aún sin comentarios para extraer patrones</span>;
             return (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {buckets.map(b => {
-                        const items = palabras[b.key] || [];
+                        const items = porMotor?.[b.key] || [];
+                        if (items.length === 0) return null;
                         return (
                             <div key={b.key} className="border border-gray-800 rounded-lg p-3">
                                 <div className="text-xs font-semibold mb-2" style={{ color: b.color }}>
                                     <span>●</span> {b.label}
                                 </div>
-                                {items.length === 0 ? (
-                                    <span className="text-xs text-gray-500">Aún sin datos</span>
-                                ) : (
-                                    <div className="flex flex-wrap gap-1.5">
-                                        {items.map((it, i) => (
-                                            <span key={i} className="text-xs px-2 py-0.5 rounded" style={{ background: '#1f2937', color: '#d4d4d8' }}>
-                                                {it.palabra} <span className="text-gray-500">×{it.n}</span>
-                                            </span>
-                                        ))}
-                                    </div>
-                                )}
+                                <div className="flex flex-wrap gap-1.5">
+                                    {items.map((it, i) => (
+                                        <span key={i} className="text-xs px-2 py-0.5 rounded" style={{ background: '#1f2937', color: '#d4d4d8' }}>
+                                            {it.palabra} <span className="text-gray-500">×{it.n}</span>
+                                        </span>
+                                    ))}
+                                </div>
                             </div>
                         );
                     })}
@@ -646,7 +560,7 @@
             <div className="card p-4 mb-5">
                 <div onClick={() => setOpen(o => !o)} className="flex items-baseline justify-between cursor-pointer select-none">
                     <h2 className="text-sm font-bold text-white">
-                        Análisis de divergencia
+                        Progreso y patrones léxicos
                         <span className="text-xs font-normal text-gray-500 ml-2">(click para desplegar)</span>
                     </h2>
                     <span className="text-xs text-gray-500">{open ? '▾' : '▸'}</span>
@@ -659,7 +573,7 @@
                             <>
                                 <div className="flex gap-6 text-sm flex-wrap">
                                     <div>
-                                        <div className="text-xs text-gray-500 uppercase tracking-wide">Etiquetados</div>
+                                        <div className="text-xs text-gray-500 uppercase tracking-wide">Comentados</div>
                                         <div className="text-xl font-bold text-white">{stats.total_etiquetados}<span className="text-gray-600 text-base">/{stats.total_disponibles}</span></div>
                                     </div>
                                     <div>
@@ -671,27 +585,17 @@
                                         <div className="text-xl font-bold text-gray-400">{stats.descartados || 0}</div>
                                     </div>
                                     <div>
-                                        <div className="text-xs text-gray-500 uppercase tracking-wide">Long. media comentario</div>
-                                        <div className="text-xl font-bold text-white">
-                                            {Math.round(((stats.longitud_media_comentario?.verde || 0) + (stats.longitud_media_comentario?.amarillo || 0) + (stats.longitud_media_comentario?.rojo || 0)) / 3)}
-                                            <span className="text-gray-600 text-base"> chars</span>
-                                        </div>
+                                        <div className="text-xs text-gray-500 uppercase tracking-wide">Long. media</div>
+                                        <div className="text-xl font-bold text-white">{stats.longitud_media_comentario || 0}<span className="text-gray-600 text-base"> chars</span></div>
                                     </div>
                                 </div>
 
                                 <div>
-                                    <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Tu distribución</div>
-                                    <ColorBar dist={stats.distribucion_admin} />
-                                </div>
-
-                                <div>
-                                    <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Concordancia motor ↔ tú</div>
-                                    <MatrizConcordancia matriz={stats.matriz_concordancia} />
-                                </div>
-
-                                <div>
-                                    <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Palabras frecuentes en tus comentarios</div>
-                                    <PalabrasFrecuentes palabras={stats.palabras_frecuentes} />
+                                    <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Palabras frecuentes en tus comentarios, agrupadas por color del motor</div>
+                                    <PalabrasPorMotor porMotor={stats.palabras_por_color_motor} />
+                                    <div className="text-xs text-gray-500 mt-3 leading-relaxed">
+                                        Cómo leer esto: si una palabra como "harshness" aparece muchas veces en tus comentarios sobre tracks que el motor clasificó <span style={{color:'#4ade80'}}>verde</span>, probablemente el motor está subestimando algo que tú oyes claramente. Es señal preliminar — el reporte real lo genero yo cuando me lo pidas en chat.
+                                    </div>
                                 </div>
                             </>
                         )}
@@ -740,7 +644,7 @@
         }
 
         const isDescartado = (t) => !!(t.etiqueta && t.etiqueta.descartado);
-        const isEvaluado = (t) => !!(t.etiqueta && !t.etiqueta.descartado && (t.etiqueta.veredicto || t.etiqueta.comentario));
+        const isEvaluado = (t) => !!(t.etiqueta && !t.etiqueta.descartado && t.etiqueta.comentario);
         const isPendiente = (t) => !isDescartado(t) && !isEvaluado(t);
 
         const filtrados = useMemo(() => {
@@ -756,13 +660,7 @@
             const etiquetados = tracks.filter(isEvaluado).length;
             const descartados = tracks.filter(isDescartado).length;
             const pendientes = total - etiquetados - descartados;
-            const por_veredicto = { verde: 0, amarillo: 0, rojo: 0 };
-            for (const t of tracks) {
-                if (isEvaluado(t) && t.etiqueta?.veredicto && por_veredicto[t.etiqueta.veredicto] !== undefined) {
-                    por_veredicto[t.etiqueta.veredicto]++;
-                }
-            }
-            return { total, etiquetados, descartados, pendientes, por_veredicto };
+            return { total, etiquetados, descartados, pendientes };
         }, [tracks]);
 
         if (loading) {
@@ -781,8 +679,10 @@
                         <a href="/dashboard" className="text-xs text-gray-400 hover:text-white">← Dashboard</a>
                     </div>
                     <p className="text-sm text-gray-400">
-                        Etiqueta cada análisis con feedback_real. Escucha el track, lee lo que dijo el motor,
-                        y deja tu juicio: qué oyes tú, dónde acierta, dónde exagera o se queda corto.
+                        Por cada track: escucha el enlace externo, lee lo que dijo el motor, y escribe libre tu
+                        feedback cualitativo — qué oyes tú, dónde acierta, dónde exagera, qué no captó, lenguaje
+                        que no encaja, observaciones de mezcla/producción/arreglo/dirección. Cuando hayas hecho
+                        un lote me lo dices en chat y saco el reporte de divergencias.
                     </p>
                 </header>
 
@@ -796,22 +696,17 @@
 
                 <div className="card p-4 mb-5">
                     <div className="flex items-center justify-between flex-wrap gap-3">
-                        <div className="flex items-baseline gap-6 text-sm">
-                            <span>
-                                <span className="text-2xl font-bold text-white">{stats.etiquetados}</span>
-                                <span className="text-gray-500">/{stats.total}</span>
-                                <span className="text-xs text-gray-400 ml-2">etiquetados</span>
-                            </span>
-                            <span className="text-xs text-gray-500 flex gap-3">
-                                <span><span className="text-green-400">●</span> {stats.por_veredicto.verde}</span>
-                                <span><span className="text-yellow-400">●</span> {stats.por_veredicto.amarillo}</span>
-                                <span><span className="text-red-400">●</span> {stats.por_veredicto.rojo}</span>
-                            </span>
+                        <div className="flex items-baseline gap-2 text-sm">
+                            <span className="text-2xl font-bold text-white">{stats.etiquetados}</span>
+                            <span className="text-gray-500">/{stats.total - stats.descartados} activos</span>
+                            {stats.descartados > 0 && (
+                                <span className="text-xs text-gray-500 ml-3">+ {stats.descartados} descartados</span>
+                            )}
                         </div>
                         <div className="flex gap-2 flex-wrap">
                             <button onClick={() => setFiltro('todos')} className={`filter-btn ${filtro === 'todos' ? 'active' : ''}`}>Activos ({stats.total - stats.descartados})</button>
                             <button onClick={() => setFiltro('pendientes')} className={`filter-btn ${filtro === 'pendientes' ? 'active' : ''}`}>Pendientes ({stats.pendientes})</button>
-                            <button onClick={() => setFiltro('etiquetados')} className={`filter-btn ${filtro === 'etiquetados' ? 'active' : ''}`}>Etiquetados ({stats.etiquetados})</button>
+                            <button onClick={() => setFiltro('etiquetados')} className={`filter-btn ${filtro === 'etiquetados' ? 'active' : ''}`}>Comentados ({stats.etiquetados})</button>
                             <button onClick={() => setFiltro('descartados')} className={`filter-btn ${filtro === 'descartados' ? 'active' : ''}`}>Descartados ({stats.descartados})</button>
                         </div>
                     </div>
