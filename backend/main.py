@@ -48,7 +48,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.8")
+app = FastAPI(title="Mentotrack API", version="0.5.9")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -184,10 +184,13 @@ def _get_token_from_request(request: Request) -> str | None:
     return None
 
 
-# Google Sheets webhook (env var only, no hardcoded URL)
+# Google Sheets webhook. Cutover B cerrado el 2026-05-20: Postgres es la
+# fuente única para escrituras y lecturas. Esta variable solo se usa como
+# puente de autenticación para usuarios `__MIGRATED__` (legacy de Sheets
+# que aún no han establecido contraseña local). Cuando ese subconjunto
+# acabe de migrar o reset password, se puede desactivar la variable y
+# borrar el código de fallback restante.
 SHEETS_WEBHOOK = os.environ.get("SHEETS_WEBHOOK", "")
-if not SHEETS_WEBHOOK:
-    print("[WARN] SHEETS_WEBHOOK no configurado — las funciones de Google Sheets no funcionarán")
 
 # Almacenamiento simple de sesiones (JSON lines)
 SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
@@ -195,7 +198,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.8"}
+    return {"status": "ok", "version": "0.5.9"}
 
 
 @app.post("/api/diagnostico")
@@ -462,25 +465,6 @@ async def guardar_feedback_request(request: Request, data: dict):
     return {"ok": True}
 
 
-# =========================================================================
-# Proxy de Google Sheets — el frontend NUNCA debe conocer la URL del script
-# =========================================================================
-
-async def _sheets_post(payload: dict) -> dict:
-    """Hace POST al Apps Script con datos en el body (no en query params)."""
-    try:
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            resp = await client.post(SHEETS_WEBHOOK, json=payload, timeout=15)
-            try:
-                return resp.json()
-            except Exception:
-                # Apps Script legacy devuelve texto plano "ok", no JSON
-                return {"ok": True, "raw": resp.text[:100]}
-    except Exception as e:
-        print(f"[SHEETS POST] Error: {e}")
-        return {"error": str(e)}
-
-
 def _parse_formulario_str_to_dict(s: str) -> dict:
     """'Tech House | Casi listo | Demo | 2-5 años | Estructura | Bloqueo: ...'
     → dict para JSONB."""
@@ -500,7 +484,10 @@ def _parse_formulario_str_to_dict(s: str) -> dict:
 @app.post("/api/sheets/registro")
 @limiter.limit("5/minute")
 async def proxy_sheets_registro(request: Request, data: dict):
-    """Persiste un análisis. Postgres primary, Sheets mirror durante cutover B."""
+    """Persiste un análisis. Postgres primary (cutover B cerrado 2026-05-20).
+    El nombre del endpoint mantiene el prefijo `/api/sheets/` por
+    compatibilidad con el frontend desplegado — internamente ya solo escribe
+    a Postgres."""
     email = (data.get("email") or "").strip().lower()
     nombre_proyecto = (data.get("nombre_proyecto") or "").strip()
     formulario_str = data.get("formulario", "")
@@ -575,21 +562,8 @@ async def proxy_sheets_registro(request: Request, data: dict):
                 genero_custom=(genero_custom or None),
             )
         except Exception as e:
-            print(f"[REGISTRO] Postgres falló (sigue Sheets): {e}")
+            print(f"[REGISTRO] Postgres falló: {e}")
 
-    # Sheets mirror (best-effort)
-    if SHEETS_WEBHOOK:
-        payload = {
-            "tipo": "registro",
-            "timestamp": ts_str or timestamp.isoformat(),
-            "email": email,
-            "nombre_proyecto": nombre_proyecto,
-            "formulario": formulario_str,
-            "diagnostico": diagnostico,
-            "senales_json": senales_json_str,
-            "genero_custom": genero_custom,
-        }
-        await _sheets_post(payload)
     return {"ok": True}
 
 
@@ -597,12 +571,11 @@ async def proxy_sheets_registro(request: Request, data: dict):
 @limiter.limit("10/minute")
 async def proxy_sheets_feedback(request: Request, data: dict):
     """Actualiza fue_util/comentario del análisis más reciente del usuario.
-    Postgres primary, Sheets mirror."""
+    Postgres primary (cutover B cerrado 2026-05-20)."""
     email = (data.get("email") or "").strip().lower()
     fue_util = data.get("fue_util", "")
     comentario = data.get("comentario", "")
 
-    # Postgres primary: encontrar análisis más reciente y actualizar
     if _pg_available() and email:
         try:
             from db import get_pool
@@ -616,24 +589,15 @@ async def proxy_sheets_feedback(request: Request, data: dict):
                     comentario=(comentario or None),
                 )
         except Exception as e:
-            print(f"[FEEDBACK] Postgres falló (sigue Sheets): {e}")
-
-    # Sheets mirror
-    if SHEETS_WEBHOOK:
-        await _sheets_post({
-            "tipo": "feedback_util",
-            "email": email,
-            "fue_util": fue_util,
-            "comentario": comentario,
-        })
+            print(f"[FEEDBACK] Postgres falló: {e}")
     return {"ok": True}
 
 
 @app.post("/api/sheets/feedback-real")
 @limiter.limit("5/minute")
 async def proxy_sheets_feedback_real(request: Request, data: dict):
-    """Actualiza feedback_real (enlace SoundCloud) del análisis más reciente.
-    Postgres primary, Sheets mirror."""
+    """Actualiza feedback_real (enlace a SoundCloud / Dropbox / etc.) del
+    análisis más reciente. Postgres primary (cutover B cerrado 2026-05-20)."""
     email = (data.get("email") or "").strip().lower()
     enlace = (data.get("enlace") or "").strip()
 
@@ -646,42 +610,34 @@ async def proxy_sheets_feedback_real(request: Request, data: dict):
             if latest and enlace:
                 await repo.update_analisis_feedback_real(pool, latest["id"], enlace)
         except Exception as e:
-            print(f"[FEEDBACK_REAL] Postgres falló (sigue Sheets): {e}")
-
-    if SHEETS_WEBHOOK:
-        await _sheets_post({
-            "tipo": "feedback_real",
-            "email": email,
-            "enlace": enlace,
-        })
+            print(f"[FEEDBACK_REAL] Postgres falló: {e}")
     return {"ok": True}
 
 
 @app.post("/api/sheets/tutorial-click")
 @limiter.limit("20/minute")
 async def proxy_sheets_tutorial_click(request: Request):
-    """Proxy: registra click en tutorial de YouTube en Google Sheets.
-    Parsea body manualmente para soportar sendBeacon (que puede no
-    enviar Content-Type: application/json correctamente).
-
-    Nota: no se persiste en Postgres por ahora; el campo tutorial_clickado/
-    tutoriales_sugeridos de la tabla analisis solo se hidrata vía la
-    migración inicial. Si en el futuro queremos persistir clicks nuevos,
-    añadir UPDATE aquí."""
+    """Registra qué tutorial de YouTube clickó el usuario. Postgres primary
+    (cutover B cerrado 2026-05-20). Parsea body manualmente para soportar
+    sendBeacon, que puede no enviar Content-Type: application/json."""
     try:
         body = await request.body()
         data = json.loads(body) if body else {}
     except Exception:
         data = {}
-    payload = {
-        "tipo": "tutorial_click",
-        "email": data.get("email", ""),
-        "diagnostico_id": data.get("diagnostico_id", ""),
-        "tutorial_clickado": data.get("tutorial_clickado", ""),
-        "tutoriales_sugeridos": data.get("tutoriales_sugeridos", ""),
-    }
-    if SHEETS_WEBHOOK:
-        await _sheets_post(payload)
+    email = (data.get("email") or "").strip().lower()
+    tutorial_url = (data.get("tutorial_clickado") or "").strip()
+
+    if _pg_available() and email and tutorial_url:
+        try:
+            from db import get_pool
+            import repositories as repo
+            pool = get_pool()
+            latest = await repo.find_latest_analisis_by_email(pool, email)
+            if latest:
+                await repo.update_tutorial_clickado(pool, latest["id"], tutorial_url)
+        except Exception as e:
+            print(f"[TUTORIAL_CLICK] Postgres falló: {e}")
     return {"ok": True}
 
 
@@ -695,26 +651,17 @@ async def proxy_sheets_datos(request: Request):
     if not _verify_admin_token(admin_cookie):
         return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
 
-    # Postgres primary
-    if _pg_available():
-        try:
-            from db import get_pool
-            import repositories as repo
-            pool = get_pool()
-            rows = await repo.list_all_analisis(pool)
-            return {"ok": True, "data": [_pg_row_to_legacy_format(r) for r in rows]}
-        except Exception as e:
-            print(f"[ADMIN/DATOS] Postgres falló, fallback a Sheets: {e}")
-
-    # Fallback Sheets
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Postgres no disponible"})
     try:
-        result = await _sheets_get({"action": "get_all"})
-        if result.get("_connection_error"):
-            return JSONResponse(status_code=503, content={"error": "Error conectando con la base de datos"})
-        return result
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+        rows = await repo.list_all_analisis(pool)
+        return {"ok": True, "data": [_pg_row_to_legacy_format(r) for r in rows]}
     except Exception as e:
-        print(f"[ERROR] sheets datos: {e}")
-        return JSONResponse(status_code=503, content={"error": "Error conectando con la base de datos"})
+        print(f"[ADMIN/DATOS] Postgres falló: {e}")
+        return JSONResponse(status_code=503, content={"error": "Error consultando DB"})
 
 
 # =========================================================================
@@ -752,20 +699,6 @@ async def _sheets_get(params: dict) -> dict:
     except Exception as e:
         print(f"[SHEETS] Error: {e}")
         return {"_connection_error": str(e)}
-
-
-async def _obtener_historial_sheets(email: str) -> list:
-    """Obtiene el historial del usuario desde Google Sheets via POST."""
-    try:
-        result = await _sheets_get({"action": "get_all"})
-        if result.get("_connection_error"):
-            print(f"[HISTORIAL] Error de conexión: {result['_connection_error']}")
-            return []
-        all_rows = result.get("data", [])
-    except Exception as e:
-        print(f"[HISTORIAL] Error: {e}")
-        all_rows = []
-    return [r for r in all_rows if (r.get("email") or "").strip().lower() == email]
 
 
 # -------------------------------------------------------------------------
@@ -847,53 +780,45 @@ def _pg_row_to_legacy_format(row: dict) -> dict:
 
 
 async def _obtener_historial(email: str) -> list:
-    """Devuelve historial del usuario priorizando Postgres, con fallback a Sheets.
-    Garantiza el formato legacy esperado por el frontend."""
-    if _pg_available():
-        try:
-            from db import get_pool
-            import repositories as repo
-            pool = get_pool()
-            user = await repo.get_user_by_email(pool, email)
-            if user:
-                rows = await repo.list_analisis_usuario(pool, user["id"])
-                if rows:
-                    return [_pg_row_to_legacy_format(r) for r in rows]
-                # Usuario existe en Postgres pero sin análisis ahí (puede pasar
-                # si el usuario es nuevo y aún no se ha hecho doble escritura).
-                # Caer a Sheets para no devolver vacío.
-        except Exception as e:
-            print(f"[HISTORIAL] Postgres falló, fallback a Sheets: {e}")
-    return await _obtener_historial_sheets(email)
+    """Devuelve historial del usuario desde Postgres en el formato legacy
+    esperado por el frontend (cutover B cerrado 2026-05-20)."""
+    if not _pg_available():
+        return []
+    try:
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+        user = await repo.get_user_by_email(pool, email)
+        if not user:
+            return []
+        rows = await repo.list_analisis_usuario(pool, user["id"])
+        return [_pg_row_to_legacy_format(r) for r in rows]
+    except Exception as e:
+        print(f"[HISTORIAL] Postgres falló: {e}")
+        return []
 
 
 async def _get_user_for_auth(email: str) -> dict | None:
-    """Busca usuario para autenticación. Postgres primero, fallback Sheets.
-    Devuelve dict con keys: found, email, password_hash, username (compatible
-    con el formato de Apps Script)."""
-    if _pg_available():
-        try:
-            from db import get_pool
-            import repositories as repo
-            pool = get_pool()
-            u = await repo.get_user_by_email(pool, email)
-            if u:
-                return {
-                    "found": True,
-                    "email": u["email"],
-                    "password_hash": u["password_hash"],
-                    "username": u.get("username") or "",
-                    "_from": "postgres",
-                }
-        except Exception as e:
-            print(f"[AUTH] Postgres get_user falló, fallback Sheets: {e}")
-    # Fallback Sheets
-    if not SHEETS_WEBHOOK:
+    """Busca usuario para autenticación en Postgres (cutover B cerrado 2026-05-20).
+    Devuelve dict con keys: found, email, password_hash, username (formato
+    compatible con el flujo legacy)."""
+    if not _pg_available():
         return None
-    sheets_resp = await _sheets_get({"action": "get_user", "email": email})
-    if sheets_resp.get("found"):
-        sheets_resp["_from"] = "sheets"
-        return sheets_resp
+    try:
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+        u = await repo.get_user_by_email(pool, email)
+        if u:
+            return {
+                "found": True,
+                "email": u["email"],
+                "password_hash": u["password_hash"],
+                "username": u.get("username") or "",
+                "_from": "postgres",
+            }
+    except Exception as e:
+        print(f"[AUTH] Postgres get_user falló: {e}")
     return None
 
 
@@ -1032,22 +957,8 @@ async def auth_register(request: Request, data: dict):
             else:
                 await repo.create_user(pool, email, hashed, username)
         except Exception as e:
-            print(f"[REGISTER] Postgres falló, intentando Sheets: {e}")
-
-    # Sheets mirror (best-effort)
-    if SHEETS_WEBHOOK:
-        result = await _sheets_get({
-            "action": "register", "email": email, "username": username, "hash": hashed,
-        })
-        if result.get("_connection_error") and not _pg_available():
+            print(f"[REGISTER] Postgres falló: {e}")
             return JSONResponse(status_code=503, content={"error": "No se pudo conectar con la base de datos."})
-        if not result.get("ok") and not _pg_available():
-            err = result.get("error", "")
-            if err == "El usuario ya existe":
-                return JSONResponse(status_code=409, content={"error": "Ese email ya está registrado."})
-            if err == "Username no disponible":
-                return JSONResponse(status_code=409, content={"error": "Ese nombre de usuario ya está cogido."})
-            return JSONResponse(status_code=400, content={"error": err or "No se pudo registrar"})
 
     token = _create_token(email)
     return {
@@ -1070,24 +981,17 @@ async def auth_check_username(request: Request, data: dict):
     if not _valid_username(username):
         return {"ok": False, "available": False, "error": "Formato inválido"}
 
-    # Postgres primary: comprobar si está cogido
-    if _pg_available():
-        try:
-            from db import get_pool
-            import repositories as repo
-            pool = get_pool()
-            available = await repo.is_username_available(pool, username)
-            return {"ok": True, "available": bool(available)}
-        except Exception as e:
-            print(f"[CHECK_USERNAME] Postgres falló, intentando Sheets: {e}")
-
-    # Fallback Sheets
-    if not SHEETS_WEBHOOK:
-        return {"ok": False, "available": False, "error": "Servicio no configurado"}
-    result = await _sheets_get({"action": "check_username", "username": username})
-    if result.get("_connection_error"):
+    if not _pg_available():
+        return {"ok": False, "available": False, "error": "Servicio no disponible"}
+    try:
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+        available = await repo.is_username_available(pool, username)
+        return {"ok": True, "available": bool(available)}
+    except Exception as e:
+        print(f"[CHECK_USERNAME] Postgres falló: {e}")
         return {"ok": False, "available": False, "error": "Error de conexión"}
-    return {"ok": True, "available": bool(result.get("available"))}
 
 
 # -------------------------------------------------------------------------
@@ -1125,30 +1029,12 @@ async def auth_set_username(request: Request, data: dict):
                 if otro and otro["id"] != user["id"]:
                     return JSONResponse(status_code=409, content={"error": "Ese nombre de usuario ya está cogido."})
                 await repo.update_user_username(pool, user["id"], username)
-                # Sheets mirror (best-effort)
-                if SHEETS_WEBHOOK:
-                    await _sheets_get({"action": "set_username", "email": email, "username": username})
                 return {"ok": True, "username": username}
         except Exception as e:
-            print(f"[SET_USERNAME] Postgres falló, intentando Sheets: {e}")
+            print(f"[SET_USERNAME] Postgres falló: {e}")
+            return JSONResponse(status_code=503, content={"error": "No se pudo conectar con la base de datos."})
 
-    # Fallback Sheets
-    if not SHEETS_WEBHOOK:
-        return JSONResponse(status_code=503, content={"error": "Servicio no configurado."})
-    result = await _sheets_get({
-        "action": "set_username",
-        "email": email,
-        "username": username,
-    })
-    if result.get("_connection_error"):
-        return JSONResponse(status_code=503, content={"error": "No se pudo conectar con la base de datos."})
-    if not result.get("ok"):
-        err = result.get("error", "")
-        if err == "Username no disponible":
-            return JSONResponse(status_code=409, content={"error": "Ese nombre de usuario ya está cogido."})
-        return JSONResponse(status_code=400, content={"error": err or "No se pudo asignar"})
-
-    return {"ok": True, "username": username}
+    return JSONResponse(status_code=503, content={"error": "Servicio no disponible."})
 
 
 # -------------------------------------------------------------------------
@@ -1205,13 +1091,7 @@ async def _create_user_dual(email: str, password_hash: str) -> tuple[bool, str |
                 await repo.create_user(pool, email, password_hash)
         except Exception as e:
             print(f"[AUTH] Postgres create_user falló: {e}")
-            # No bloqueamos por esto: caemos a Sheets-only para no perder el registro
-    # Sheets mirror (best-effort, no bloqueante en caso de error)
-    if SHEETS_WEBHOOK:
-        try:
-            await _sheets_get({"action": "register", "email": email, "hash": password_hash})
-        except Exception as e:
-            print(f"[AUTH] Sheets register falló (mirror): {e}")
+            return False, "No se pudo crear el usuario."
     return True, None
 
 
@@ -1612,20 +1492,15 @@ async def get_ideas(request: Request):
             } for r in rows]
             return {"ideas": ideas}
         except Exception as e:
-            print(f"[IDEAS GET] Postgres falló, fallback Sheets: {e}")
-    # Fallback Sheets
-    result = await _sheets_get({"action": "get_ideas"})
-    if result.get("_connection_error"):
-        return JSONResponse(status_code=503, content={"error": "Error de conexión"})
-    ideas = result.get("ideas", [])
-    ideas.sort(key=lambda x: x.get("votos", 0), reverse=True)
-    return {"ideas": ideas}
+            print(f"[IDEAS GET] Postgres falló: {e}")
+            return JSONResponse(status_code=503, content={"error": "Error de conexión"})
+    return JSONResponse(status_code=503, content={"error": "Postgres no disponible"})
 
 
 @app.post("/api/ideas")
 @limiter.limit("5/minute")
 async def create_idea(request: Request, data: dict):
-    """Crea una nueva idea. Postgres primary + mirror best-effort a Sheets."""
+    """Crea una nueva idea (cutover B cerrado 2026-05-20, solo Postgres)."""
     nombre = (data.get("nombre") or "").strip()
     titulo = (data.get("titulo") or "").strip()
     descripcion = (data.get("descripcion") or "").strip()
@@ -1637,46 +1512,24 @@ async def create_idea(request: Request, data: dict):
     if len(descripcion) > 500:
         return JSONResponse(status_code=400, content={"error": "La descripción no puede superar 500 caracteres"})
 
-    new_id = None
-    # Postgres primary
-    if _pg_available():
-        try:
-            from db import get_pool
-            import repositories as repo
-            pool = get_pool()
-            row = await repo.create_idea(pool, nombre=nombre, titulo=titulo, descripcion=descripcion)
-            new_id = str(row["id"])
-        except Exception as e:
-            print(f"[IDEAS CREATE] Postgres falló: {e}")
-
-    # Mirror Sheets (best-effort, ID corto para legibilidad en Sheet).
-    if SHEETS_WEBHOOK:
-        sheets_id = (new_id[:8] if new_id else str(uuid.uuid4())[:8])
-        try:
-            await _sheets_post({
-                "action": "create_idea",
-                "id": sheets_id,
-                "nombre": nombre,
-                "titulo": titulo,
-                "descripcion": descripcion,
-                "fecha": datetime.now(timezone.utc).strftime("%d %b %Y"),
-                "votos": 0,
-            })
-            if new_id is None:
-                new_id = sheets_id
-        except Exception as e:
-            print(f"[IDEAS CREATE] Mirror Sheets falló: {e}")
-
-    if new_id is None:
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Postgres no disponible"})
+    try:
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+        row = await repo.create_idea(pool, nombre=nombre, titulo=titulo, descripcion=descripcion)
+        return {"ok": True, "id": str(row["id"])}
+    except Exception as e:
+        print(f"[IDEAS CREATE] Postgres falló: {e}")
         return JSONResponse(status_code=503, content={"error": "No se pudo guardar la idea"})
-    return {"ok": True, "id": new_id}
 
 
 @app.post("/api/ideas/{idea_id}/vote")
 @limiter.limit("20/minute")
 async def vote_idea(request: Request, idea_id: str, data: dict):
-    """Vota una idea. Si el ID es UUID, se vota en Postgres; si no, se asume
-    ID corto de Sheets y se vota allí (compat con ideas pre-migración)."""
+    """Vota una idea. Solo se aceptan UUIDs ahora (cutover B cerrado 2026-05-20).
+    Los IDs cortos legacy de Sheets ya no se procesan; en su día se migraron."""
     delta = data.get("delta")
     if delta is None:
         voto = data.get("voto", "")
@@ -1688,29 +1541,25 @@ async def vote_idea(request: Request, idea_id: str, data: dict):
     except (TypeError, ValueError):
         return JSONResponse(status_code=400, content={"error": "Delta inválido"})
 
-    # Si el ID parece UUID, votamos en Postgres.
     try:
         from uuid import UUID as _UUID
         idea_uuid = _UUID(idea_id)
     except (ValueError, TypeError):
-        idea_uuid = None
+        return JSONResponse(status_code=400, content={"error": "ID de idea inválido"})
 
-    if idea_uuid is not None and _pg_available():
-        try:
-            from db import get_pool
-            import repositories as repo
-            pool = get_pool()
-            new_votos = await repo.vote_idea(pool, idea_uuid, delta)
-            if new_votos is not None:
-                return {"ok": True, "votos": new_votos}
-        except Exception as e:
-            print(f"[IDEAS VOTE] Postgres falló: {e}")
-
-    # Fallback Sheets (IDs cortos legacy o UUID no encontrado).
-    result = await _sheets_get({"action": "vote_idea", "id": idea_id, "delta": delta})
-    if result.get("_connection_error"):
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Postgres no disponible"})
+    try:
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+        new_votos = await repo.vote_idea(pool, idea_uuid, delta)
+        if new_votos is not None:
+            return {"ok": True, "votos": new_votos}
+        return JSONResponse(status_code=404, content={"error": "Idea no encontrada"})
+    except Exception as e:
+        print(f"[IDEAS VOTE] Postgres falló: {e}")
         return JSONResponse(status_code=503, content={"error": "Error de conexión"})
-    return {"ok": True, "votos": result.get("votos", 0)}
 
 
 # Ruta para servir la página de ideas
