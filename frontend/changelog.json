@@ -1,6 +1,17 @@
 {
   "entries": [
     {
+      "version": "0.5.9",
+      "date": "2026-05-20",
+      "title": "Cierre del cutover B — Postgres como única fuente",
+      "changes": [
+        "Eliminado el espejo a Google Sheets de todas las escrituras (registro de análisis, feedback útil, enlace de feedback real, click de tutorial, registro de usuario, asignación de username, creación y voto de ideas). Postgres es ahora la única fuente para datos nuevos.",
+        "Eliminados también los fallbacks de lectura desde Sheets (dashboard, historial del usuario, listado de ideas, voto de ideas). Si Postgres falla, se devuelve 503 directo en lugar de servir datos posiblemente obsoletos del Sheet.",
+        "El click de tutorial ahora se persiste en Postgres (campo tutorial_clickado del último análisis del usuario) — antes solo iba a Sheets.",
+        "Único uso restante de Sheets: puente de autenticación para usuarios `__MIGRATED__` (legacy sin hash bcrypt en Postgres). Cuando esos usuarios establezcan contraseña o reseteen, el código de fallback puede desaparecer también."
+      ]
+    },
+    {
       "version": "0.5.8",
       "date": "2026-05-20",
       "title": "Aviso de true peak + Dub Techno como género propio",

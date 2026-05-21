@@ -18,8 +18,8 @@ Documento de referencia para trabajar en este repo. Para la visión completa del
 
 `MENTOTRACK.md` quedó en v0.4.1 (24 abril). Cambios posteriores relevantes (resumen — para detalle ver `frontend/changelog.json`):
 
-- **API version actual:** `0.5.3` (en `/api/health` y en `FastAPI(...)`).
-- **DB primaria: PostgreSQL en Railway** (`backend/db.py` con pool asyncpg). Cutover B activo: Sheets se mantiene en paralelo como espejo durante ~1 semana tras el merge a `main`.
+- **API version actual:** `0.5.9` (en `/api/health` y en `FastAPI(...)`).
+- **DB primaria: PostgreSQL en Railway** (`backend/db.py` con pool asyncpg). **Cutover B cerrado el 2026-05-20**: Postgres es la única fuente para todas las escrituras y lecturas. Sheets ya solo se consulta como puente de auth para usuarios `__MIGRATED__` (legacy sin hash bcrypt local). Cuando ese subconjunto migre/reset password, se podrá eliminar el código de fallback restante y la variable `SHEETS_WEBHOOK`.
 - **Proyectos + versiones** (feat 0.5.3): un análisis pertenece a un proyecto y se numera (`v1`, `v2`…) con etiqueta opcional. El panel del usuario unifica el listado, marca el proyecto/versión de cada análisis y permite asignar inline los huérfanos. Detalle de proyecto con barra de "listo para sello" y cambios entre versiones en lenguaje de escucha.
 - **Tracking de tutoriales YouTube:** clicks guardados en Postgres (con espejo a Sheets) vía `/api/sheets/tutorial-click`.
 - **Página `/ideas`:** propuestas con votación (`/api/ideas`, voto toggle).
@@ -146,8 +146,8 @@ Mira `git log --oneline` para calibrar tono. Patrones que se usan:
 ### Backend
 - Todos los endpoints de cara al exterior pasan por slowapi rate limit.
 - Endpoints sensibles (`/api/feedback*`, `/api/auth/historial`, `/api/proyectos*`) requieren JWT en header `Authorization: Bearer`.
-- Endpoints `/api/sheets/*` son proxies internos: escriben primero en Postgres y mantienen el espejo a Sheets durante el cutover.
-- Patrón de fallback: Postgres → Sheets. **Cuidado con escribir helpers que se llamen a sí mismos en la rama de fallback** (`_obtener_historial` tuvo ese bug). Siempre delegar a la función `_*_sheets` correspondiente.
+- Endpoints `/api/sheets/*` son legacy en el nombre (frontend desplegado los usa), pero internamente solo escriben a Postgres tras el cierre del cutover B. No mantienen espejo a Sheets.
+- Patrón de fallback Sheets: SOLO usado para autenticación de usuarios `__MIGRATED__`. Cualquier otra escritura/lectura es Postgres-only; si falla, 503 directo.
 - Si añades un endpoint nuevo, regístralo también en el catch-all si debe servir HTML.
 - Capa SQL en `repositories.py`: cada función decorada con `@with_retry()` para mitigar cortes intermitentes del proxy TCP de Railway. No usar el pool sin el decorador.
 

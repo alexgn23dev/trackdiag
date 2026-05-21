@@ -554,6 +554,21 @@ async def update_analisis_feedback_real(
 
 
 @with_retry()
+async def update_tutorial_clickado(
+    pool: asyncpg.Pool, analisis_id: UUID, tutorial_url: str
+) -> bool:
+    """Registra qué tutorial de YouTube clickó el usuario sobre un análisis.
+    El campo `tutoriales_sugeridos` se hidrata al crear el análisis; este
+    UPDATE sólo registra cuál de ellos llegó a abrir."""
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            "UPDATE analisis SET tutorial_clickado = $1 WHERE id = $2",
+            tutorial_url.strip(), analisis_id,
+        )
+    return result.endswith(" 1")
+
+
+@with_retry()
 async def list_all_analisis(pool: asyncpg.Pool, limit: int = 10000) -> list[dict]:
     """Lista todos los análisis (admin/dashboard). Usar con cuidado al escalar.
 
