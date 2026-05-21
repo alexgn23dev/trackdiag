@@ -1718,7 +1718,7 @@
                 });
         }, []);
 
-        const MAX_FILE_MB = 100;
+        const MAX_FILE_MB = 150;
         const handleFileSelected = (f) => {
             const sizeMB = f.size / 1024 / 1024;
             if (sizeMB > MAX_FILE_MB) {

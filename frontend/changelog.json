@@ -1,6 +1,14 @@
 {
   "entries": [
     {
+      "version": "0.5.10",
+      "date": "2026-05-20",
+      "title": "Límite de subida ampliado a 150 MB",
+      "changes": [
+        "El máximo de tamaño de archivo sube de 100 MB a 150 MB, tanto en cliente como en servidor. Permite WAVs más largos sin necesidad de convertir previamente a MP3."
+      ]
+    },
+    {
       "version": "0.5.9",
       "date": "2026-05-20",
       "title": "Cierre del cutover B — Postgres como única fuente",
