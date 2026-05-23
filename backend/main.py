@@ -48,7 +48,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.10")
+app = FastAPI(title="Mentotrack API", version="0.5.11")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -198,7 +198,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.10"}
+    return {"status": "ok", "version": "0.5.11"}
 
 
 @app.post("/api/diagnostico")
@@ -465,6 +465,18 @@ async def guardar_feedback_request(request: Request, data: dict):
     return {"ok": True}
 
 
+def _country_from_request(request: Request) -> str | None:
+    """Lee el código ISO-3166-1 alpha-2 del país desde el header de Cloudflare
+    (CF-IPCountry). Devuelve None si no está disponible (entorno local sin
+    Cloudflare delante) o si el código no es válido."""
+    country = (request.headers.get("CF-IPCountry") or "").strip().upper()
+    # Cloudflare puede devolver "XX" (desconocido), "T1" (Tor), "EU" (UE sin país concreto).
+    # Los descartamos para no inflar las stats con buckets ruidosos.
+    if not country or len(country) != 2 or country in ("XX", "T1"):
+        return None
+    return country
+
+
 def _parse_formulario_str_to_dict(s: str) -> dict:
     """'Tech House | Casi listo | Demo | 2-5 años | Estructura | Bloqueo: ...'
     → dict para JSONB."""
@@ -560,6 +572,7 @@ async def proxy_sheets_registro(request: Request, data: dict):
                 diagnostico=diagnostico or "",
                 senales=senales_dict,
                 genero_custom=(genero_custom or None),
+                pais=_country_from_request(request),
             )
         except Exception as e:
             print(f"[REGISTRO] Postgres falló: {e}")
@@ -775,6 +788,7 @@ def _pg_row_to_legacy_format(row: dict) -> dict:
         "nota_alex": float(nota_alex) if nota_alex is not None else "",
         "tutoriales_sugeridos": tut_sug or "",
         "tutorial_clickado": row.get("tutorial_clickado") or "",
+        "pais": (row.get("pais") or "").strip() or "",
         "genero_custom": row.get("genero_custom") or "",
     }
 
