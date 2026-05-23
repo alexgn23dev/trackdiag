@@ -445,6 +445,7 @@ async def create_analisis(
     diagnostico: str,
     senales: dict,
     genero_custom: Optional[str] = None,
+    pais: Optional[str] = None,
 ) -> dict:
     """Inserta un análisis. Si colisiona con uq_analisis_proyecto_version
     (dos requests concurrentes calcularon el mismo `version_num`), reintenta
@@ -452,8 +453,8 @@ async def create_analisis(
     sql_insert = """INSERT INTO analisis (
                         usuario_id, proyecto_id, version_num, version_etiqueta,
                         timestamp, email, nombre_proyecto_legacy,
-                        formulario, diagnostico, senales, genero_custom
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                        formulario, diagnostico, senales, genero_custom, pais
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
                     RETURNING id, timestamp, version_num"""
     email_norm = email.strip().lower()
     for attempt in range(3):
@@ -463,7 +464,7 @@ async def create_analisis(
                     sql_insert,
                     usuario_id, proyecto_id, version_num, version_etiqueta,
                     timestamp, email_norm, nombre_proyecto_legacy,
-                    formulario, diagnostico, senales, genero_custom,
+                    formulario, diagnostico, senales, genero_custom, pais,
                 )
             return dict(row)
         except asyncpg.exceptions.UniqueViolationError:
@@ -583,7 +584,7 @@ async def list_all_analisis(pool: asyncpg.Pool, limit: int = 10000) -> list[dict
                       fue_util, comentario, feedback_real,
                       revision_alex, nota_alex,
                       tutoriales_sugeridos, tutorial_clickado,
-                      genero_custom
+                      genero_custom, pais
                FROM analisis
                ORDER BY timestamp ASC
                LIMIT $1""",
