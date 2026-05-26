@@ -1,6 +1,38 @@
 {
   "entries": [
     {
+      "version": "0.5.17",
+      "date": "2026-05-26",
+      "title": "Columna motor_version: ahora se puede medir antes/después de un recalibrado",
+      "changes": [
+        "Cada análisis nuevo guarda con qué versión del motor se diagnosticó (columna `motor_version` en la tabla `analisis`, VARCHAR(20)). Sin esto, las recalibraciones se hacían a ciegas — ahora sí podemos comparar el %útil real del mismo diagnóstico antes y después de cambiar una regla.",
+        "Migración Alembic auto-aplicada al deploy: añade la columna NULLable. Los análisis previos quedan con motor_version NULL (no se puede inferir cuál era el motor cuando se hicieron).",
+        "Nuevo filtro en la card de \"Diagnóstico × Satisfacción\" del tab Motor del dashboard: dropdown para ver el %útil global, solo análisis con versión etiquetada, solo legacy sin versión, o filtrar por una versión concreta del motor. En 2-4 semanas con análisis nuevos suficientes, se podrá comparar p.ej. v0.5.14 (pre-recalibrado) vs v0.5.17 (post)."
+      ]
+    },
+    {
+      "version": "0.5.16",
+      "date": "2026-05-26",
+      "title": "Mezcla prematura endurecida + explicación de correlación L/R + sub-géneros nicho captados",
+      "changes": [
+        "Mezcla prematura endurecida: el dx más rechazado (43% útil, 2 de 4 marcados como \"no coincide\") ahora se modula por la madurez detectada por el motor. Con fase 'casi_listo' + madurez 'en_desarrollo' + una sola señal débil de estructura ya no se diagnostica — era el patrón típico del falso positivo (usuario consideraba el arreglo cerrado, motor disentía con poca evidencia). Reduce los casos de 32 a 15 sobre el histórico (-53%); los tracks que antes recibían mezcla_prematura ahora pasan a problema_arreglo (más específico) o sin_diagnostico.",
+        "Template de mezcla_prematura reescrito en tono constructivo: deja de etiquetar al usuario como \"prematuro\" y propone una rutina concreta de bypass + comparación con referencia + foco en estructura antes de volver a la mezcla.",
+        "Correlación L/R ahora se explica al usuario: cuando la correlación entre canales es ≥ 95% (casi-mono), el resumen ya no dice solo \"excelente compatibilidad mono\" sino que añade \"el track tiene poca anchura estéreo — si buscas profundidad, abre el panning de hats/pads/FX, no toques kick ni bajo\". Resuelve la duda recurrente (\"correlación 100%, ¿es bueno o malo?\").",
+        "Heurística de género estático ampliada: la detección por palabra-clave en el campo \"Otro/genero_custom\" ahora capta minimal, micro, deetron, hypnotic, raw y tool — sub-géneros que estaban quedando fuera y recibían reglas genéricas. Refactorizado: las cuatro duplicaciones de la lista se centralizan en un único helper `es_genero_estatico()`.",
+        "El gatekeeper de carencia_espectral (v0.5.15) también respeta esta heurística ampliada: usuarios que escriben \"deetron house\" o \"hypnotic deep progressive\" en Otro ya no reciben falsos positivos de carencia espectral por el espectro austero del estilo."
+      ]
+    },
+    {
+      "version": "0.5.15",
+      "date": "2026-05-26",
+      "title": "Gatekeeper de espectro disperso en carencia_espectral (afro_house, minimal, deep_house, dub_techno)",
+      "changes": [
+        "El reanálisis sobre 583 tracks históricos reveló que `carencia_espectral` saltaba en el 64% de minimal y 69% de afro_house — casi monoclase. En estos géneros el espectro con menos cuerpo en medios suele ser lenguaje del estilo, no un fallo de mezcla. Mismo patrón que ya estaba aplicado a `mezcla_prematura` y `poco_contraste` en géneros estáticos.",
+        "Nuevo gatekeeper: en `minimal`, `afro_house`, `deep_house` y `dub_techno` la regla solo mantiene el dx si hay refuerzo claro (carencia en ambas bandas + exceso de graves). Los falsos positivos sistemáticos pasan a recibir dx más adecuados (harshness, exceso_lowend) o `sin_diagnostico`.",
+        "Impacto medido en el histórico: ~40 tracks dejan de tener carencia_espectral como dx principal. La utilidad media de la regla apenas se mueve (76% → 73%): no estábamos perdiendo precisión, solo eliminando casos donde la regla no aplicaba."
+      ]
+    },
+    {
       "version": "0.5.14",
       "date": "2026-05-26",
       "title": "Cruces nuevos en el tab Motor (satisfacción, género, país)",

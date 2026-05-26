@@ -863,6 +863,20 @@ def _analizar_mono_compatibility(y_stereo: np.ndarray, sr: int) -> dict:
             "energía significativa. Esto afectará la reproducción en sistemas mono "
             "(clubs, smartphones, radio)."
         )
+    elif correlacion >= 0.95 and graves_ok:
+        # Caso típico de duda del usuario: "correlación 100%, ¿es bueno o malo?"
+        # Técnicamente la compatibilidad mono es perfecta, pero significa que el
+        # track suena casi en mono — sin movimiento estéreo. Para club/streaming
+        # da igual, para escucha doméstica puede sentirse "plano".
+        resultado["nivel_compatibilidad"] = "excelente"
+        resultado["resumen"] = (
+            f"Compatibilidad mono perfecta — los canales L y R son casi idénticos "
+            f"(correlación {correlacion*100:.0f}%). Eso garantiza que suena bien en "
+            f"cualquier sistema (club, smartphone, radio), pero también significa "
+            f"que el track tiene poca anchura estéreo: si buscas sensación de "
+            f"profundidad o movimiento lateral, abre el panning de hats, pads o "
+            f"FX hacia los lados. No toques kick ni bajo — deben quedarse al centro."
+        )
     elif correlacion > 0.85 and graves_ok:
         resultado["nivel_compatibilidad"] = "excelente"
         resultado["resumen"] = (

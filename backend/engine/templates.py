@@ -55,19 +55,20 @@ TEMPLATES = {
         ),
     },
     "mezcla_prematura": {
-        "titulo": "Estás intentando pulir la mezcla antes de tiempo.",
+        "titulo": "Aún quedan detalles del arreglo antes de cerrar la mezcla.",
         "prioridades": [
-            "Para de mezclar y vuelve al arreglo — tu track tiene problemas más básicos que resolver primero.",
-            "Cierra la estructura completa antes de tocar EQ, compresión o niveles.",
-            "Asegúrate de que el track funciona en estructura y energía antes de preocuparte por cómo suena técnicamente.",
+            "Antes de seguir afinando EQ y compresión, dedica una sesión a cerrar la estructura: revisa que cada sección tiene un propósito claro (intro, break, drop, outro) y que el contraste energético se nota a primera escucha.",
+            "Bajada técnica: bypass de todos los plugins del master y de los buses. Escucha el track plano. Si la energía y el desarrollo siguen funcionando así, la estructura está cerrada y puedes volver a la mezcla. Si no, el problema no era de mezcla.",
+            "Compara con un track de referencia del mismo estilo: ¿tu desarrollo entre secciones es comparable? ¿Tus drops llegan al mismo nivel de energía? Si no, ahí está lo que mover.",
         ],
         "no_tocar": [
-            "No toques EQ ni compresión individual todavía.",
-            "No compares tu mezcla con tracks de referencia en esta fase — es prematuro.",
+            "Evita afinar EQ por elementos individuales mientras la estructura no esté cerrada — vas a cambiar las decisiones de mezcla cuando muevas las secciones.",
+            "No subas el loudness final ni pongas limitador de master todavía — distorsiona la percepción del contraste entre secciones.",
         ],
         "siguiente_sesion": (
-            "En tu próxima sesión, desactiva todos los plugins de mezcla que hayas puesto y escucha el track "
-            "solo con los faders. ¿La estructura funciona? ¿Las secciones tienen contraste? Si no, trabaja eso primero."
+            "Próxima sesión: abre el proyecto, desactiva el master y los plugins de mezcla individuales, y "
+            "haz una pasada centrada solo en arreglo y energía. Marca los puntos donde el track 'no respira' "
+            "o donde dos secciones suenan demasiado parecidas, y resuélvelos antes de volver a la mezcla."
         ),
     },
     "exceso_lowend": {
