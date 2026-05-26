@@ -939,7 +939,7 @@
                 <div className="card p-5">
                     <h3 className="text-sm font-semibold text-gray-300 mb-1">Distribución por país (todos los análisis)</h3>
                     <p className="text-xs text-gray-500 mb-4">
-                        Detectado vía Cloudflare. Solo incluye análisis hechos tras el deploy del 2026-05-20.
+                        Detectado por IP vía ipapi.co (sin guardar la IP). Solo análisis posteriores al deploy del 2026-05-21.
                     </p>
                     {(() => {
                         const counts = {};
@@ -958,7 +958,7 @@
                         if (ranked.length === 0) {
                             return (
                                 <p className="text-xs text-gray-500">
-                                    Aún sin datos de país. Espera a los próximos análisis con la v0.5.11 desplegada.
+                                    Aún sin datos de país. Espera a los próximos análisis con la v0.5.12 desplegada.
                                 </p>
                             );
                         }

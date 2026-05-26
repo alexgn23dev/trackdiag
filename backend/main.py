@@ -48,7 +48,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.11")
+app = FastAPI(title="Mentotrack API", version="0.5.12")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -198,7 +198,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.11"}
+    return {"status": "ok", "version": "0.5.12"}
 
 
 @app.post("/api/diagnostico")
@@ -465,16 +465,68 @@ async def guardar_feedback_request(request: Request, data: dict):
     return {"ok": True}
 
 
-def _country_from_request(request: Request) -> str | None:
-    """Lee el código ISO-3166-1 alpha-2 del país desde el header de Cloudflare
-    (CF-IPCountry). Devuelve None si no está disponible (entorno local sin
-    Cloudflare delante) o si el código no es válido."""
-    country = (request.headers.get("CF-IPCountry") or "").strip().upper()
-    # Cloudflare puede devolver "XX" (desconocido), "T1" (Tor), "EU" (UE sin país concreto).
-    # Los descartamos para no inflar las stats con buckets ruidosos.
-    if not country or len(country) != 2 or country in ("XX", "T1"):
+# Caché en memoria de IP → código de país ISO-2. Persiste hasta que el
+# contenedor reinicia. Soporta valores None para no martillear ipapi.co
+# ante IPs que ya fallaron una vez.
+_IP_COUNTRY_CACHE: dict[str, str | None] = {}
+
+
+def _client_ip(request: Request) -> str | None:
+    """Extrae la IP del cliente final. Railway forwardea la IP real en
+    X-Forwarded-For (primer elemento de la lista separada por comas);
+    para entornos sin proxy intermedio usamos request.client.host."""
+    xff = (request.headers.get("X-Forwarded-For") or "").strip()
+    if xff:
+        first = xff.split(",")[0].strip()
+        if first:
+            return first
+    return request.client.host if request.client else None
+
+
+_PRIVATE_IP_PREFIXES = ("10.", "172.16.", "172.17.", "172.18.", "172.19.",
+                        "172.20.", "172.21.", "172.22.", "172.23.",
+                        "172.24.", "172.25.", "172.26.", "172.27.",
+                        "172.28.", "172.29.", "172.30.", "172.31.",
+                        "192.168.", "127.", "169.254.", "::1")
+
+
+async def _country_from_request(request: Request) -> str | None:
+    """Resuelve el país del cliente a código ISO-3166-1 alpha-2.
+
+    Cadena de fuentes, en orden:
+    1. Header CF-IPCountry — sólo si en algún momento se proxia por Cloudflare.
+       Hoy mentotrack.com NO va detrás del proxy de CF (incompatible con
+       uploads > 100 MB en plan Free), pero leemos el header por si cambia.
+    2. Lookup contra ipapi.co usando la IP del cliente. Gratis hasta 30k
+       req/mes sin API key. Cacheado en memoria por IP para no machacar el
+       endpoint con el mismo usuario."""
+    # Vía CF (no debería disparar hoy, pero es barato dejarlo).
+    cf = (request.headers.get("CF-IPCountry") or "").strip().upper()
+    if cf and len(cf) == 2 and cf not in ("XX", "T1", "EU"):
+        return cf
+
+    ip = _client_ip(request)
+    if not ip:
         return None
-    return country
+    # IPs privadas o loopback: no merece la pena llamar al servicio.
+    if any(ip.startswith(p) for p in _PRIVATE_IP_PREFIXES):
+        return None
+    if ip in _IP_COUNTRY_CACHE:
+        return _IP_COUNTRY_CACHE[ip]
+
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            resp = await client.get(f"https://ipapi.co/{ip}/country/")
+            country = (resp.text or "").strip().upper()
+            if len(country) == 2 and country.isalpha():
+                _IP_COUNTRY_CACHE[ip] = country
+                return country
+    except Exception as e:
+        print(f"[GEO] ipapi.co falló para {ip}: {e}")
+
+    # Negative cache para no reintentar en cada request del mismo usuario.
+    _IP_COUNTRY_CACHE[ip] = None
+    return None
 
 
 def _parse_formulario_str_to_dict(s: str) -> dict:
@@ -572,7 +624,7 @@ async def proxy_sheets_registro(request: Request, data: dict):
                 diagnostico=diagnostico or "",
                 senales=senales_dict,
                 genero_custom=(genero_custom or None),
-                pais=_country_from_request(request),
+                pais=await _country_from_request(request),
             )
         except Exception as e:
             print(f"[REGISTRO] Postgres falló: {e}")
