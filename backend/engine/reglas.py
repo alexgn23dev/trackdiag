@@ -452,6 +452,25 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     harshness = senales.get("harshness", {})
     if harshness.get("tiene_harshness") and senales["carencia_agudos"]:
         score -= 2; razones.append("(−) Hay harshness en medios-altos — no es carencia sino exceso mal distribuido")
+    # Gatekeeper de espectro disperso (añadido 2026-05-26 tras reanálisis de
+    # 583 tracks): en minimal, afro_house, deep_house y dub_techno el espectro
+    # con menos cuerpo en medios es lenguaje del estilo, no un fallo de mezcla.
+    # En el dataset histórico carencia_espectral saltaba en el 64% de minimal y
+    # 69% de afro_house — casi monoclase. Solo mantenemos el dx si hay refuerzo
+    # claro (carencias en ambas bandas + exceso de graves arrastrándolas).
+    generos_esparsos = ["minimal", "afro_house", "deep_house", "dub_techno"]
+    if genero in generos_esparsos:
+        refuerzo_real = (
+            senales["carencia_medios"]
+            and senales["carencia_agudos"]
+            and senales["balance_grave"] in ["elevado", "excesivo"]
+        )
+        if not refuerzo_real and score > 0:
+            score = 0
+            razones.append(
+                f"(−) En {genero}, un espectro con menos cuerpo en medios suele ser parte "
+                f"del lenguaje del estilo y no se diagnostica como carencia"
+            )
     scores["carencia_espectral"] = score
     detalles["carencia_espectral"] = razones
 
