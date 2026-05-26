@@ -818,6 +818,86 @@
             otro: 'Otro',
         };
 
+        // ---- Cruces sobre todo el dataset (no filtrados por periodo) ----
+
+        // Diagnóstico × Satisfacción: para cada dx, qué % de usuarios respondió útil
+        const dxVsSatisfaccion = useMemo(() => {
+            const buckets = {};
+            entries.forEach(e => {
+                const u = e.fueUtil;
+                if (u !== 'Sí' && u !== 'Parcial' && u !== 'No') return;
+                const id = diagIdOf(e);
+                if (!buckets[id]) buckets[id] = { id, total: 0, si: 0, parcial: 0, no: 0 };
+                buckets[id].total += 1;
+                if (u === 'Sí') buckets[id].si += 1;
+                else if (u === 'Parcial') buckets[id].parcial += 1;
+                else buckets[id].no += 1;
+            });
+            // Solo dx con >= 3 respuestas (resto = ruido estadístico)
+            return Object.values(buckets)
+                .filter(b => b.total >= 3)
+                .map(b => ({ ...b, pctUtil: (b.si / b.total) * 100 }))
+                .sort((a, b) => b.total - a.total);
+        }, [entries]);
+
+        // Género × Diagnóstico: matriz de count para detectar qué dx predomina por género
+        const generoVsDx = useMemo(() => {
+            const matrix = {};      // generoLabel -> dxId -> count
+            const totalPorGenero = {};
+            const totalPorDx = {};
+            entries.forEach(e => {
+                const g = (e.genero || '').trim();
+                if (!g) return;
+                const id = diagIdOf(e);
+                if (!matrix[g]) matrix[g] = {};
+                matrix[g][id] = (matrix[g][id] || 0) + 1;
+                totalPorGenero[g] = (totalPorGenero[g] || 0) + 1;
+                totalPorDx[id] = (totalPorDx[id] || 0) + 1;
+            });
+            // Géneros con al menos 2 análisis; diagnósticos top 8 por frecuencia
+            const generos = Object.entries(totalPorGenero)
+                .filter(([, n]) => n >= 2)
+                .sort((a, b) => b[1] - a[1])
+                .map(([g]) => g);
+            const diagnosticos = Object.entries(totalPorDx)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 8)
+                .map(([d]) => d);
+            return { matrix, generos, diagnosticos, totalPorGenero };
+        }, [entries]);
+
+        // País × Género: solo entries con país detectado
+        const paisVsGenero = useMemo(() => {
+            const matrix = {};
+            const totalPorPais = {};
+            const totalPorGenero = {};
+            entries.forEach(e => {
+                if (!e.pais || e.pais.length !== 2) return;
+                const g = (e.genero || '').trim() || '—';
+                const p = e.pais;
+                if (!matrix[p]) matrix[p] = {};
+                matrix[p][g] = (matrix[p][g] || 0) + 1;
+                totalPorPais[p] = (totalPorPais[p] || 0) + 1;
+                totalPorGenero[g] = (totalPorGenero[g] || 0) + 1;
+            });
+            const paises = Object.entries(totalPorPais)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10)
+                .map(([p]) => p);
+            const generos = Object.entries(totalPorGenero)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 6)
+                .map(([g]) => g);
+            return { matrix, paises, generos, totalPorPais };
+        }, [entries]);
+
+        // Color de celda según densidad (0-1) → púrpura translúcido sobre fondo gris
+        const cellBg = (count, max) => {
+            if (count === 0 || max === 0) return 'transparent';
+            const alpha = Math.max(0.08, Math.min(0.65, count / max));
+            return `rgba(139, 92, 246, ${alpha})`;
+        };
+
         const PeriodPicker = ({ label, from, to, setFrom, setTo, total, color }) => (
             <div className="card p-4">
                 <div className="flex items-center justify-between mb-3">
@@ -957,6 +1037,157 @@
                                     </li>
                                 ))}
                             </ul>
+                        );
+                    })()}
+                </div>
+
+                <div className="card p-5">
+                    <h3 className="text-sm font-semibold text-gray-300 mb-1">Diagnóstico × Satisfacción</h3>
+                    <p className="text-xs text-gray-500 mb-4">
+                        Por cada diagnóstico, qué proporción de usuarios contestó que les fue útil. Solo se muestran
+                        diagnósticos con al menos 3 respuestas (sí/parcial/no). %útil bajo es señal de que la regla
+                        acierta poco o que el feedback no aterriza.
+                    </p>
+                    {dxVsSatisfaccion.length === 0 ? (
+                        <p className="text-xs text-gray-500">Aún sin respuestas de utilidad suficientes (≥3 por diagnóstico).</p>
+                    ) : (
+                        <div className="space-y-1.5">
+                            <div className="grid gap-2 text-[10px] text-gray-500 uppercase tracking-wide pb-1 border-b border-gray-800"
+                                 style={{ gridTemplateColumns: '1fr 50px 50px 50px 50px 60px' }}>
+                                <span>Diagnóstico</span>
+                                <span className="text-right">Total</span>
+                                <span className="text-right text-green-400">Sí</span>
+                                <span className="text-right text-yellow-400">Parcial</span>
+                                <span className="text-right text-red-400">No</span>
+                                <span className="text-right">% útil</span>
+                            </div>
+                            {dxVsSatisfaccion.map(b => {
+                                const colorUtil = b.pctUtil >= 70 ? '#4ade80'
+                                                : b.pctUtil >= 40 ? '#facc15' : '#f87171';
+                                return (
+                                    <div key={b.id} className="grid gap-2 text-xs pt-1"
+                                         style={{ gridTemplateColumns: '1fr 50px 50px 50px 50px 60px' }}>
+                                        <span className="text-gray-300 truncate">{labelOf(b.id)}</span>
+                                        <span className="text-right text-gray-400">{b.total}</span>
+                                        <span className="text-right text-gray-300">{b.si}</span>
+                                        <span className="text-right text-gray-300">{b.parcial}</span>
+                                        <span className="text-right text-gray-300">{b.no}</span>
+                                        <span className="text-right font-semibold" style={{ color: colorUtil }}>
+                                            {b.pctUtil.toFixed(0)}%
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+
+                <div className="card p-5">
+                    <h3 className="text-sm font-semibold text-gray-300 mb-1">Género × Diagnóstico</h3>
+                    <p className="text-xs text-gray-500 mb-4">
+                        Cuántas veces ha aparecido cada diagnóstico por género. Una columna que se enciende mucho
+                        en un género concreto suele ser señal de que las reglas no están bien calibradas para ese
+                        género (falso positivo sistemático) o de un problema real del estilo.
+                    </p>
+                    {generoVsDx.generos.length === 0 ? (
+                        <p className="text-xs text-gray-500">Sin datos suficientes por género (≥2 análisis).</p>
+                    ) : (() => {
+                        const maxCount = Math.max(
+                            1,
+                            ...generoVsDx.generos.flatMap(g =>
+                                generoVsDx.diagnosticos.map(d => (generoVsDx.matrix[g] || {})[d] || 0)
+                            )
+                        );
+                        return (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-xs" style={{ borderCollapse: 'separate', borderSpacing: '2px' }}>
+                                    <thead>
+                                        <tr>
+                                            <th className="text-left text-gray-500 text-[10px] uppercase tracking-wide pb-2 pr-2">Género</th>
+                                            {generoVsDx.diagnosticos.map(d => (
+                                                <th key={d} className="text-gray-500 text-[10px] font-normal pb-2 px-1 text-center whitespace-nowrap"
+                                                    style={{ minWidth: '60px', maxWidth: '90px' }}>
+                                                    <div className="truncate" title={labelOf(d)}>{labelOf(d)}</div>
+                                                </th>
+                                            ))}
+                                            <th className="text-gray-500 text-[10px] font-normal pb-2 pl-2 text-right">Tot</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {generoVsDx.generos.map(g => (
+                                            <tr key={g}>
+                                                <td className="text-gray-300 pr-2 py-0.5 whitespace-nowrap">{g}</td>
+                                                {generoVsDx.diagnosticos.map(d => {
+                                                    const n = (generoVsDx.matrix[g] || {})[d] || 0;
+                                                    return (
+                                                        <td key={d} className="text-center text-gray-200 py-1 px-1 rounded"
+                                                            style={{ background: cellBg(n, maxCount), minWidth: '40px' }}>
+                                                            {n || ''}
+                                                        </td>
+                                                    );
+                                                })}
+                                                <td className="text-right text-gray-500 pl-2">{generoVsDx.totalPorGenero[g]}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        );
+                    })()}
+                </div>
+
+                <div className="card p-5">
+                    <h3 className="text-sm font-semibold text-gray-300 mb-1">País × Género</h3>
+                    <p className="text-xs text-gray-500 mb-4">
+                        Qué géneros se producen en cada país. Solo análisis con país detectado (vía ipapi.co,
+                        post-2026-05-21). Útil para entender si Mentotrack está captando ciertos nichos regionales.
+                    </p>
+                    {paisVsGenero.paises.length === 0 ? (
+                        <p className="text-xs text-gray-500">Aún sin datos de país suficientes.</p>
+                    ) : (() => {
+                        const maxCount = Math.max(
+                            1,
+                            ...paisVsGenero.paises.flatMap(p =>
+                                paisVsGenero.generos.map(g => (paisVsGenero.matrix[p] || {})[g] || 0)
+                            )
+                        );
+                        return (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-xs" style={{ borderCollapse: 'separate', borderSpacing: '2px' }}>
+                                    <thead>
+                                        <tr>
+                                            <th className="text-left text-gray-500 text-[10px] uppercase tracking-wide pb-2 pr-2">País</th>
+                                            {paisVsGenero.generos.map(g => (
+                                                <th key={g} className="text-gray-500 text-[10px] font-normal pb-2 px-1 text-center whitespace-nowrap"
+                                                    style={{ minWidth: '60px', maxWidth: '90px' }}>
+                                                    <div className="truncate" title={g}>{g}</div>
+                                                </th>
+                                            ))}
+                                            <th className="text-gray-500 text-[10px] font-normal pb-2 pl-2 text-right">Tot</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {paisVsGenero.paises.map(p => (
+                                            <tr key={p}>
+                                                <td className="text-gray-300 pr-2 py-0.5 whitespace-nowrap">
+                                                    <span className="mr-1">{flagEmoji(p)}</span>
+                                                    <span className="text-[11px]">{PAIS_NOMBRES[p] || p}</span>
+                                                </td>
+                                                {paisVsGenero.generos.map(g => {
+                                                    const n = (paisVsGenero.matrix[p] || {})[g] || 0;
+                                                    return (
+                                                        <td key={g} className="text-center text-gray-200 py-1 px-1 rounded"
+                                                            style={{ background: cellBg(n, maxCount), minWidth: '40px' }}>
+                                                            {n || ''}
+                                                        </td>
+                                                    );
+                                                })}
+                                                <td className="text-right text-gray-500 pl-2">{paisVsGenero.totalPorPais[p]}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         );
                     })()}
                 </div>

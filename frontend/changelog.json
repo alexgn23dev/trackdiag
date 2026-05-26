@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "version": "0.5.14",
+      "date": "2026-05-26",
+      "title": "Cruces nuevos en el tab Motor (satisfacción, género, país)",
+      "changes": [
+        "Diagnóstico × Satisfacción: por cada diagnóstico, qué % de usuarios contestó útil/parcial/no. Solo se cuentan los que tienen ≥ 3 respuestas para filtrar ruido estadístico. %útil bajo es señal directa de que la regla acierta poco o el mensaje no aterriza.",
+        "Género × Diagnóstico: matriz/heatmap que muestra qué diagnósticos predominan en cada género. Columnas que se encienden mucho en un género suelen ser falsos positivos sistemáticos (regla mal calibrada para el lenguaje del género).",
+        "País × Género: matriz que cruza países detectados con géneros producidos. Útil para entender si Mentotrack capta nichos regionales (deep house en LATAM, hard techno en DE, etc.)."
+      ]
+    },
+    {
       "version": "0.5.13",
       "date": "2026-05-26",
       "title": "Reanálisis histórico con el motor actual (dashboard)",
