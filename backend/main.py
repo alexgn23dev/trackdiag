@@ -48,7 +48,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.12")
+app = FastAPI(title="Mentotrack API", version="0.5.13")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -198,7 +198,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.12"}
+    return {"status": "ok", "version": "0.5.13"}
 
 
 @app.post("/api/diagnostico")
@@ -1918,6 +1918,323 @@ async def calibrar_guardar_etiqueta(request: Request, data: dict):
     except Exception as e:
         print(f"[CALIBRAR] error guardando etiqueta: {e}")
         return JSONResponse(status_code=503, content={"error": "Error guardando"})
+
+
+# =========================================================================
+# Reanálisis histórico — pasa señales guardadas por el motor actual
+# =========================================================================
+#
+# Las señales se guardan en la columna JSONB `analisis.senales` en formato
+# *flat* (key→valor) tal y como las arma el frontend. El motor de reglas
+# espera un dict *anidado* (con sub-dicts `distribucion`, `armonia`,
+# `loudness`, `mono_compat`, `harshness`). Reconstruimos el anidado a partir
+# del flat para poder re-evaluar el motor sin tener que re-subir el WAV.
+# Algunos campos no están en el flat (max_seccion_baja, notas_dominantes…);
+# se rellenan con defaults seguros. Para la decisión de score esto basta —
+# son campos cosméticos para los mensajes, no thresholds.
+
+_FORMULARIO_LABEL_TO_VALUE = {
+    "genero": {
+        "Tech House": "tech_house", "House": "house", "Techno": "techno",
+        "Techno ácido": "techno_acido", "Hard Techno": "hard_techno",
+        "Minimal": "minimal", "Dub Techno": "dub_techno",
+        "Progressive House": "progressive_house", "Trance": "trance",
+        "Psytrance": "psytrance", "Melodic Techno": "melodic_techno",
+        "Deep House": "deep_house", "Afro House": "afro_house",
+        "Indie Dance": "indie_dance", "Breaks": "breaks", "Otro": "otro",
+    },
+    "fase": {
+        "Idea inicial / loop": "idea",
+        "Arreglo en progreso": "arreglo_en_progreso",
+        "Arreglo cerrado, ajustando mezcla": "ajustando_mezcla",
+        "Creo que está casi listo": "casi_listo",
+    },
+    "objetivo": {
+        "Publicar y tocar en sesión": "pinchar",
+        "Practicar y aprender": "aprender",
+        "Enviar demo a sellos": "sellos",
+        "Todo lo anterior": "todo",
+    },
+    "experiencia": {
+        "Menos de 6 meses": "menos_6m",
+        "6 meses a 2 años": "6m_2a",
+        "2 a 5 años": "2a_5a",
+        "Más de 5 años": "mas_5a",
+    },
+    "dificultad_habitual": {
+        "Terminar tracks": "terminar",
+        "Encontrar buenos sonidos": "sonidos",
+        "Que la mezcla suene bien": "mezcla",
+        "Estructurar las ideas": "estructura",
+        "Todo me cuesta": "todo",
+    },
+}
+
+
+def _duracion_seg_from_fmt(fmt: str) -> int:
+    """'4:32' → 272. Acepta MM:SS o HH:MM:SS. 0 si no parsea."""
+    if not isinstance(fmt, str):
+        return 0
+    parts = fmt.split(":")
+    try:
+        if len(parts) == 2:
+            return int(parts[0]) * 60 + int(parts[1])
+        if len(parts) == 3:
+            return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+    except (ValueError, TypeError):
+        return 0
+    return 0
+
+
+def _reconstruir_senales_nested(flat: dict) -> dict:
+    """Flat (frontend snapshot) → nested (lo que esperan reglas.py / diagnostico.py).
+    Lossy en campos que el flat no captura (max_seccion_baja, etc.); rellena
+    con defaults que no alteran las decisiones del motor."""
+    if not isinstance(flat, dict):
+        return {}
+    duracion_fmt = flat.get("duracion") or ""
+    return {
+        "bpm": flat.get("bpm", 0) or 0,
+        "duracion_fmt": duracion_fmt,
+        "duracion_seg": _duracion_seg_from_fmt(duracion_fmt),
+        "balance_grave": flat.get("balance_grave", "ok"),
+        "diff_grave_media": flat.get("diff_grave_media", 0) or 0,
+        "diff_sub_low": flat.get("diff_sub_low", 0) or 0,
+        "db_grave": flat.get("db_grave", 0) or 0,
+        "db_media": flat.get("db_media", 0) or 0,
+        "db_aguda": flat.get("db_aguda", 0) or 0,
+        "densidad_global": flat.get("densidad", "media") or "media",
+        "densidad_espectral": flat.get("densidad_espectral", 0) or 0,
+        "contraste_energetico": flat.get("contraste", "medio") or "medio",
+        "varianza_energia": flat.get("varianza_energia", 0) or 0,
+        "rango_dinamico": flat.get("rango_dinamico", 2.0) or 2.0,
+        "tiene_desarrollo": bool(flat.get("tiene_desarrollo", False)),
+        "cambios_significativos": flat.get("cambios_significativos", 0) or 0,
+        "n_bloques": flat.get("n_bloques", 0) or 0,
+        "madurez_estimada": flat.get("madurez", "en_desarrollo") or "en_desarrollo",
+        "carencia_medios": bool(flat.get("carencia_medios", False)),
+        "carencia_agudos": bool(flat.get("carencia_agudos", False)),
+        "distribucion": {
+            "break_desproporcionado": bool(flat.get("break_largo", False)),
+            "drop_corto": bool(flat.get("drop_corto", False)),
+            "inicio_abrupto": bool(flat.get("sin_intro", False)),
+            "sin_outro": bool(flat.get("sin_outro", False)),
+            "estructura_problematica": bool(flat.get("estructura_problematica", False)),
+            "max_seccion_baja": 0,
+            "max_seccion_alta": 0,
+        },
+        "armonia": {
+            "key": flat.get("key", "?") or "?",
+            "modo": flat.get("modo", "") or "",
+            "key_confidence": flat.get("key_confidence", 0) or 0,
+            "contenido_tonal": flat.get("contenido_tonal", 0.5) or 0.5,
+            # consistencia_armonica es float 0-1, complejidad_armonica es string
+            "consistencia_armonica": flat.get("consistencia_armonica", 0.5) if isinstance(flat.get("consistencia_armonica"), (int, float)) else 0.5,
+            "complejidad_armonica": flat.get("complejidad_armonica") or "moderada",
+            "ratio_tonal_percusivo": flat.get("ratio_tonal_percusivo", 1.0) or 1.0,
+            "n_notas_activas": flat.get("n_notas_activas", 0) or 0,
+            "notas_dominantes": [],
+        },
+        "loudness": {
+            "lufs_integrado": flat.get("lufs_integrado", -14) or -14,
+            "lufs_short_term_max": flat.get("lufs_short_term_max", -14) or -14,
+            "rango_loudness": flat.get("rango_loudness", 0) or 0,
+            "nivel": flat.get("nivel_loudness", "moderado") or "moderado",
+            "true_peak_dbtp": flat.get("true_peak_dbtp", -99.0) or -99.0,
+            "nivel_true_peak": flat.get("nivel_true_peak", "") or "",
+            "referencia": "",
+        },
+        "mono_compat": {
+            "es_stereo": bool(flat.get("es_stereo", True)),
+            "correlacion_lr": flat.get("correlacion_lr", 1.0) or 1.0,
+            "perdida_mono_db": flat.get("perdida_mono_db", 0) or 0,
+            "nivel_compatibilidad": flat.get("nivel_mono", "compatible") or "compatible",
+            "fase_invertida": bool(flat.get("fase_invertida", False)),
+            "bandas": {
+                "graves": {"estado": flat.get("mono_graves", "ok") or "ok"},
+                "medios": {"estado": flat.get("mono_medios", "ok") or "ok"},
+                "agudos": {"estado": flat.get("mono_agudos", "ok") or "ok"},
+            },
+        },
+        "harshness": {
+            "tiene_harshness": bool(flat.get("tiene_harshness", False)),
+            "nivel": flat.get("harshness_nivel", "no") or "no",
+            "pico_p95": flat.get("harshness_p95", 0) or 0,
+            "pct_frames_harsh": flat.get("harshness_pct", 0) or 0,
+            "zona_problema": "",
+            "peak_freq_hz": 0,
+            "caracter": "",
+        },
+    }
+
+
+def _formulario_to_contexto(formulario: dict, genero_custom: str = "") -> dict:
+    """Formulario guardado (con labels en ES) → contexto (con slugs) que
+    espera el motor de reglas. `bloqueo` se reexporta como
+    `bloqueo_percibido` porque ese es el nombre que usan las reglas."""
+    if not isinstance(formulario, dict):
+        return {}
+    contexto: dict = {}
+    for campo, valor in formulario.items():
+        if not isinstance(valor, str):
+            contexto[campo] = valor
+            continue
+        mapa = _FORMULARIO_LABEL_TO_VALUE.get(campo, {})
+        slug = mapa.get(valor.strip())
+        contexto[campo] = slug if slug else valor.strip()
+    contexto["bloqueo_percibido"] = contexto.get("bloqueo", "")
+    if genero_custom:
+        contexto["genero_custom"] = genero_custom
+    return contexto
+
+
+_DX_PRINCIPAL_ID_RE = re.compile(
+    r"DIAGNÓSTICO PRINCIPAL:.*?\(([a-zA-Z0-9_]+)\)", re.IGNORECASE
+)
+
+
+def _extraer_dx_principal_id(diagnostico_str: str) -> str:
+    """Extrae el id (entre paréntesis) del diagnóstico principal del informe
+    de texto que se guarda en analisis.diagnostico."""
+    if not diagnostico_str:
+        return ""
+    m = _DX_PRINCIPAL_ID_RE.search(diagnostico_str)
+    return m.group(1) if m else ""
+
+
+def _replay_motor_sobre_analisis(row: dict) -> dict | None:
+    """Re-evalúa el motor actual sobre las señales guardadas. Lectura: no
+    toca la DB. Devuelve None si no se pudo procesar (señales vacías o
+    el motor lanzó excepción)."""
+    flat = row.get("senales") or {}
+    if not flat:
+        return None
+    # asyncpg devuelve JSONB como dict; si por lo que sea viene str, parseamos.
+    if isinstance(flat, str):
+        try:
+            flat = json.loads(flat)
+        except Exception:
+            return None
+    senales = _reconstruir_senales_nested(flat)
+    contexto = _formulario_to_contexto(
+        row.get("formulario") or {},
+        genero_custom=(row.get("genero_custom") or "") or "",
+    )
+    try:
+        from engine.reglas import evaluar_diagnosticos, aplicar_jerarquia
+        scores, _ = evaluar_diagnosticos(senales, contexto)
+        principal_id, secundario_id, _, _ = aplicar_jerarquia(scores, senales, contexto)
+    except Exception as e:
+        print(f"[REANALISIS] motor falló sobre {row.get('id')}: {e}")
+        return None
+    return {
+        "id": str(row.get("id")),
+        "timestamp": row.get("timestamp"),
+        "email": row.get("email") or "",
+        "old_id": _extraer_dx_principal_id(row.get("diagnostico") or ""),
+        "new_id": principal_id,
+        "new_secundario_id": secundario_id,
+        "new_score": int(scores.get(principal_id, 0)),
+        "scores": {k: int(v) for k, v in scores.items()},
+        "genero_label": (row.get("formulario") or {}).get("genero", "") or "",
+        "genero_slug": contexto.get("genero", "") or "",
+    }
+
+
+@app.get("/api/admin/reanalisis")
+@limiter.limit("10/minute")
+async def admin_reanalisis(request: Request):
+    """Pasa cada análisis guardado por el motor actual y devuelve un resumen
+    de matches vs cambios. SOLO LECTURA — no modifica DB. Útil para medir
+    impacto de recalibraciones sin tener que re-subir tracks."""
+    if not _admin_email_from_cookie(request):
+        return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Postgres no disponible"})
+
+    try:
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+        rows = await repo.list_all_analisis(pool, limit=5000)
+    except Exception as e:
+        print(f"[REANALISIS] error listando análisis: {e}")
+        return JSONResponse(status_code=503, content={"error": "Error consultando DB"})
+
+    total_procesados = 0
+    errores = 0
+    matches = 0
+    cambios = 0
+    sin_old_id = 0  # análisis donde el informe guardado no permite extraer el id
+    transitions: dict[str, int] = {}
+    cambios_samples: list[dict] = []
+    por_genero: dict[str, dict] = {}
+
+    for row in rows:
+        res = _replay_motor_sobre_analisis(row)
+        if not res:
+            errores += 1
+            continue
+        total_procesados += 1
+        old_id = res["old_id"]
+        new_id = res["new_id"]
+        if not old_id:
+            sin_old_id += 1
+            es_match = False
+        else:
+            es_match = (old_id == new_id)
+        if es_match:
+            matches += 1
+        else:
+            cambios += 1
+            key = f"{old_id or '?'} → {new_id}"
+            transitions[key] = transitions.get(key, 0) + 1
+            cambios_samples.append({
+                "id": res["id"],
+                "timestamp": res["timestamp"].isoformat() if res["timestamp"] else None,
+                "email": res["email"],
+                "old_id": old_id,
+                "new_id": new_id,
+                "new_secundario_id": res["new_secundario_id"],
+                "new_score": res["new_score"],
+                "genero": res["genero_label"],
+                "scores": res["scores"],
+            })
+        # Por género (label tal cual lo guardó el frontend)
+        g = res["genero_label"] or "—"
+        bucket = por_genero.setdefault(g, {"total": 0, "matches": 0, "cambios": 0})
+        bucket["total"] += 1
+        if es_match:
+            bucket["matches"] += 1
+        else:
+            bucket["cambios"] += 1
+
+    # Muestras: más recientes primero, capadas a 100 para no inflar el payload
+    cambios_samples.sort(key=lambda x: x["timestamp"] or "", reverse=True)
+    cambios_samples = cambios_samples[:100]
+
+    transitions_ordenadas = sorted(
+        ({"transition": k, "n": v} for k, v in transitions.items()),
+        key=lambda x: x["n"], reverse=True,
+    )
+    por_genero_lista = [
+        {"genero": g, **bucket}
+        for g, bucket in sorted(por_genero.items(), key=lambda x: -x[1]["total"])
+    ]
+
+    return {
+        "ok": True,
+        "motor_version": app.version,
+        "total_en_db": len(rows),
+        "total_procesados": total_procesados,
+        "errores": errores,
+        "sin_old_id": sin_old_id,
+        "matches": matches,
+        "cambios": cambios,
+        "transitions": transitions_ordenadas,
+        "cambios_samples": cambios_samples,
+        "por_genero": por_genero_lista,
+    }
 
 
 @app.get("/calibrar")

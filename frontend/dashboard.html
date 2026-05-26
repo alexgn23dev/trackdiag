@@ -711,6 +711,31 @@
         const [prevFrom, setPrevFrom] = useState(toISODate(fourteenDaysAgo));
         const [prevTo, setPrevTo] = useState(toISODate(sevenDaysAgo));
 
+        // Reanálisis histórico — pasa el motor actual sobre las señales guardadas
+        const [reaData, setReaData] = useState(null);
+        const [reaLoading, setReaLoading] = useState(false);
+        const [reaError, setReaError] = useState(null);
+        const [reaSamplesOpen, setReaSamplesOpen] = useState(false);
+
+        const lanzarReanalisis = async () => {
+            setReaLoading(true);
+            setReaError(null);
+            try {
+                const resp = await fetch(`${API_URL}/api/admin/reanalisis`, { credentials: 'same-origin' });
+                if (!resp.ok) {
+                    setReaError(`HTTP ${resp.status}`);
+                    setReaLoading(false);
+                    return;
+                }
+                const data = await resp.json();
+                setReaData(data);
+            } catch (e) {
+                setReaError(String(e));
+            } finally {
+                setReaLoading(false);
+            }
+        };
+
         const inRange = (date, fromStr, toStr) => {
             if (!date) return false;
             const fromD = new Date(fromStr + 'T00:00:00Z');
@@ -989,6 +1014,158 @@
                             </div>
                         );
                     })()}
+                </div>
+
+                <div className="card p-5">
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                        <div>
+                            <h3 className="text-sm font-semibold text-gray-300">Reanálisis con motor actual</h3>
+                            <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                                Pasa cada análisis ya guardado por el motor de reglas actual (sin tocar la DB) y
+                                cuenta cuántos diagnósticos principales seguirían siendo iguales y cuántos cambiarían
+                                tras las recalibraciones recientes. Las señales se reconstruyen desde el snapshot
+                                guardado en JSONB — algunos campos cosméticos no están y se rellenan con defaults
+                                neutros, pero los thresholds de score se respetan.
+                            </p>
+                        </div>
+                        <button
+                            onClick={lanzarReanalisis}
+                            disabled={reaLoading}
+                            className="text-xs px-3 py-2 rounded-lg flex-shrink-0"
+                            style={{
+                                background: reaLoading ? '#3f3f46' : '#8b5cf6',
+                                color: '#fff',
+                                cursor: reaLoading ? 'not-allowed' : 'pointer',
+                            }}
+                        >
+                            {reaLoading ? 'Procesando…' : (reaData ? 'Reanalizar' : 'Lanzar reanálisis')}
+                        </button>
+                    </div>
+
+                    {reaError && (
+                        <p className="text-xs text-red-400">Error: {reaError}</p>
+                    )}
+
+                    {reaData && (
+                        <div className="space-y-4">
+                            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
+                                <div className="bg-gray-900/40 rounded p-2.5">
+                                    <div className="text-gray-500 text-[10px] uppercase tracking-wide">En DB</div>
+                                    <div className="text-gray-200 text-lg font-semibold">{reaData.total_en_db}</div>
+                                </div>
+                                <div className="bg-gray-900/40 rounded p-2.5">
+                                    <div className="text-gray-500 text-[10px] uppercase tracking-wide">Procesados</div>
+                                    <div className="text-gray-200 text-lg font-semibold">{reaData.total_procesados}</div>
+                                </div>
+                                <div className="bg-gray-900/40 rounded p-2.5" style={{ borderLeft: '3px solid #4ade80' }}>
+                                    <div className="text-gray-500 text-[10px] uppercase tracking-wide">Matches</div>
+                                    <div className="text-green-400 text-lg font-semibold">
+                                        {reaData.matches}
+                                        <span className="text-gray-500 text-xs font-normal ml-1">
+                                            ({reaData.total_procesados > 0 ? ((reaData.matches / reaData.total_procesados) * 100).toFixed(0) : 0}%)
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="bg-gray-900/40 rounded p-2.5" style={{ borderLeft: '3px solid #facc15' }}>
+                                    <div className="text-gray-500 text-[10px] uppercase tracking-wide">Cambios</div>
+                                    <div className="text-yellow-400 text-lg font-semibold">
+                                        {reaData.cambios}
+                                        <span className="text-gray-500 text-xs font-normal ml-1">
+                                            ({reaData.total_procesados > 0 ? ((reaData.cambios / reaData.total_procesados) * 100).toFixed(0) : 0}%)
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="bg-gray-900/40 rounded p-2.5" style={{ borderLeft: '3px solid #6b7280' }}>
+                                    <div className="text-gray-500 text-[10px] uppercase tracking-wide">Errores / sin id</div>
+                                    <div className="text-gray-400 text-lg font-semibold">
+                                        {reaData.errores}
+                                        <span className="text-gray-500 text-xs font-normal ml-1">/ {reaData.sin_old_id}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <p className="text-[11px] text-gray-500">
+                                Motor: <span className="text-gray-300">v{reaData.motor_version}</span> ·
+                                "Sin id" = el informe guardado no incluye un id parseable de diagnóstico principal
+                                (análisis muy antiguos o `sin_diagnostico` sin paréntesis).
+                            </p>
+
+                            {reaData.transitions.length > 0 && (
+                                <div>
+                                    <h4 className="text-xs font-semibold text-gray-400 uppercase mb-2 mt-3">Transiciones de diagnóstico</h4>
+                                    <div className="space-y-1">
+                                        {reaData.transitions.map((t, i) => {
+                                            const [oldId, newId] = t.transition.split(' → ');
+                                            return (
+                                                <div key={i} className="flex items-center justify-between text-xs border-t border-gray-800 pt-1.5">
+                                                    <span className="text-gray-300">
+                                                        <span className="text-gray-500">{diagLabels[oldId] || oldId}</span>
+                                                        <span className="mx-2 text-gray-600">→</span>
+                                                        <span className="text-purple-400">{diagLabels[newId] || newId}</span>
+                                                    </span>
+                                                    <span className="text-gray-400">{t.n}</span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {reaData.por_genero.length > 0 && (
+                                <div>
+                                    <h4 className="text-xs font-semibold text-gray-400 uppercase mb-2 mt-3">Por género</h4>
+                                    <div className="space-y-1">
+                                        {reaData.por_genero.map(g => {
+                                            const pctCambios = g.total > 0 ? (g.cambios / g.total) * 100 : 0;
+                                            return (
+                                                <div key={g.genero} className="flex items-center gap-3 text-xs border-t border-gray-800 pt-1.5">
+                                                    <span className="text-gray-300 w-32 flex-shrink-0">{g.genero || '—'}</span>
+                                                    <div className="flex-1 bg-gray-800/40 rounded h-1.5 overflow-hidden">
+                                                        <div style={{ width: `${pctCambios}%`, background: '#facc15', height: '100%' }} />
+                                                    </div>
+                                                    <span className="text-gray-500 w-32 text-right">
+                                                        <span className="text-yellow-400">{g.cambios}</span>
+                                                        <span className="mx-1">/</span>
+                                                        <span className="text-gray-300">{g.total}</span>
+                                                        <span className="ml-1 text-gray-600">({pctCambios.toFixed(0)}%)</span>
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {reaData.cambios_samples.length > 0 && (
+                                <div>
+                                    <button
+                                        onClick={() => setReaSamplesOpen(o => !o)}
+                                        className="text-xs text-purple-400 hover:text-purple-300 mt-3"
+                                    >
+                                        {reaSamplesOpen ? '▾' : '▸'} Muestras de cambios ({reaData.cambios_samples.length})
+                                    </button>
+                                    {reaSamplesOpen && (
+                                        <div className="mt-2 space-y-1.5 max-h-96 overflow-y-auto">
+                                            {reaData.cambios_samples.map(s => (
+                                                <div key={s.id} className="border-t border-gray-800 pt-1.5 text-[11px]">
+                                                    <div className="flex justify-between text-gray-500">
+                                                        <span>{s.timestamp ? new Date(s.timestamp).toLocaleDateString('es-ES') : '?'}</span>
+                                                        <span>{s.genero || '—'}</span>
+                                                    </div>
+                                                    <div className="text-gray-300 mt-0.5">
+                                                        <span className="text-gray-500">{diagLabels[s.old_id] || s.old_id || '?'}</span>
+                                                        <span className="mx-1 text-gray-600">→</span>
+                                                        <span className="text-purple-400">{diagLabels[s.new_id] || s.new_id}</span>
+                                                        <span className="text-gray-600 ml-2">(score {s.new_score})</span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
         );
