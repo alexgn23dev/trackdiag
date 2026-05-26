@@ -115,6 +115,7 @@
             diagSecundario,
             prioridades,
             fueUtil: row.fue_util || '',
+            motorVersion: row.motor_version || '',
             comentario: row.comentario || '',
             enlaceFeedback: row.feedback_real || '',
             tutorialesSugeridos: row.tutoriales_sugeridos || '',
@@ -820,10 +821,26 @@
 
         // ---- Cruces sobre todo el dataset (no filtrados por periodo) ----
 
+        // Filtro de versión del motor para la card de satisfacción (mide impacto
+        // de recalibraciones: comparar mismo dx en versiones distintas del motor).
+        const [motorVersionFilter, setMotorVersionFilter] = useState('todas');
+
+        // Versiones distintas presentes en los datos (orden semver descendente)
+        const versionesDisponibles = useMemo(() => {
+            const set = new Set();
+            entries.forEach(e => { if (e.motorVersion) set.add(e.motorVersion); });
+            return [...set].sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+        }, [entries]);
+
         // Diagnóstico × Satisfacción: para cada dx, qué % de usuarios respondió útil
         const dxVsSatisfaccion = useMemo(() => {
             const buckets = {};
             entries.forEach(e => {
+                if (motorVersionFilter === 'con_version' && !e.motorVersion) return;
+                if (motorVersionFilter === 'sin_version' && e.motorVersion) return;
+                if (motorVersionFilter !== 'todas' && motorVersionFilter !== 'con_version'
+                    && motorVersionFilter !== 'sin_version'
+                    && e.motorVersion !== motorVersionFilter) return;
                 const u = e.fueUtil;
                 if (u !== 'Sí' && u !== 'Parcial' && u !== 'No') return;
                 const id = diagIdOf(e);
@@ -838,7 +855,7 @@
                 .filter(b => b.total >= 3)
                 .map(b => ({ ...b, pctUtil: (b.si / b.total) * 100 }))
                 .sort((a, b) => b.total - a.total);
-        }, [entries]);
+        }, [entries, motorVersionFilter]);
 
         // Género × Diagnóstico: matriz de count para detectar qué dx predomina por género
         const generoVsDx = useMemo(() => {
@@ -1042,11 +1059,26 @@
                 </div>
 
                 <div className="card p-5">
-                    <h3 className="text-sm font-semibold text-gray-300 mb-1">Diagnóstico × Satisfacción</h3>
+                    <div className="flex items-start justify-between gap-3 mb-1">
+                        <h3 className="text-sm font-semibold text-gray-300">Diagnóstico × Satisfacción</h3>
+                        <select
+                            value={motorVersionFilter}
+                            onChange={e => setMotorVersionFilter(e.target.value)}
+                            className="text-xs bg-gray-900 border border-gray-700 rounded px-2 py-1 text-gray-300"
+                        >
+                            <option value="todas">Todas las versiones</option>
+                            <option value="con_version">Con versión etiquetada</option>
+                            <option value="sin_version">Sin versión (legacy)</option>
+                            {versionesDisponibles.map(v => (
+                                <option key={v} value={v}>Motor v{v}</option>
+                            ))}
+                        </select>
+                    </div>
                     <p className="text-xs text-gray-500 mb-4">
                         Por cada diagnóstico, qué proporción de usuarios contestó que les fue útil. Solo se muestran
                         diagnósticos con al menos 3 respuestas (sí/parcial/no). %útil bajo es señal de que la regla
-                        acierta poco o que el feedback no aterriza.
+                        acierta poco o que el feedback no aterriza. Filtra por versión del motor para comparar
+                        antes/después de un recalibrado (los análisis previos a 2026-05-26 no tienen versión).
                     </p>
                     {dxVsSatisfaccion.length === 0 ? (
                         <p className="text-xs text-gray-500">Aún sin respuestas de utilidad suficientes (≥3 por diagnóstico).</p>

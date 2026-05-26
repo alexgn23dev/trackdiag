@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "version": "0.5.17",
+      "date": "2026-05-26",
+      "title": "Columna motor_version: ahora se puede medir antes/después de un recalibrado",
+      "changes": [
+        "Cada análisis nuevo guarda con qué versión del motor se diagnosticó (columna `motor_version` en la tabla `analisis`, VARCHAR(20)). Sin esto, las recalibraciones se hacían a ciegas — ahora sí podemos comparar el %útil real del mismo diagnóstico antes y después de cambiar una regla.",
+        "Migración Alembic auto-aplicada al deploy: añade la columna NULLable. Los análisis previos quedan con motor_version NULL (no se puede inferir cuál era el motor cuando se hicieron).",
+        "Nuevo filtro en la card de \"Diagnóstico × Satisfacción\" del tab Motor del dashboard: dropdown para ver el %útil global, solo análisis con versión etiquetada, solo legacy sin versión, o filtrar por una versión concreta del motor. En 2-4 semanas con análisis nuevos suficientes, se podrá comparar p.ej. v0.5.14 (pre-recalibrado) vs v0.5.17 (post)."
+      ]
+    },
+    {
       "version": "0.5.16",
       "date": "2026-05-26",
       "title": "Mezcla prematura endurecida + explicación de correlación L/R + sub-géneros nicho captados",
