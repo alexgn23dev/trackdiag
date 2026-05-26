@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "version": "0.5.12",
+      "date": "2026-05-21",
+      "title": "Detección de país vía IP server-side (sin Cloudflare proxy)",
+      "changes": [
+        "La detección por CF-IPCountry no funcionaba porque mentotrack.com solo usa Cloudflare como DNS, no como proxy (incompatible con uploads > 100 MB en plan Free).",
+        "Nueva implementación: lookup contra ipapi.co usando la IP del cliente desde X-Forwarded-For. Gratis hasta 30k req/mes sin API key. Caché en memoria por IP para no machacar el servicio con el mismo usuario.",
+        "Privado: no se persiste la IP — solo el código ISO-2 del país. Mantenemos el lookup CF-IPCountry como primer intento por si en el futuro se activa Cloudflare proxy."
+      ]
+    },
+    {
       "version": "0.5.11",
       "date": "2026-05-20",
       "title": "Detección de país en cada análisis",
