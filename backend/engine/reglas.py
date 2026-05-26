@@ -7,6 +7,44 @@ Evalúa hipótesis, aplica jerarquía pedagógica y genera el diagnóstico final
 UMBRAL_MINIMO_CONFIANZA = 2
 
 
+# =============================================================================
+# Familias de género reutilizadas por varias reglas
+# =============================================================================
+# Géneros "estáticos" — la repetición prolongada, el bajo contraste energético
+# y la falta de desarrollo son lenguaje del estilo, no fallos de mezcla/arreglo.
+GENEROS_ESTATICOS = ["minimal", "ambient", "drone", "downtempo", "dub_techno"]
+
+# Palabras-clave para detectar género estático cuando el usuario escribe en
+# texto libre (campo `genero_custom` cuando genero == "otro"). Ampliada tras
+# el feedback de usuarios que trabajan sub-géneros nicho (deetron, hypnotic
+# deep, micro house, raw techno, etc.) y recibían dx descontextualizados.
+PALABRAS_CUSTOM_ESTATICO = [
+    "ambient", "drone", "downtempo", "dub techno", "dub_techno",
+    "atmosfer", "ambiente",
+    # Sub-géneros minimalistas / repetitivos detectados en feedback (2026-05):
+    "minimal", "micro", "deetron", "hypnotic", "raw", "tool",
+]
+
+
+def es_genero_estatico(contexto: dict, senales: dict) -> bool:
+    """True si el género (catálogo o texto libre) o la heurística atmosférica
+    indican que estructura repetitiva / contraste bajo es lenguaje del estilo.
+    Centraliza el check para que todas las reglas lo usen igual."""
+    genero = contexto.get("genero", "")
+    custom = (contexto.get("genero_custom") or "").lower()
+    armonia = senales.get("armonia", {}) or {}
+    parece_atmosferico = (
+        genero == "otro"
+        and armonia.get("ratio_tonal_percusivo", 1.0) > 2.5
+        and armonia.get("contenido_tonal", 0.5) > 0.55
+    )
+    return (
+        genero in GENEROS_ESTATICOS
+        or any(k in custom for k in PALABRAS_CUSTOM_ESTATICO)
+        or parece_atmosferico
+    )
+
+
 def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     scores = {}
     detalles = {}
@@ -47,17 +85,7 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     # contraste bajo y poco desarrollo son lenguaje del género, no problema.
     # Se aplica el mismo criterio que en mezcla_prematura — calculado al inicio
     # de esa rama. Para no duplicar, lo recalculamos local aquí.
-    _genero_local = contexto.get("genero", "")
-    _custom_local = (contexto.get("genero_custom") or "").lower()
-    _armonia_local = senales.get("armonia", {}) or {}
-    _es_estatico_local = (
-        _genero_local in ["minimal", "ambient", "drone", "downtempo", "dub_techno"]
-        or any(k in _custom_local for k in ["ambient", "drone", "downtempo", "dub techno", "dub_techno", "atmosfer"])
-        or (_genero_local == "otro"
-            and _armonia_local.get("ratio_tonal_percusivo", 1.0) > 2.5
-            and _armonia_local.get("contenido_tonal", 0.5) > 0.55)
-    )
-    if _es_estatico_local and not dist["estructura_problematica"]:
+    if es_genero_estatico(contexto, senales) and not dist["estructura_problematica"]:
         # Capping a 0 — conservamos el diagnóstico solo si la distribución de
         # secciones está realmente rota (señal específica, no global).
         if score > 0:
@@ -90,19 +118,9 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     # Gatekeeper género estático: en ambient/minimal/dub techno, "loop continuo
     # sin desarrollo" es lenguaje del género. Si el usuario no se queja de
     # repetitividad, no diagnosticar.
-    _g = contexto.get("genero", "")
-    _gc = (contexto.get("genero_custom") or "").lower()
-    _arm = senales.get("armonia", {}) or {}
-    _estatico = (
-        _g in ["minimal", "ambient", "drone", "downtempo", "dub_techno"]
-        or any(k in _gc for k in ["ambient", "drone", "downtempo", "dub techno", "dub_techno", "atmosfer"])
-        or (_g == "otro"
-            and _arm.get("ratio_tonal_percusivo", 1.0) > 2.5
-            and _arm.get("contenido_tonal", 0.5) > 0.55)
-    )
     _usuario_se_queja_repe = any(p in bloqueo for p in
                                   ["repetitivo", "repite", "loop", "monóton", "monoton", "aburrido", "igual"])
-    if _estatico and not _usuario_se_queja_repe:
+    if es_genero_estatico(contexto, senales) and not _usuario_se_queja_repe:
         if score > 0:
             score = 0
         razones.append("(−) En géneros estáticos (minimal, ambient, dub techno…), un loop continuo es lenguaje del género")
@@ -146,26 +164,10 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
 
     # Gatekeeper por género (añadido 2026-05 tras feedback de Alex):
     # En géneros donde poco desarrollo y bajo contraste son lenguaje del género
-    # (minimal, ambient, dub techno, drone, downtempo), las señales de
+    # (minimal, ambient, dub techno, drone, downtempo, etc.), las señales de
     # problemas_estructura son falsos positivos sistemáticos.
     genero_actual = contexto.get("genero", "")
-    genero_custom_lower = (contexto.get("genero_custom") or "").lower()
-    generos_estaticos = ["minimal", "ambient", "drone", "downtempo", "dub_techno"]
-    palabras_custom_estatico = ["ambient", "drone", "downtempo", "dub techno",
-                                 "dub_techno", "atmosfer", "ambiente"]
-    armonia_local = senales.get("armonia", {}) or {}
-    # Heurística para "Otro": predominantemente tonal y poco percusivo →
-    # probablemente ambient/atmosférico, no apto para diagnóstico estructural.
-    parece_atmosferico = (
-        genero_actual == "otro"
-        and armonia_local.get("ratio_tonal_percusivo", 1.0) > 2.5
-        and armonia_local.get("contenido_tonal", 0.5) > 0.55
-    )
-    es_genero_estatico = (
-        genero_actual in generos_estaticos
-        or any(k in genero_custom_lower for k in palabras_custom_estatico)
-        or parece_atmosferico
-    )
+    es_estatico = es_genero_estatico(contexto, senales)
 
     def _motivo_estructura():
         """Devuelve el texto preciso según qué señal disparó."""
@@ -179,33 +181,59 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
             return "poco contraste energético entre secciones"
         return "señales de arreglo todavía abierto"
 
+    # Cuántas señales fuertes de inmadurez del arreglo hay simultáneamente.
+    # Con UNA sola señal débil + fase casi_listo, no debemos diagnosticar
+    # "mezcla prematura" — es el patrón de falso positivo más quejado en
+    # el feedback (usuario considera el track ya cerrado, motor disiente).
+    n_problemas = sum([sin_desarrollo, contraste_bajo, estructura_rota])
+    madurez = senales["madurez_estimada"]
+
     if fase_mezcla and problemas_estructura:
-        score += 4
+        # Peso modulado por madurez del audio: si el motor también lo ve
+        # claramente inmaduro (verde) la señal es fuerte (+4). Si el motor
+        # lo ve "en_desarrollo" y solo hay una señal, es ambiguo (+1).
+        if madurez == "verde":
+            score += 4
+        elif n_problemas >= 2:
+            score += 3
+        else:
+            score += 1
         razones.append(f"El usuario dice estar mezclando pero el track presenta {_motivo_estructura()}")
     if usuario_enfocado_mezcla and track_no_maduro:
         score += 3; razones.append("El usuario habla de mezcla pero el track aún no está maduro")
-    if fase_mezcla and senales["madurez_estimada"] == "verde":
+    if fase_mezcla and madurez == "verde":
         score += 2; razones.append("Fase de mezcla declarada en un track claramente verde")
     if usuario_enfocado_mezcla and problemas_estructura:
         score += 1
         razones.append(f"Foco en mezcla cuando hay {_motivo_estructura()}")
-    if senales["madurez_estimada"] == "avanzado" and senales["tiene_desarrollo"]:
+    if madurez == "avanzado" and senales["tiene_desarrollo"]:
         score -= 4; razones.append("(−) El track parece avanzado — la mezcla sí es relevante ahora")
     # Cruce: loudness alto + estructura inmadura = el usuario ha masterizado antes de arreglar
     loudness = senales.get("loudness", {})
-    if loudness.get("nivel") in ["alto", "muy_alto"] and track_no_maduro:
+    loudness_alto = loudness.get("nivel") in ["alto", "muy_alto"]
+    if loudness_alto and track_no_maduro:
         score += 2; razones.append("Loudness alto en un track inmaduro — parece que se ha masterizado antes de cerrar el arreglo")
-    # Gatekeeper final: en géneros estáticos / atmosféricos, neutralizar los
+    # Gatekeeper final 1: en géneros estáticos / atmosféricos, neutralizar los
     # positivos derivados de problemas_estructura. Si el usuario aún declara
     # estar mezclando un track verde (madurez), eso se mantiene como señal real.
-    # Capping a 0 — no a un valor negativo arbitrario — para evitar que se
-    # combine raro con otros descuentos.
-    if es_genero_estatico and problemas_estructura and senales["madurez_estimada"] != "verde":
+    if es_estatico and problemas_estructura and madurez != "verde":
         if score > 0:
             score = 0
-        etiqueta_gen = (genero_actual if genero_actual in generos_estaticos
-                        else "track atmosférico/ambient")
+        etiqueta_gen = (genero_actual if genero_actual in GENEROS_ESTATICOS
+                        else "track atmosférico/minimalista")
         razones.append(f"(−) En {etiqueta_gen}, poco desarrollo y bajo contraste suelen ser intencionales — no se diagnostica como mezcla prematura")
+    # Gatekeeper final 2: fase casi_listo + el track tiene desarrollo + solo
+    # una señal débil de estructura + loudness no excesivo = el usuario está
+    # razonablemente cerca de cerrar. Diagnosticar "mezcla prematura" aquí
+    # es lo que generó las quejas tipo "el arreglo ya está cerrado".
+    if (fase == "casi_listo"
+            and madurez == "en_desarrollo"
+            and senales["tiene_desarrollo"]
+            and n_problemas <= 1
+            and not loudness_alto):
+        if score > 0:
+            score = 0
+        razones.append("(−) El track tiene desarrollo y solo una señal floja — en fase casi_listo no se diagnostica como mezcla prematura sin más evidencia")
     scores["mezcla_prematura"] = score
     detalles["mezcla_prematura"] = razones
 
@@ -399,17 +427,7 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
         score += 2
         razones.append("El usuario percibe el track como repetitivo o demasiado largo")
     # Descuento: si el género es ambient/minimal/dub_techno, la repetición es lenguaje
-    _g_local = contexto.get("genero", "")
-    _gc_local = (contexto.get("genero_custom") or "").lower()
-    _arm_local = senales.get("armonia", {}) or {}
-    _estatico_local2 = (
-        _g_local in ["minimal", "ambient", "drone", "downtempo", "dub_techno"]
-        or any(k in _gc_local for k in ["ambient", "drone", "downtempo", "dub techno", "dub_techno", "atmosfer"])
-        or (_g_local == "otro"
-            and _arm_local.get("ratio_tonal_percusivo", 1.0) > 2.5
-            and _arm_local.get("contenido_tonal", 0.5) > 0.55)
-    )
-    if _estatico_local2:
+    if es_genero_estatico(contexto, senales):
         if score > 0:
             score = 0
         razones.append("(−) En géneros estáticos (minimal, ambient, dub techno…), la repetición prolongada es parte del lenguaje")
@@ -453,13 +471,21 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     if harshness.get("tiene_harshness") and senales["carencia_agudos"]:
         score -= 2; razones.append("(−) Hay harshness en medios-altos — no es carencia sino exceso mal distribuido")
     # Gatekeeper de espectro disperso (añadido 2026-05-26 tras reanálisis de
-    # 583 tracks): en minimal, afro_house, deep_house y dub_techno el espectro
-    # con menos cuerpo en medios es lenguaje del estilo, no un fallo de mezcla.
-    # En el dataset histórico carencia_espectral saltaba en el 64% de minimal y
-    # 69% de afro_house — casi monoclase. Solo mantenemos el dx si hay refuerzo
+    # 583 tracks): en minimal, afro_house, deep_house, dub_techno — y en
+    # géneros nicho que el usuario escribe en "Otro" tipo deetron, micro
+    # house, hypnotic deep, raw techno — el espectro con menos cuerpo en
+    # medios es lenguaje del estilo. Solo mantenemos el dx si hay refuerzo
     # claro (carencias en ambas bandas + exceso de graves arrastrándolas).
     generos_esparsos = ["minimal", "afro_house", "deep_house", "dub_techno"]
-    if genero in generos_esparsos:
+    custom_lower = (contexto.get("genero_custom") or "").lower()
+    es_esparso = (
+        genero in generos_esparsos
+        or any(k in custom_lower for k in PALABRAS_CUSTOM_ESTATICO)
+        # Heurística "Otro" + perfil atmosférico: ya cubierta por
+        # es_genero_estatico(), reutilizamos.
+        or (genero == "otro" and es_genero_estatico(contexto, senales))
+    )
+    if es_esparso:
         refuerzo_real = (
             senales["carencia_medios"]
             and senales["carencia_agudos"]
@@ -467,8 +493,9 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
         )
         if not refuerzo_real and score > 0:
             score = 0
+            etiqueta = genero if genero in generos_esparsos else "este sub-género"
             razones.append(
-                f"(−) En {genero}, un espectro con menos cuerpo en medios suele ser parte "
+                f"(−) En {etiqueta}, un espectro con menos cuerpo en medios suele ser parte "
                 f"del lenguaje del estilo y no se diagnostica como carencia"
             )
     scores["carencia_espectral"] = score
