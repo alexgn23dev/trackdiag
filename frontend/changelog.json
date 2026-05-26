@@ -1,6 +1,26 @@
 {
   "entries": [
     {
+      "version": "0.5.14",
+      "date": "2026-05-26",
+      "title": "Cruces nuevos en el tab Motor (satisfacción, género, país)",
+      "changes": [
+        "Diagnóstico × Satisfacción: por cada diagnóstico, qué % de usuarios contestó útil/parcial/no. Solo se cuentan los que tienen ≥ 3 respuestas para filtrar ruido estadístico. %útil bajo es señal directa de que la regla acierta poco o el mensaje no aterriza.",
+        "Género × Diagnóstico: matriz/heatmap que muestra qué diagnósticos predominan en cada género. Columnas que se encienden mucho en un género suelen ser falsos positivos sistemáticos (regla mal calibrada para el lenguaje del género).",
+        "País × Género: matriz que cruza países detectados con géneros producidos. Útil para entender si Mentotrack capta nichos regionales (deep house en LATAM, hard techno en DE, etc.)."
+      ]
+    },
+    {
+      "version": "0.5.13",
+      "date": "2026-05-26",
+      "title": "Reanálisis histórico con el motor actual (dashboard)",
+      "changes": [
+        "Nuevo endpoint admin `/api/admin/reanalisis` que pasa cada análisis ya guardado por el motor de reglas actual y devuelve cuántos diagnósticos principales seguirían igual (matches) y cuántos cambiarían (cambios) tras las recalibraciones de v0.5.4-0.5.7. Solo lectura — no toca la DB.",
+        "Las señales se reconstruyen desde el snapshot JSONB que el frontend guarda al hacer cada análisis (no hace falta re-subir el WAV). Las reglas evalúan exactamente con el mismo nivel de evidencia que en un análisis nuevo.",
+        "Nueva sección en el tab Motor del dashboard: lanza el reanálisis on-demand, muestra el resumen (matches / cambios / errores), la matriz de transiciones de diagnóstico (old → new ordenadas por frecuencia), el desglose por género y muestras de los cambios concretos con su nuevo score."
+      ]
+    },
+    {
       "version": "0.5.12",
       "date": "2026-05-21",
       "title": "Detección de país vía IP server-side (sin Cloudflare proxy)",
