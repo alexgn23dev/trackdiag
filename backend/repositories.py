@@ -157,6 +157,45 @@ async def is_username_available(pool: asyncpg.Pool, username: str) -> bool:
     return row is None
 
 
+@with_retry()
+async def stats_usuarios_migrated(pool: asyncpg.Pool) -> dict:
+    """Inventario del cierre del cutover B. Devuelve cuántos usuarios tienen
+    password_hash placeholder (__MIGRATED__) — los que todavía dependen del
+    fallback Sheets para autenticar — y cuántos tienen análisis recientes."""
+    async with pool.acquire() as conn:
+        total = await conn.fetchval("SELECT COUNT(*) FROM usuarios")
+        migrated = await conn.fetchval(
+            "SELECT COUNT(*) FROM usuarios WHERE password_hash = '__MIGRATED__'"
+        )
+        # Cuántos de los __MIGRATED__ tienen al menos un análisis. Los que no
+        # tienen ningún análisis, casi seguro son cuentas zombi.
+        con_actividad = await conn.fetchval(
+            """SELECT COUNT(DISTINCT u.id) FROM usuarios u
+               JOIN analisis a ON a.usuario_id = u.id
+               WHERE u.password_hash = '__MIGRATED__'"""
+        )
+        # Cuántos con actividad reciente (últimos 30 días). Si son cero,
+        # podemos eliminar el fallback sin afectar a nadie activo.
+        recientes = await conn.fetchval(
+            """SELECT COUNT(DISTINCT u.id) FROM usuarios u
+               JOIN analisis a ON a.usuario_id = u.id
+               WHERE u.password_hash = '__MIGRATED__'
+                 AND a.timestamp > now() - INTERVAL '30 days'"""
+        )
+        ultima = await conn.fetchval(
+            """SELECT MAX(a.timestamp) FROM usuarios u
+               JOIN analisis a ON a.usuario_id = u.id
+               WHERE u.password_hash = '__MIGRATED__'"""
+        )
+    return {
+        "usuarios_total": int(total or 0),
+        "migrated_pending": int(migrated or 0),
+        "migrated_con_actividad_alguna_vez": int(con_actividad or 0),
+        "migrated_con_actividad_ultimos_30d": int(recientes or 0),
+        "ultima_actividad_migrated": ultima.isoformat() if ultima else None,
+    }
+
+
 # =============================================================================
 # PROYECTOS
 # =============================================================================

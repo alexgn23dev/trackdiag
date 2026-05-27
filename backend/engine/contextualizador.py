@@ -337,6 +337,50 @@ def contextualizar_feedback(diagnostico_id: str, contexto: dict, senales: dict) 
             "no para limitar tu creatividad."
         )
 
+    # --- Aviso de género fuera de scope (música no-electrónica de club) ---
+    # En el feedback hemos visto usuarios con tracks de vallenato, indie pop,
+    # rock, reggaeton, etc. El motor está calibrado para electrónica de club;
+    # los diagnósticos no aplican igual fuera de eso. Detectamos sub-géneros
+    # comunes en el campo libre de "Otro" para avisar al inicio del informe.
+    if genero == "otro":
+        custom = (contexto.get("genero_custom") or "").lower()
+        # Whitelist: si el custom contiene una palabra electrónica conocida,
+        # NO disparar el aviso aunque también contenga ruido. Evita falsos
+        # positivos como "rock electrónico" o "indie dance pop".
+        _whitelist_electronic = (
+            "tech", "techno", "house", "trance", "minimal", "ambient", "drum",
+            "dnb", "d&b", "garage", "dubstep", "electro", "edm", "dance",
+            "downtempo", "breakbeat", "breaks", "psy", "hardstyle", "hardcore",
+            "dub techno", "deep", "future", "club", "rave",
+        )
+        es_electronic_friendly = any(k in custom for k in _whitelist_electronic)
+
+        _palabras_no_electronicas = (
+            "vallenato", "salsa", "bachata", "merengue", "cumbia", "mariachi",
+            "ranchera", "banda", "mambo", "rumba", "tango", "samba", "bossa",
+            "reggaeton", "reggaetón", "dembow", "perreo",
+            "pop ", " pop", "indie pop", "k-pop", "kpop",
+            "rock", "metal", "punk", "grunge", "hardcore punk",
+            "rap", "hip hop", "hip-hop", "trap latino", "drill",
+            "jazz", "blues", "soul", "gospel", "r&b", "rnb",
+            "country", "folk", "bluegrass",
+            "reggae", "ska",
+            "classical", "clásica", "clasica", "sinfónic", "sinfonic",
+            "opera", "ópera", "flamenco", "fandango",
+            "vals", "paso doble", "polka", "celta", "afrobeat", "afrobeats",
+        )
+        match_no_electronic = next(
+            (p.strip() for p in _palabras_no_electronicas if p in custom),
+            None,
+        )
+        if match_no_electronic and not es_electronic_friendly:
+            resultado["aviso_genero"] = (
+                f"Mentotrack está calibrado específicamente para música electrónica de club "
+                f"(house, techno, trance y derivados). Has marcado '{contexto.get('genero_custom', '').strip()}' "
+                f"como género — el motor todavía aplica sus reglas, pero algunos diagnósticos pueden no encajar "
+                f"con las convenciones de tu estilo. Trátalo como una segunda opinión técnica, no como verdad absoluta."
+            )
+
     return resultado
 
 
