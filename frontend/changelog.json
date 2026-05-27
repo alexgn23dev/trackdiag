@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "version": "0.5.18",
+      "date": "2026-05-27",
+      "title": "Templates de diagnóstico reescritos en clave accionable",
+      "changes": [
+        "Reescritos los 8 diagnósticos más frecuentes (carencia_espectral, harshness_mezcla, pobreza_armonica, problema_arreglo, exceso_lowend, exceso_densidad, poco_contraste, track_verde) con instrucciones concretas: qué elemento típico tiene el problema, qué herramienta usar, qué rango frecuencial, qué Q, qué attack/release. Las prioridades pasan de \"revisa los agudos\" a frases como \"abre un EQ paramétrico con Q 4-8 y +4 dB, barre entre 2-6 kHz hasta encontrar el chirrido, invierte a -3 dB\".",
+        "Las reglas del motor NO se han tocado en esta versión — los diagnósticos asignados son exactamente los mismos que en v0.5.17. Cambia solo el texto que el usuario lee. Cero riesgo de regresión en la calibración del motor; el efecto en el %útil dependerá de cuánto mejor aterriza la nueva escritura.",
+        "Resuelve directamente quejas recurrentes del feedback (\"cuando dice revisar agudos estaría bueno que especifique sobre qué\", \"necesitaría una explicación más concreta acerca de los problemas del arreglo\", \"no acabo de entender la explicación\"). Cada template ahora distingue diagnóstico (qué problema hay) de prescripción (qué hacer y en qué orden)."
+      ]
+    },
+    {
       "version": "0.5.17",
       "date": "2026-05-26",
       "title": "Columna motor_version: ahora se puede medir antes/después de un recalibrado",

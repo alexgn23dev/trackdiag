@@ -5,36 +5,40 @@ Escritos a mano para controlar tono, claridad y utilidad.
 
 TEMPLATES = {
     "problema_arreglo": {
-        "titulo": "Tu cuello de botella principal parece estar en la estructura del arreglo.",
+        "titulo": "La estructura del arreglo es el cuello de botella — falta forma reconocible.",
         "prioridades": [
-            "Define al menos 3-4 secciones diferenciables (intro, desarrollo, break, drop/clímax, outro).",
-            "Crea contrastes claros de energía entre secciones — sube y baja la intensidad.",
-            "No añadas más elementos todavía. Trabaja la estructura con lo que ya tienes.",
+            "Identifica qué señal disparó el diagnóstico — el motor te lo dice en la explicación: poco contraste entre bloques, sin desarrollo, n_bloques bajo, break desproporcionado o inicio abrupto. La acción cambia según el caso: si es poco contraste, mete drops y breaks claros. Si es sin desarrollo, añade transiciones (filtros que abren, capas que entran). Si es break desproporcionado, recorta o súbele intensidad media.",
+            "Estructura base de track de club (4-6 minutos): intro de 32 bars con kick + percusión + 1 elemento (DJ-friendly); build-up de 16 bars donde entran elementos progresivamente; drop principal de 32-64 bars con todo activo; break de 16-32 bars con la mitad de elementos quitados y un giro melódico/atmosférico; segundo drop de 32-64 bars (variado, no idéntico al primero); outro de 16-32 bars perdiendo elementos para mix. Si tu track no encaja vagamente con esto, tienes ahí los huecos.",
+            "Antes de seguir, haz el ejercicio del mapa de bloques en papel: divide el tiempo del track en bloques de 32 compases y, para cada bloque, escribe (a) qué energía tiene (1-5), (b) qué elementos están sonando, (c) qué cambia respecto al bloque anterior. Si dos bloques contiguos tienen exactamente lo mismo, ahí está el problema — o añades variación o recortas el bloque repetido.",
         ],
         "no_tocar": [
-            "No te centres en la mezcla todavía — primero necesitas un arreglo claro.",
-            "No busques más presets o samples. Usa los que tienes para cerrar la estructura.",
+            "No mezcles ni masterices hasta que la estructura esté cerrada — vas a tomar decisiones de EQ/compresión que se invalidan en cuanto muevas las secciones.",
+            "No busques sonidos nuevos como excusa. La estructura se trabaja con lo que ya tienes — copy/paste de patrones, mutes, automatizaciones de volumen. Solo después decides si hace falta material nuevo.",
+            "No copies la duración de tu track favorito sin más. Los tracks de DJ extendidos miden 5-7 min con varias variaciones, no 8 min del mismo loop. La duración debe estar justificada por la información musical, no por el género.",
         ],
         "siguiente_sesion": (
-            "En tu próxima sesión, crea un mapa de bloques con duración y función para cada sección. "
-            "Después, mueve y duplica tus elementos actuales para rellenar esa estructura. No añadas nada nuevo."
+            "Próxima sesión: ignora todo lo que no sea estructura durante 60-90 minutos. Cierra plugins, "
+            "haz el mapa de bloques en papel, define qué pasa en cada bloque y mueve/duplica/recorta tu material "
+            "actual para encajar en ese mapa. Objetivo realista: tu track debe poder escucharse plano (sin mezcla) "
+            "y reconocerse la forma a primera escucha. Cuando lo consigas, vuelves a mezcla."
         ),
     },
     "poco_contraste": {
-        "titulo": "El track necesita más desarrollo — suena como un loop continuo sin evolución.",
+        "titulo": "El track suena como un loop continuo — falta una curva de energía clara.",
         "prioridades": [
-            "Crea al menos una sección de alta energía y una de baja energía claramente diferenciadas.",
-            "Añade un break o parón que rompa la monotonía y genere expectativa antes del drop.",
-            "Usa filtros, automatizaciones o silencios para crear transiciones entre las secciones.",
+            "Crea contraste de energía de manera quirúrgica: en el track entero, debe haber al menos una sección donde el oyente sienta 'bajada' (energy 2-3 sobre 5) y al menos una donde sienta 'subida' (energy 4-5). Las técnicas más rápidas para conseguirlo: (a) mute del kick durante 8-16 compases en una sección — el simple hecho de quitar el pulso ya baja la energía percibida; (b) low-pass filter sweep que abre desde 200 Hz hasta full en 8-16 bars antes del drop; (c) sección donde solo suenan kick + bajo + 1 elemento atmosférico, vs sección con todo activo.",
+            "Mete al menos un break perceptible: punto del track donde la energía cae claramente (kick fuera o filtrado, percusiones secundarias muteadas, queda pad o atmosfera + 1 elemento tonal) durante 8-16 compases. La regla: si tras el break, al volver a entrar el drop, no se siente subida, el break está fallando. Comparado al drop, debería sentirse al menos 30% más bajo en energía.",
+            "Usa automatizaciones de filtro, volumen y send a reverb para construir transiciones graduales entre secciones (4-8 bars de transición). Sin transiciones, los cortes son secos y el oyente no anticipa lo que viene — esto se percibe como 'el track no respira'.",
         ],
         "no_tocar": [
-            "No sigas sumando capas por todo el track — el problema no es falta de elementos, es falta de estructura.",
-            "No mezcles en detalle hasta que tengas una estructura con intro, desarrollo, clímax y cierre.",
+            "No sigas sumando capas pensando que el track suena plano por falta de elementos. Probablemente tienes los elementos suficientes — lo que falta es distribuirlos en el tiempo con curva de energía.",
+            "No mezcles en detalle todavía. Si la estructura no tiene contraste, vas a tomar decisiones de EQ y compresión que se invalidan cuando cambies la curva de energía.",
         ],
         "siguiente_sesion": (
-            "En tu próxima sesión, escucha un track de referencia de tu género y fíjate en su estructura: "
-            "dónde quita elementos, dónde los suma, dónde hay un parón. Intenta replicar ese esquema "
-            "con tus propios sonidos."
+            "Próxima sesión: escucha un track de referencia del mismo estilo con auriculares y un papel. Apunta "
+            "minuto a minuto qué hace la energía (sube, baja, mantiene). Verás que tiene 4-6 cambios claros. "
+            "Vuelve a tu track e intenta replicar esa curva, usando mutes y filter sweeps antes de añadir nada nuevo. "
+            "Si tras 90 minutos tu track tiene al menos 3 cambios claros de energía, sesión cumplida."
         ),
     },
     "falta_impacto": {
@@ -72,70 +76,81 @@ TEMPLATES = {
         ),
     },
     "exceso_lowend": {
-        "titulo": "Hay un exceso notable de energía en la zona grave.",
+        "titulo": "Los graves dominan demasiado el espectro — el track va a sonar turbio o aburrido.",
         "prioridades": [
-            "Revisa la relación entre kick y bajo — probablemente están compitiendo en la misma zona frecuencial.",
-            "Aplica un high-pass filter a todo lo que no necesite graves (pads, leads, efectos, voces).",
-            "Verifica que el sidechain entre kick y bass está funcionando correctamente.",
+            "Limpia los elementos que no necesitan graves con un high-pass filter en su canal individual: pads en 150-200 Hz, leads en 200-300 Hz, voces en 100-120 Hz, FX y reverbs en 200-300 Hz, percusiones agudas (hats, shakers) en 300-500 Hz. Solo el kick, el bajo, los toms graves y las percusiones tonales con cuerpo deben llegar bajos. Es el cambio que más rápido te baja la suciedad en graves.",
+            "Revisa la relación kick ↔ bajo: una de las dos causas más típicas. Solea kick + bajo. Si pelean, aplica sidechain compression (4-6 ms attack, 100-150 ms release, ratio 4:1, threshold para 4-6 dB de reducción) o EQ dinámico en el bajo que se reduzca solo cuando entra el kick. Frecuencias típicas de pelea: el kick vive en 50-80 Hz, el bajo en 80-200 Hz — si tu bajo está empujando por debajo de 80 Hz, súbele un high-pass moderado (around 50 Hz).",
+            "Verifica el control del sub (0-60 Hz): tracks con rumble suelen tener un sub que no se controla. Pon un analizador low-end (SPAN con resolution alta, o un goniómetro) y mira qué hay debajo de 40 Hz. Si tu kick o tu bajo tienen contenido por debajo de 30-40 Hz que no aporta nada (no se oye en altavoces normales pero come headroom y excita el limiter), córtalo con un high-pass de 24 dB/oct a 30 Hz.",
         ],
         "no_tocar": [
-            "No intentes resolver esto solo con EQ en el master — el problema suele estar en los elementos individuales.",
-            "No subas los medios y agudos para compensar — primero limpia los graves.",
+            "No metas un EQ ancho en el master a -3 dB en 100 Hz pensando que arreglas el problema. Vas a debilitar el kick que sí debe sonar fuerte. El low-end se trabaja por canal individual, no por el master.",
+            "No subas medios y agudos para 'igualar' — el balance no se arregla añadiendo más sobre lo que ya hay demasiado. Resta lo que sobra primero.",
+            "No confíes solo en monitores con poco grave (KRK 5\", auriculares de gama media). Cruza siempre la decisión con un analizador o con auriculares de referencia (HD600/650, DT 1990) — los altavoces pequeños mienten en sub.",
         ],
         "siguiente_sesion": (
-            "En tu próxima sesión, solea kick y bajo juntos. ¿Se escuchan los dos con claridad? Si no, "
-            "ajusta el sidechain, la EQ del bajo o el diseño del kick hasta que convivan sin enmascararse."
+            "Próxima sesión: ronda de high-pass en serie. Empieza por mute solo del kick y el bajo y "
+            "escucha el resto del track. Cualquier cosa que tenga peso en graves cuando no debería (un pad "
+            "rumboso, un FX que sopla por debajo, una voz con bocazo) recibe high-pass en su canal. Luego activa "
+            "kick + bajo y soléalos: que se entiendan los dos. Si no se entienden, sidechain. Cierra la sesión "
+            "habiendo eliminado contenido grave de los 3-5 canales que más cargaban innecesariamente."
         ),
     },
     "exceso_densidad": {
-        "titulo": "El track suena demasiado denso — hay muchos elementos compitiendo.",
+        "titulo": "Demasiados elementos sonando a la vez — el track se siente saturado.",
         "prioridades": [
-            "Identifica los 3-4 elementos más importantes del track y baja o mutea el resto.",
-            "Revisa si hay elementos que cumplen la misma función (dos pads, dos melodías similares) y elimina uno.",
-            "Deja espacio: no todos los elementos necesitan sonar durante todo el track.",
+            "Haz el ejercicio del mute progresivo: mutea TODOS los canales, luego activa uno a uno empezando por kick, bajo, percusión principal. Cuando lleves 4-5 elementos activos, pregúntate antes de añadir el siguiente: ¿lo que estoy oyendo ya cuenta la historia? Si la respuesta es sí, lo siguiente que actives tiene que aportar algo nuevo (frecuencia, ritmo, color) o se queda fuera. Los tracks que sienten densos suelen tener 12-15 elementos cuando con 7-8 bien escogidos sobraría.",
+            "Caza duplicados de función: ¿tienes dos pads cubriendo el mismo rango (200-800 Hz)? Mutea uno y escucha. ¿Dos elementos rítmicos secundarios en la misma posición temporal (un clap y un snare que caen en el 2 y 4)? Elimina uno. ¿Capas de hi-hats que ocupan exactamente la misma banda? Junta a una y dale más peso. La regla: cada elemento debe tener una banda frecuencial dominante distinta o una función rítmica distinta.",
+            "Crea respiración temporal: ningún elemento (salvo el kick si es 4x4) tiene que sonar durante todo el track. Define en qué bloques entra y sale cada cosa — pad solo en el break, lead en el drop principal pero no en el secundario, shaker solo en los compases pares. Esto reduce densidad sin perder elementos, solo distribuyéndolos en el tiempo.",
         ],
         "no_tocar": [
-            "No intentes resolver la densidad solo con EQ — a veces el problema es que sobran elementos, no frecuencias.",
-            "No añadas más capas pensando que falta algo. Probablemente sobra algo.",
+            "No intentes resolver densidad solo con EQ. EQ ayuda a separar elementos que conviven, pero si tienes 14 capas, la solución es quitar 4, no ecualizar más fino.",
+            "No te pongas a ecualizar el master para 'limpiar'. Si el master suena turbio es porque hay demasiada información llegando — soluciona arriba, en los canales.",
+            "No añadas más capas pensando que falta algo. Si el diagnóstico dice exceso de densidad, casi seguro sobra. La sensación de 'le falta algo' suele ser sensación de 'no se entiende lo que ya hay'.",
         ],
         "siguiente_sesion": (
-            "En tu próxima sesión, haz un ejercicio de resta: mutea todos los canales y ve activándolos uno a uno. "
-            "Cada vez que actives uno, pregúntate: ¿esto aporta algo que los demás no aportan? Si no, déjalo muteado."
+            "Próxima sesión: graba un bounce de cómo suena ahora. Después, mutea de golpe la mitad de los canales "
+            "secundarios (no kick/bajo/elemento principal). Escucha. Si el track sigue funcionando, la mitad sobraba. "
+            "Si pierde algo importante, activa solo lo que de verdad echas en falta. Compara con el bounce inicial. "
+            "Objetivo: cerrar la sesión con al menos 3-4 canales muteados permanentemente o reemplazados por algo que sí aporte."
         ),
     },
     "track_verde": {
-        "titulo": "Este track está en una fase muy temprana — es una idea sin desarrollar.",
+        "titulo": "Es un boceto temprano — todavía no hay un track, hay una idea que crece.",
         "prioridades": [
-            "No te preocupes por cómo suena todavía. Preocúpate por qué quieres que pase en el track.",
-            "Extiende la idea a al menos 2-3 minutos con secciones diferenciables.",
-            "Define qué tipo de track quieres hacer: ¿para pinchar? ¿para escuchar? ¿qué energía debería tener?",
+            "Trabaja la idea, no la mezcla. En esta fase, las preguntas correctas son: ¿qué emoción quieres transmitir? ¿quién bailaría/escucharía esto? ¿en qué momento de un set encajaría? Si no tienes respuesta clara a ninguna, dedica 20 minutos a escribir 3 referencias concretas (artista + track + por qué te gusta) que vayan en la línea de lo que quieres hacer. Sin eso, vas a hacer mil decisiones sin criterio.",
+            "Extiende la duración a 4-5 minutos con secciones básicas, aunque sea con copy/paste y muy poca variación. Plantilla mínima viable: 32 bars de intro (solo kick + 1 elemento), 32 bars de desarrollo (suma elementos), 16 bars de break (quita kick + ambient), 32 bars de drop (todo activo), 16 bars de outro. Eso solo, con tu material actual duplicado y arrastrado, ya te pone en posición de empezar a tomar decisiones reales.",
+            "Limita el alcance de la sesión: en esta fase, terminar la estructura completa (aunque suene mal) vale infinitamente más que perfeccionar 16 compases. La razón es psicológica: con la estructura completa ves dónde fallan las cosas; sin ella te quedas dando vueltas al mismo loop.",
         ],
         "no_tocar": [
-            "No mezcles ni ecualices nada todavía — es demasiado pronto.",
-            "No busques feedback externo en esta fase — primero cierra tú la idea.",
-            "No te compares con tracks terminados — esto es un boceto y es normal que suene así.",
+            "No mezcles ni ecualices nada todavía. Salvo high-pass evidente o sidechain básico, todo plugin que metas ahora se va a tener que rehacer cuando cambien las decisiones del arreglo.",
+            "No te compares con tracks terminados de tus referencias. Es un boceto vs un release pulido — la comparación no es informativa, solo te frustra.",
+            "No busques presets ni samples nuevos como excusa para no decidir. La paralización por exceso de opciones es el error #1 en esta fase. Cierra el navegador y trabaja con lo que ya tienes en sesión.",
         ],
         "siguiente_sesion": (
-            "En tu próxima sesión, escribe en un papel (sí, papel) las secciones que debería tener tu track "
-            "y cuánto debería durar cada una. Después, extiende tu proyecto para cubrir esa duración aunque sea "
-            "con elementos básicos."
+            "Próxima sesión: 60 minutos máximo. Objetivo único — terminar la estructura completa de principio a fin "
+            "con el material actual + las plantillas mínimas (intro, desarrollo, break, drop, outro). Aunque suene "
+            "repetitivo o aburrido. Cuando tengas eso, escúchalo entero sin parar y apunta los 3 puntos que más "
+            "te molesten. Esos serán los target de la SIGUIENTE sesión, no de esta."
         ),
     },
     "carencia_espectral": {
-        "titulo": "El track tiene poco contenido en la zona media y/o aguda del espectro.",
+        "titulo": "Al track le falta cuerpo en medios y/o aire en agudos.",
         "prioridades": [
-            "Añade elementos que ocupen la zona de medios: percusiones con cuerpo, voces, stabs o texturas.",
-            "Revisa si tus sonidos principales tienen suficiente presencia en medios — un EQ puede ayudar a abrir esa zona.",
-            "Los agudos dan definición y aire: hi-hats, shakers, rides o texturas brillantes pueden llenar esa zona.",
+            "Primero diagnostica si es problema de CONTENIDO o de NIVEL: solea por separado los pads, leads, percusiones secundarias (claps, shakers) y hi-hats. Si alguno suena claro pero en la mezcla desaparece, es nivel — sube ese canal 2-3 dB. Si al solearlo ya suena pobre o vacío, es contenido — necesitas añadir algo en esa banda, no subir lo que tienes.",
+            "Para los medios (200 Hz–2 kHz): suelen vivir aquí pads, stabs, vocal chops, percusiones tonales (claves, congas). Si tu track no tiene nada de esto, añade una capa: un pad ancho con cuerpo en 300-600 Hz, un stab corto con ataque en 800 Hz–1.2 kHz, o una percusión tonal. Como guía, abre un track de referencia de tu estilo y mira el analizador en esa zona — debería haber actividad constante, no un valle.",
+            "Para los agudos (4 kHz en adelante): faltan probablemente hi-hats, shakers, rides, foley o aire general. Si ya los tienes pero no se notan, prueba un shelf de +2-3 dB desde 8 kHz con Q ancho en el canal del hi-hat o usa un exciter (Soothe en modo expansivo, Fresh Air, o el de tu DAW). Si no tienes nada brillante, añade un shaker o un loop de ambiente — incluso a -25 dB aporta aire.",
         ],
         "no_tocar": [
-            "No subas el volumen general para compensar — el problema no es de nivel, es de contenido frecuencial.",
-            "No quites graves para que los medios 'se oigan más' — añade lo que falta en lugar de quitar lo que funciona.",
+            "No subas el master para compensar — el problema no es volumen, es contenido. El limiter va a aplastar los pocos medios que tengas en lugar de añadirlos.",
+            "No cortes graves para 'destapar' los medios. Eso solo desbalancea el track más. Añade en lo que falta, no restes de lo que ya funciona.",
+            "No abras un EQ ancho en el master a +5 dB en 2 kHz buscando brillo — vas a subir también ruido, harshness y reverbs no intencionadas. Trabaja siempre en el canal del elemento, no en el master.",
         ],
         "siguiente_sesion": (
-            "En tu próxima sesión, compara tu track con una referencia del mismo género. Escucha específicamente "
-            "la zona media: ¿qué tiene la referencia que le da cuerpo y tú no tienes? Percusiones, texturas, "
-            "capas rítmicas... Añade 2-3 elementos en esa zona."
+            "Próxima sesión: abre tu track con un analizador (SPAN, iZotope Insight, Voxengo SPAN) "
+            "junto a un track de referencia del mismo estilo. Compara la curva entre 500 Hz y 8 kHz — "
+            "ese es el rango donde se pierde el cuerpo. Identifica los 1-2 huecos más obvios y, "
+            "para cada uno, decide si añades un elemento nuevo o subes uno existente. Cierra la sesión "
+            "habiendo cubierto al menos un hueco."
         ),
     },
     "conflicto_armonico": {
@@ -156,37 +171,43 @@ TEMPLATES = {
         ),
     },
     "pobreza_armonica": {
-        "titulo": "El track tiene poco contenido melódico o armónico.",
+        "titulo": "El track tiene poco contenido melódico o armónico (apenas notas, sin progresión).",
         "prioridades": [
-            "Valora si el track necesita un elemento melódico que le dé identidad: una línea de bajo con notas, un lead, un stab con acordes, o una vocal.",
-            "Si ya tienes algún elemento tonal, intenta desarrollarlo más: variaciones, transposiciones entre secciones, o una progresión de acordes simple.",
-            "Una progresión de 2-4 acordes en loop puede ser suficiente para dar dirección armónica al track.",
+            "Primero decide si tu track lo necesita: en techno crudo, dub techno, minimal, hypnotic o tracks puramente rítmicos, la pobreza armónica es intencional y este diagnóstico no aplica — ignóralo. Si tu estilo sí pide armonía (house, melodic techno, progressive, trance, indie dance, deep house), sigue al punto 2.",
+            "Añade al menos una capa con dirección armónica. Tres opciones por orden de complejidad: (a) progresión de 2-4 acordes en un pad ancho (basta con i–VI–III–VII en menor para sonar profesional); (b) un stab corto que toque solo 2-3 notas en cada bar para dar movimiento; (c) un bajo con notas (no solo el root del kick) que recorra la progresión. Para empezar simple, prueba un pad con un envolvente lento (attack 200-500 ms) sobre tu loop.",
+            "Si ya tienes algo tonal pero suena estático, dale movimiento entre secciones: cambia la nota raíz cada 16 ó 32 compases, mete una transposición de +5 (cuarta justa) en el break, o varía el ritmo de los acordes (que el pad cambie cada compás en el drop y cada 2 compases en el verso). En 8 bars de cambio armónico se nota mucho.",
         ],
         "no_tocar": [
-            "No fuerces melodías complejas si tu track funciona como una pieza rítmica — en algunos géneros, menos armonía es intencional.",
-            "No copies progresiones de otros tracks directamente — escucha qué emoción quieres transmitir y busca acordes que la representen.",
+            "No fuerces melodía si tu estilo es rítmico-percusivo — minimal, dub, raw techno funcionan perfectamente sin progresión armónica explícita. Marca el género correcto en el cuestionario y el diagnóstico debería desaparecer.",
+            "No copies directamente la progresión de tu track favorito. Apunta qué emoción te transmite y busca acordes que tú asocies a esa emoción (menor para tensión, mayor para resolución, séptimas para color jazz/house, suspended para flotante).",
+            "No te enredes con teoría musical antes de probar: en electrónica, una progresión de 4 acordes en menor con notas básicas funciona para el 90% de los tracks. Si quieres ir más allá luego, perfecto, pero no es lo primero.",
         ],
         "siguiente_sesion": (
-            "En tu próxima sesión, experimenta con un sintetizador simple (un pad o un pluck) "
-            "y prueba 3-4 notas diferentes sobre tu loop principal. Si alguna combinación "
-            "te hace sentir algo, desarróllala. No busques complejidad — busca emoción."
+            "Próxima sesión: abre un sintetizador simple (pad o pluck), pon el track en loop sobre 8 compases "
+            "y prueba progresiones de 4 acordes en menor (Am–F–C–G es un clásico que funciona en cualquier estilo). "
+            "Toca cada acorde durante 2 compases. Si algo te emociona, queda. Si nada te convence, prueba una "
+            "progresión más oscura (Am–Em–F–Dm). Cierra la sesión con una progresión que te guste, aunque sea de pads "
+            "muy bajitos en volumen — la decisión armónica afecta a todo lo demás."
         ),
     },
     "harshness_mezcla": {
-        "titulo": "La mezcla tiene zonas duras o chirriantes en medios-altos.",
+        "titulo": "Hay zonas duras o chirriantes en medios-altos (2–6 kHz).",
         "prioridades": [
-            "Identifica qué elementos suenan más agresivos o chirriantes: hi-hats, leads, voces procesadas o percusiones metálicas.",
-            "Aplica un EQ sustractivo en la zona de 2-6kHz a los elementos que más molestan — cortes de 2-4dB pueden hacer mucho.",
-            "Revisa si hay saturación o distorsión no intencionada en algún canal — a veces un plugin está empujando demasiado.",
+            "Caza al culpable: pon el track a volumen moderado-bajo y solea uno por uno los candidatos típicos — hi-hats, claps, snares con sample chirriante, leads brillantes, voces procesadas con saturación, percusiones metálicas o cymbals. Apunta los 1-2 que más cansan al oído. Trabaja sobre esos canales, no sobre el master.",
+            "Sobre el elemento problemático, abre un EQ paramétrico con un corte estrecho (Q 4-8) y +4 dB. Barre lentamente entre 2 kHz y 6 kHz hasta encontrar el punto exacto donde más chirría. Una vez localizado, INVIERTE el corte a -3 dB con el mismo Q (puedes bajar el Q a 2-3 si quieres suavizar). Si el elemento sigue molestando, repite el barrido entre 6 y 10 kHz — ahí están las resonancias más finas (ssss de las voces, brillos exagerados de las cymbals).",
+            "Si el harshness viene de saturación o distorsión no intencionada: revisa si tienes plugins empujando — un compresor con make-up muy alto, un saturador en serie, una tape emulation con drive subido. Baja el input/drive de esos plugins antes de meter más EQ sustractivo. Soothe2 o Smart:EQ Live también funcionan muy bien para resonancias dinámicas si tienes presupuesto, pero un EQ paramétrico bien usado resuelve el 80% de los casos.",
         ],
         "no_tocar": [
-            "No bajes todos los agudos del master — el problema suele estar en 1-2 elementos concretos, no en todo el track.",
-            "No compenses subiendo los graves — primero doma lo que chirría.",
+            "No bajes todos los agudos del master con un shelf negativo — vas a apagar también lo que sí tiene que brillar (hats, percusiones, aire). El harshness suele venir de 1-2 elementos puntuales, no de toda la zona alta.",
+            "No compenses subiendo los graves o medios para 'tapar' el chirrido — solo desbalanceas el track. Resuelve el harshness primero, luego ajusta balance si hace falta.",
+            "No uses un de-esser genérico en el master pensando que es atajo. Está pensado para una banda muy concreta (5-9 kHz típicamente) y se va a comer también la presencia útil de otros elementos.",
         ],
         "siguiente_sesion": (
-            "En tu próxima sesión, escucha el track a volumen moderado-bajo. Los elementos que más te molestan o "
-            "se escuchan por encima de todo son los que necesitan un EQ sustractivo. Prueba con un corte estrecho "
-            "(Q alto) entre 2-6kHz y barre hasta encontrar la zona que molesta, luego recorta 2-4dB."
+            "Próxima sesión: escucha el track a volumen bajo durante un minuto entero — el oído detecta harshness "
+            "mucho mejor a niveles moderados que a volumen de monitor. Cualquier elemento que destaque por encima "
+            "del resto o que te haga querer bajar el volumen es candidato. Aplica el barrido + corte sobre ese "
+            "elemento (no sobre el master) y vuelve a escuchar a volumen bajo. Si sigue molestando, repite con el "
+            "siguiente candidato. Objetivo: cierra la sesión habiendo tratado los 2 elementos más agresivos."
         ),
     },
     "break_sin_payoff": {
