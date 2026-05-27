@@ -225,7 +225,7 @@ function GrowthChart({ serie, loading }) {
         <div>
           <h2 className="text-lg font-semibold" style={{ color: 'var(--text)' }}>Crecimiento (últimos 30 días)</h2>
           <p className="text-sm mt-1" style={{ color: 'var(--text-soft)' }}>
-            Análisis acumulados (eje izquierdo) y usuarios registrados (eje derecho).
+            Análisis acumulados (eje izquierdo) y productores que han usado la app (eje derecho).
           </p>
         </div>
         <div className="flex items-center gap-4 text-xs" style={{ color: 'var(--text-soft)' }}>
@@ -235,7 +235,7 @@ function GrowthChart({ serie, loading }) {
           </span>
           <span className="flex items-center gap-2">
             <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: 'var(--accent-warm)' }}></span>
-            Usuarios
+            Productores
           </span>
         </div>
       </div>
@@ -360,7 +360,7 @@ function GrowthChart({ serie, loading }) {
               <div className="flex items-center justify-between gap-3 mt-1" style={{ color: 'var(--text)' }}>
                 <span className="flex items-center gap-1.5">
                   <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'var(--accent-warm)' }}></span>
-                  Usuarios
+                  Productores
                 </span>
                 <span className="num font-medium">{formatNum(point.usuarios)}</span>
               </div>
