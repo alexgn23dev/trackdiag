@@ -18,8 +18,8 @@ Documento de referencia para trabajar en este repo. Para la visión completa del
 
 `MENTOTRACK.md` quedó en v0.4.1 (24 abril). Cambios posteriores relevantes (resumen — para detalle ver `frontend/changelog.json`):
 
-- **API version actual:** `0.5.21` (en `/api/health` y en `FastAPI(...)`).
-- **DB primaria: PostgreSQL en Railway** (`backend/db.py` con pool asyncpg). **Cutover B cerrado el 2026-05-20**: Postgres es la única fuente para todas las escrituras y lecturas. Sheets ya solo se consulta como puente de auth para usuarios `__MIGRATED__` (legacy sin hash bcrypt local). Cuando ese subconjunto migre/reset password, se podrá eliminar el código de fallback restante y la variable `SHEETS_WEBHOOK`.
+- **API version actual:** `0.5.22` (en `/api/health` y en `FastAPI(...)`).
+- **DB primaria: PostgreSQL en Railway** (`backend/db.py` con pool asyncpg). **Cutover B cerrado completamente el 2026-05-27**: Postgres es la fuente única. El self-heal bulk de v0.5.21 copió 315 de 316 hashes residuales `__MIGRATED__` desde Sheets a Postgres; queda 1 usuario residual sin hash real (no encontrado en Sheets) que tendrá que usar /forgot password manual si quiere volver. Los flujos de auth (`/login`, `/acceder`, `/register`) son Postgres-only. La variable `SHEETS_WEBHOOK` ya solo la usan los endpoints admin `/api/admin/cutover-b*` por si hay que repetir la operación con casos edge — se puede desactivar en Railway cuando se confirme que no hace falta más.
 - **Proyectos + versiones** (feat 0.5.3): un análisis pertenece a un proyecto y se numera (`v1`, `v2`…) con etiqueta opcional. El panel del usuario unifica el listado, marca el proyecto/versión de cada análisis y permite asignar inline los huérfanos. Detalle de proyecto con barra de "listo para sello" y cambios entre versiones en lenguaje de escucha.
 - **Tracking de tutoriales YouTube:** clicks guardados en Postgres (con espejo a Sheets) vía `/api/sheets/tutorial-click`.
 - **Página `/ideas`:** propuestas con votación (`/api/ideas`, voto toggle).

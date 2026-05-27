@@ -48,7 +48,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.21")
+app = FastAPI(title="Mentotrack API", version="0.5.22")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -184,12 +184,13 @@ def _get_token_from_request(request: Request) -> str | None:
     return None
 
 
-# Google Sheets webhook. Cutover B cerrado el 2026-05-20: Postgres es la
-# fuente única para escrituras y lecturas. Esta variable solo se usa como
-# puente de autenticación para usuarios `__MIGRATED__` (legacy de Sheets
-# que aún no han establecido contraseña local). Cuando ese subconjunto
-# acabe de migrar o reset password, se puede desactivar la variable y
-# borrar el código de fallback restante.
+# Google Sheets webhook. Cutover B cerrado completamente el 2026-05-27:
+# self-heal bulk copió 315 de 316 hashes residuales a Postgres, dejando
+# 1 usuario residual sin hash real (no encontrado en Sheets). Postgres
+# es la fuente única para auth normal. Esta variable SOLO la usan los
+# endpoints admin de cutover-b (consulta y heal bulk) por si hay que
+# repetir la operación con casos edge. Se puede desactivar en Railway
+# cuando se confirme que no se va a necesitar más.
 SHEETS_WEBHOOK = os.environ.get("SHEETS_WEBHOOK", "")
 
 # Almacenamiento simple de sesiones (JSON lines)
@@ -198,7 +199,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.21"}
+    return {"status": "ok", "version": "0.5.22"}
 
 
 @app.post("/api/diagnostico")
@@ -924,43 +925,28 @@ async def auth_login(request: Request, data: dict):
         if not _valid_username(identifier):
             return JSONResponse(status_code=400, content={"error": "Nombre de usuario inválido"})
 
-    # Postgres primary
+    # Postgres es la única fuente desde el cierre del cutover B (2026-05-27).
+    # Los usuarios residuales con password_hash = '__MIGRATED__' no pueden
+    # autenticarse y caen en "credenciales incorrectas" — recuperan via
+    # /api/auth/forgot (escribiendo a soporte para reset manual).
     user_data = None
-    if _pg_available():
-        try:
-            from db import get_pool
-            import repositories as repo
-            pool = get_pool()
-            u = await repo.get_user_by_identifier(pool, identifier)
-            if u:
-                user_data = {
-                    "found": True,
-                    "email": u["email"],
-                    "password_hash": u["password_hash"],
-                    "username": u.get("username") or "",
-                }
-        except Exception as e:
-            print(f"[LOGIN] Postgres falló, intentando Sheets: {e}")
-
-    # Fallback / hash placeholder → Sheets
-    if (user_data is None or user_data.get("password_hash") == "__MIGRATED__") and SHEETS_WEBHOOK:
-        sheets_resp = await _sheets_get({"action": "get_user_by_identifier", "identifier": identifier})
-        if sheets_resp.get("_connection_error") and user_data is None:
-            return JSONResponse(status_code=503, content={"error": "No se pudo conectar con la base de datos."})
-        if sheets_resp.get("found"):
-            sheets_hash = sheets_resp.get("password_hash", "")
-            if user_data is None:
-                user_data = {
-                    "found": True,
-                    "email": sheets_resp.get("email", "").strip().lower(),
-                    "password_hash": sheets_hash,
-                    "username": sheets_resp.get("username", ""),
-                }
-            else:
-                # Postgres tenía placeholder: usar el hash real y auto-migrar
-                user_data["password_hash"] = sheets_hash
-                user_data["username"] = user_data["username"] or sheets_resp.get("username", "")
-                await _heal_postgres_user_password(user_data["email"], sheets_hash)
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "No se pudo conectar con la base de datos."})
+    try:
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+        u = await repo.get_user_by_identifier(pool, identifier)
+        if u:
+            user_data = {
+                "found": True,
+                "email": u["email"],
+                "password_hash": u["password_hash"],
+                "username": u.get("username") or "",
+            }
+    except Exception as e:
+        print(f"[LOGIN] Postgres falló: {e}")
+        return JSONResponse(status_code=503, content={"error": "No se pudo conectar con la base de datos."})
 
     if not user_data or not user_data.get("found"):
         return JSONResponse(status_code=401, content={"error": "Credenciales incorrectas"})
@@ -1138,27 +1124,28 @@ async def _heal_postgres_user_password(email: str, real_hash: str) -> None:
         print(f"[AUTH] heal_postgres falló: {e}")
 
 
-async def _create_user_dual(email: str, password_hash: str) -> tuple[bool, str | None]:
-    """Crea usuario en Postgres (primary) y en Sheets (mirror, best-effort).
-    Devuelve (ok, error_msg). 'El usuario ya existe' si choca en cualquiera."""
+async def _create_user(email: str, password_hash: str) -> tuple[bool, str | None]:
+    """Crea usuario en Postgres. Devuelve (ok, error_msg). Si existe un
+    placeholder '__MIGRATED__' para ese email (residual del cutover B),
+    actualiza el hash en lugar de fallar — el usuario está estableciendo
+    su contraseña por primera vez."""
     email = (email or "").strip().lower()
-    # Postgres primary
-    if _pg_available():
-        try:
-            from db import get_pool
-            import repositories as repo
-            pool = get_pool()
-            existing = await repo.get_user_by_email(pool, email)
-            if existing and existing["password_hash"] != "__MIGRATED__":
-                return False, "El usuario ya existe"
-            if existing and existing["password_hash"] == "__MIGRATED__":
-                # Usuario migrado sin hash real: actualizamos en lugar de crear
-                await repo.update_user_password(pool, existing["id"], password_hash)
-            else:
-                await repo.create_user(pool, email, password_hash)
-        except Exception as e:
-            print(f"[AUTH] Postgres create_user falló: {e}")
-            return False, "No se pudo crear el usuario."
+    if not _pg_available():
+        return False, "No se pudo conectar con la base de datos."
+    try:
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+        existing = await repo.get_user_by_email(pool, email)
+        if existing and existing["password_hash"] != "__MIGRATED__":
+            return False, "El usuario ya existe"
+        if existing and existing["password_hash"] == "__MIGRATED__":
+            await repo.update_user_password(pool, existing["id"], password_hash)
+        else:
+            await repo.create_user(pool, email, password_hash)
+    except Exception as e:
+        print(f"[AUTH] Postgres create_user falló: {e}")
+        return False, "No se pudo crear el usuario."
     return True, None
 
 
@@ -1180,29 +1167,20 @@ async def acceder(request: Request, data: dict):
         return JSONResponse(status_code=400, content={"error": "La contraseña debe tener al menos 8 caracteres"})
 
     user_data = await _get_user_for_auth(email)
-    if user_data and user_data.get("password_hash") == "__MIGRATED__":
-        # Usuario migrado con hash placeholder: la auth real está en Sheets.
-        if SHEETS_WEBHOOK:
-            sheets_user = await _sheets_get({"action": "get_user", "email": email})
-            if sheets_user.get("_connection_error"):
-                return JSONResponse(status_code=503, content={
-                    "error": "No se pudo conectar con la base de datos. Inténtalo de nuevo en unos segundos."
-                })
-            if sheets_user.get("found") and sheets_user.get("password_hash"):
-                user_data["password_hash"] = sheets_user["password_hash"]
-                # Auto-migración: actualizamos Postgres con el hash real
-                await _heal_postgres_user_password(email, sheets_user["password_hash"])
 
     if user_data:
+        # Los usuarios residuales con hash '__MIGRATED__' (sin hash real en
+        # Postgres tras el cutover B) fallan aquí: bcrypt no puede verificar
+        # contra ese placeholder. Recuperan via /api/auth/forgot (manual).
         if not _verify_password(password, user_data.get("password_hash", "")):
             return JSONResponse(status_code=401, content={"error": "Contraseña incorrecta"})
         historial = await _obtener_historial(email)
         token = _create_token(email)
         return {"ok": True, "email": email, "token": token, "historial": historial, "nuevo": False}
 
-    # Usuario nuevo → registrar (Postgres primary + Sheets mirror)
+    # Usuario nuevo → registrar en Postgres
     hashed = _hash_password(password)
-    ok, err = await _create_user_dual(email, hashed)
+    ok, err = await _create_user(email, hashed)
     if not ok and err == "El usuario ya existe":
         return JSONResponse(status_code=409, content={"error": "El email ya está registrado. Prueba con tu contraseña."})
     historial = await _obtener_historial(email)
