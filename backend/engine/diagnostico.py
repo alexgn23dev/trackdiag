@@ -172,6 +172,7 @@ def generar_diagnostico(senales: dict, contexto: dict) -> dict:
         "referencia_temporal": feedback_ctx.get("referencia_temporal", ""),
         "nota_motivacional": feedback_ctx.get("nota_motivacional", ""),
         "disclaimer": feedback_ctx.get("disclaimer", ""),
+        "aviso_genero": feedback_ctx.get("aviso_genero", ""),
     }
 
     if secundario_id:

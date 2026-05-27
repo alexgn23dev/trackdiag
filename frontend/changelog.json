@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "version": "0.5.20",
+      "date": "2026-05-27",
+      "title": "Cierre del cutover B (inventario) + aviso de género fuera de scope",
+      "changes": [
+        "Nuevo endpoint admin `/api/admin/cutover-b`: cuenta cuántos usuarios siguen con password_hash placeholder __MIGRATED__ (los que aún dependen del fallback Sheets para autenticar), cuántos tienen actividad histórica y cuántos están activos en los últimos 30 días. Card nueva en el tab Motor del dashboard para verlo de un vistazo. Si quedan 0 activos, se puede eliminar el fallback Sheets + la variable SHEETS_WEBHOOK en una versión siguiente.",
+        "Aviso de género fuera de scope en el informe del diagnóstico: cuando el usuario marca 'Otro' y escribe un género no-electrónico (vallenato, reggaeton, pop, rock, indie pop, jazz, hip hop, salsa, flamenco, etc.), se muestra un banner amarillo arriba del informe avisando de que Mentotrack está calibrado para electrónica de club y que los diagnósticos deben tomarse como segunda opinión técnica, no como verdad absoluta. Whitelist de palabras electrónicas (tech, house, techno, garage, dnb, etc.) para no disparar el aviso ante combinaciones tipo 'rock electrónico' o 'indie dance pop'."
+      ]
+    },
+    {
       "version": "0.5.19",
       "date": "2026-05-27",
       "title": "Sticky bar de feedback en el diagnóstico (sube la tasa de respuesta)",

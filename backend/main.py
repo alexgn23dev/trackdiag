@@ -48,7 +48,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.19")
+app = FastAPI(title="Mentotrack API", version="0.5.20")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -198,7 +198,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.19"}
+    return {"status": "ok", "version": "0.5.20"}
 
 
 @app.post("/api/diagnostico")
@@ -2140,6 +2140,28 @@ def _replay_motor_sobre_analisis(row: dict) -> dict | None:
         "genero_label": (row.get("formulario") or {}).get("genero", "") or "",
         "genero_slug": contexto.get("genero", "") or "",
     }
+
+
+@app.get("/api/admin/cutover-b")
+@limiter.limit("30/minute")
+async def admin_cutover_b(request: Request):
+    """Inventario del cierre del cutover B: cuántos usuarios todavía usan
+    el placeholder __MIGRATED__ (= dependen de Sheets para autenticar) y
+    cuántos siguen activos. Decisión de eliminar el fallback Sheets se
+    basa en este dato."""
+    if not _admin_email_from_cookie(request):
+        return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Postgres no disponible"})
+    try:
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+        stats = await repo.stats_usuarios_migrated(pool)
+    except Exception as e:
+        print(f"[CUTOVER-B] error: {e}")
+        return JSONResponse(status_code=503, content={"error": "Error consultando DB"})
+    return {"ok": True, "sheets_webhook_activo": bool(SHEETS_WEBHOOK), **stats}
 
 
 @app.get("/api/admin/reanalisis")

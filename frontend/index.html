@@ -849,6 +849,20 @@
                         </div>
                     </div>
 
+                    {/* Aviso de género fuera de scope (vallenato, pop, rock…) */}
+                    {r.aviso_genero && (
+                        <div
+                            className="card p-4 mb-6 text-left"
+                            style={{
+                                background: 'rgba(250, 204, 21, 0.06)',
+                                borderLeft: '3px solid #facc15',
+                            }}
+                        >
+                            <p className="text-yellow-400 text-xs font-medium mb-1 uppercase tracking-wider">Aviso de género</p>
+                            <p className="text-gray-300 text-sm leading-relaxed">{r.aviso_genero}</p>
+                        </div>
+                    )}
+
                     {/* Diagnóstico principal — detalles expandibles */}
                     <details className="card p-6 mb-4">
                         <summary className="cursor-pointer">

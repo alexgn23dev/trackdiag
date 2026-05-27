@@ -737,6 +737,24 @@
             }
         };
 
+        // Inventario del cierre del cutover B (usuarios __MIGRATED__ que aún
+        // dependen del fallback Sheets para autenticar).
+        const [cutoverData, setCutoverData] = useState(null);
+        const [cutoverLoading, setCutoverLoading] = useState(false);
+
+        const comprobarCutoverB = async () => {
+            setCutoverLoading(true);
+            try {
+                const resp = await fetch(`${API_URL}/api/admin/cutover-b`, { credentials: 'same-origin' });
+                if (resp.ok) setCutoverData(await resp.json());
+                else setCutoverData({ error: `HTTP ${resp.status}` });
+            } catch (e) {
+                setCutoverData({ error: String(e) });
+            } finally {
+                setCutoverLoading(false);
+            }
+        };
+
         const inRange = (date, fromStr, toStr) => {
             if (!date) return false;
             const fromD = new Date(fromStr + 'T00:00:00Z');
@@ -1425,6 +1443,68 @@
                                             ))}
                                         </div>
                                     )}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                {/* Cutover B — inventario de usuarios __MIGRATED__ */}
+                <div className="card p-5">
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                        <div>
+                            <h3 className="text-sm font-semibold text-gray-300">Cierre del cutover B</h3>
+                            <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                                Cuántos usuarios siguen con <code>password_hash = '__MIGRATED__'</code> (= dependen
+                                del fallback Sheets para autenticar). Si quedan 0 con actividad reciente, podemos
+                                eliminar el fallback y desactivar <code>SHEETS_WEBHOOK</code>.
+                            </p>
+                        </div>
+                        <button
+                            onClick={comprobarCutoverB}
+                            disabled={cutoverLoading}
+                            className="text-xs px-3 py-2 rounded-lg flex-shrink-0"
+                            style={{
+                                background: cutoverLoading ? '#3f3f46' : '#8b5cf6',
+                                color: '#fff',
+                                cursor: cutoverLoading ? 'not-allowed' : 'pointer',
+                            }}
+                        >
+                            {cutoverLoading ? 'Consultando…' : (cutoverData ? 'Refrescar' : 'Comprobar')}
+                        </button>
+                    </div>
+                    {cutoverData && cutoverData.error && (
+                        <p className="text-xs text-red-400">Error: {cutoverData.error}</p>
+                    )}
+                    {cutoverData && !cutoverData.error && (
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                            <div className="bg-gray-900/40 rounded p-2.5">
+                                <div className="text-gray-500 text-[10px] uppercase tracking-wide">Usuarios total</div>
+                                <div className="text-gray-200 text-lg font-semibold">{cutoverData.usuarios_total}</div>
+                            </div>
+                            <div className="bg-gray-900/40 rounded p-2.5"
+                                 style={{ borderLeft: `3px solid ${cutoverData.migrated_pending === 0 ? '#4ade80' : '#facc15'}` }}>
+                                <div className="text-gray-500 text-[10px] uppercase tracking-wide">__MIGRATED__ totales</div>
+                                <div className="text-gray-200 text-lg font-semibold">{cutoverData.migrated_pending}</div>
+                            </div>
+                            <div className="bg-gray-900/40 rounded p-2.5">
+                                <div className="text-gray-500 text-[10px] uppercase tracking-wide">Con actividad alguna vez</div>
+                                <div className="text-gray-200 text-lg font-semibold">{cutoverData.migrated_con_actividad_alguna_vez}</div>
+                            </div>
+                            <div className="bg-gray-900/40 rounded p-2.5"
+                                 style={{ borderLeft: `3px solid ${cutoverData.migrated_con_actividad_ultimos_30d === 0 ? '#4ade80' : '#f87171'}` }}>
+                                <div className="text-gray-500 text-[10px] uppercase tracking-wide">Activos últimos 30 días</div>
+                                <div className="text-gray-200 text-lg font-semibold">{cutoverData.migrated_con_actividad_ultimos_30d}</div>
+                            </div>
+                            <div className="col-span-2 md:col-span-4 text-[11px] text-gray-500 pt-1">
+                                <span className="text-gray-400">SHEETS_WEBHOOK activo:</span> {cutoverData.sheets_webhook_activo ? 'sí' : 'no'}
+                                {cutoverData.ultima_actividad_migrated && (
+                                    <span> · Última actividad __MIGRATED__: {new Date(cutoverData.ultima_actividad_migrated).toLocaleDateString('es-ES')}</span>
+                                )}
+                            </div>
+                            {cutoverData.migrated_con_actividad_ultimos_30d === 0 && (
+                                <div className="col-span-2 md:col-span-4 text-xs text-green-400 pt-1">
+                                    ✓ 0 usuarios __MIGRATED__ activos en los últimos 30 días — seguro eliminar el fallback Sheets.
                                 </div>
                             )}
                         </div>
