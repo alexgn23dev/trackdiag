@@ -225,12 +225,23 @@ async def get_public_metrics(pool: asyncpg.Pool) -> dict:
         total_usuarios = await conn.fetchval("SELECT COUNT(*) FROM usuarios")
         total_proyectos = await conn.fetchval("SELECT COUNT(*) FROM proyectos")
 
-        # Acumulados ANTES del rango (para construir la línea desde el día 0)
+        # Acumulados ANTES del rango (para construir la línea desde el día 0).
         base_analisis = await conn.fetchval(
             "SELECT COUNT(*) FROM analisis WHERE timestamp::date < $1", rango_inicio,
         ) or 0
+        # IMPORTANTE: usamos "fecha del primer análisis del usuario" en lugar de
+        # `usuarios.fecha_registro`. Razón: los 316 usuarios migrados desde Sheets
+        # tienen fecha_registro = fecha de la migración (~19 mayo 2026), lo que
+        # hacía la curva plana en cero antes del cutover y un salto brusco después.
+        # `MIN(timestamp)` por usuario refleja cuándo realmente empezó a usar
+        # Mentotrack — mucho más representativo para la gráfica de crecimiento.
         base_usuarios = await conn.fetchval(
-            "SELECT COUNT(*) FROM usuarios WHERE fecha_registro::date < $1", rango_inicio,
+            """SELECT COUNT(*) FROM (
+                 SELECT usuario_id, MIN(timestamp::date) AS first_day
+                 FROM analisis WHERE usuario_id IS NOT NULL
+                 GROUP BY usuario_id
+               ) fs WHERE fs.first_day < $1""",
+            rango_inicio,
         ) or 0
 
         # Conteos diarios dentro del rango
@@ -241,9 +252,14 @@ async def get_public_metrics(pool: asyncpg.Pool) -> dict:
             rango_inicio,
         )
         usuarios_rows = await conn.fetch(
-            """SELECT fecha_registro::date AS d, COUNT(*) AS n
-               FROM usuarios WHERE fecha_registro::date >= $1
-               GROUP BY 1 ORDER BY 1""",
+            """WITH first_seen AS (
+                 SELECT usuario_id, MIN(timestamp::date) AS first_day
+                 FROM analisis WHERE usuario_id IS NOT NULL
+                 GROUP BY usuario_id
+               )
+               SELECT first_day AS d, COUNT(*) AS n
+               FROM first_seen WHERE first_day >= $1
+               GROUP BY first_day ORDER BY first_day""",
             rango_inicio,
         )
 
