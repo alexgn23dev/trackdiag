@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nueva contraseña — Mentotrack</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="theme-color" content="#09090b">
+<meta name="robots" content="noindex">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+    background: #09090b;
+    color: #e5e5e5;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  .box {
+    width: 100%;
+    max-width: 400px;
+    background: #141416;
+    border: 1px solid #27272a;
+    border-radius: 16px;
+    padding: 32px 28px;
+  }
+  .logo {
+    text-align: center;
+    margin-bottom: 24px;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: #fff;
+  }
+  .logo .dot { color: #8b5cf6; }
+  h1 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 8px;
+  }
+  .sub {
+    color: #9ca3af;
+    font-size: 13px;
+    line-height: 1.5;
+    margin-bottom: 24px;
+  }
+  form { display: flex; flex-direction: column; gap: 12px; }
+  label {
+    font-size: 12px;
+    color: #71717a;
+    margin-bottom: 4px;
+    display: block;
+  }
+  input {
+    background: #1a1a1d;
+    border: 1px solid #333338;
+    border-radius: 10px;
+    padding: 12px 14px;
+    color: #e5e5e5;
+    font-size: 15px;
+    outline: none;
+    transition: border-color 0.15s;
+    -webkit-appearance: none;
+    width: 100%;
+  }
+  input:focus { border-color: #8b5cf6; }
+  button {
+    background: #8b5cf6;
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 13px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+    -webkit-appearance: none;
+    margin-top: 6px;
+  }
+  button:hover:not(:disabled) { background: #7c3aed; }
+  button:disabled { background: #3f3f46; cursor: not-allowed; opacity: 0.6; }
+  .error {
+    color: #f87171;
+    font-size: 13px;
+    background: rgba(248, 113, 113, 0.08);
+    border-left: 3px solid #ef4444;
+    padding: 10px 12px;
+    border-radius: 6px;
+    margin-top: 8px;
+    display: none;
+  }
+  .success {
+    text-align: center;
+    padding: 12px 0;
+  }
+  .success-icon { font-size: 32px; margin-bottom: 12px; }
+  .success-text { color: #4ade80; font-size: 14px; margin-bottom: 8px; }
+  .success-sub { color: #9ca3af; font-size: 12px; }
+  .help {
+    margin-top: 20px;
+    text-align: center;
+    font-size: 12px;
+    color: #52525b;
+  }
+  .help a { color: #71717a; text-decoration: underline; }
+</style>
+</head>
+<body>
+  <div class="box">
+    <div class="logo">mentotrack<span class="dot">●</span></div>
+
+    <div id="form-view">
+      <h1>Elige una nueva contraseña</h1>
+      <p class="sub">Mínimo 8 caracteres. El enlace de este email caduca en 1 hora.</p>
+
+      <form id="reset-form" autocomplete="off">
+        <div>
+          <label for="password">Nueva contraseña</label>
+          <input type="password" id="password" name="password" required minlength="8" autofocus>
+        </div>
+        <div>
+          <label for="confirm">Confirmar contraseña</label>
+          <input type="password" id="confirm" name="confirm" required minlength="8">
+        </div>
+        <button type="submit" id="submit-btn">Cambiar contraseña</button>
+        <div class="error" id="error"></div>
+      </form>
+    </div>
+
+    <div id="success-view" style="display:none;">
+      <div class="success">
+        <div class="success-icon">✓</div>
+        <p class="success-text">Contraseña actualizada</p>
+        <p class="success-sub">Te llevamos a la aplicación…</p>
+      </div>
+    </div>
+
+    <div id="invalid-token-view" style="display:none;">
+      <h1>Enlace no válido</h1>
+      <p class="sub">Este enlace no incluye un token o está mal formado. Pide otro reset desde la pantalla de login.</p>
+    </div>
+
+    <div class="help">
+      ¿Problemas? Escribe a <a href="mailto:soporte@producciononline.com">soporte@producciononline.com</a>
+    </div>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const token = (params.get('token') || '').trim();
+
+    if (!token) {
+      document.getElementById('form-view').style.display = 'none';
+      document.getElementById('invalid-token-view').style.display = 'block';
+    }
+
+    const form = document.getElementById('reset-form');
+    const errBox = document.getElementById('error');
+    const btn = document.getElementById('submit-btn');
+
+    function showError(msg) {
+      errBox.textContent = msg;
+      errBox.style.display = 'block';
+    }
+    function clearError() {
+      errBox.textContent = '';
+      errBox.style.display = 'none';
+    }
+
+    form?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      clearError();
+      const password = document.getElementById('password').value;
+      const confirm = document.getElementById('confirm').value;
+      if (password.length < 8) {
+        showError('La contraseña debe tener al menos 8 caracteres.');
+        return;
+      }
+      if (password !== confirm) {
+        showError('Las contraseñas no coinciden.');
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = 'Cambiando…';
+      try {
+        const resp = await fetch('/api/auth/reset', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, password }),
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          showError(data.error || `Error ${resp.status}`);
+          btn.disabled = false;
+          btn.textContent = 'Cambiar contraseña';
+          return;
+        }
+        // Login automático: guardamos el JWT como hace el SPA principal y
+        // redirigimos a "/" donde el SPA detecta el token y entra autenticado.
+        if (data.token) {
+          localStorage.setItem('mentotrack_token', data.token);
+          if (data.email) localStorage.setItem('mentotrack_email', data.email);
+        }
+        document.getElementById('form-view').style.display = 'none';
+        document.getElementById('success-view').style.display = 'block';
+        setTimeout(() => { window.location.href = '/'; }, 1400);
+      } catch (e) {
+        showError('Error de red. Inténtalo de nuevo.');
+        btn.disabled = false;
+        btn.textContent = 'Cambiar contraseña';
+      }
+    });
+  </script>
+</body>
+</html>
