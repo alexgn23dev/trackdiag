@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "version": "0.5.19",
+      "date": "2026-05-27",
+      "title": "Sticky bar de feedback en el diagnóstico (sube la tasa de respuesta)",
+      "changes": [
+        "El 87% de los análisis se cerraban sin que el usuario respondiera al widget de feedback al final del informe. Causa probable: el widget está al fondo y muchos usuarios no scrollean hasta abajo o cierran la pestaña antes.",
+        "Nuevo: barra flotante anclada al fondo de la pantalla del diagnóstico que aparece a los 20 segundos si el usuario no ha respondido. Compacta, no bloquea contenido, dismissable con la X. Los 3 botones (Sí / Parcial / No) hacen scroll suave al widget original para que el usuario pueda dejar comentario opcional.",
+        "Si el usuario responde por el widget de abajo, la barra se autooculta. Si dismissea explícitamente, no vuelve a aparecer en esa sesión. El %útil seguirá medible por motor_version — en 2-4 semanas se podrá ver si esta mejora UX subió la tasa de respuesta del 13% actual."
+      ]
+    },
+    {
       "version": "0.5.18",
       "date": "2026-05-27",
       "title": "Templates de diagnóstico reescritos en clave accionable",

@@ -773,6 +773,37 @@
         const [feedbackRealEnviado, setFeedbackRealEnviado] = useState(false);
         const [showTutoriales, setShowTutoriales] = useState(false);
 
+        // Sticky bar de feedback: aparece tras 20s en la pantalla del diagnóstico
+        // si el usuario no ha respondido todavía. Resuelve el problema medido en
+        // el histórico: 87% de los análisis se cierran sin que el usuario haga
+        // scroll al widget del fondo. La barra se autoesconde al responder o al
+        // dismiss explícito (no vuelve en esa sesión).
+        const [stickyFeedbackVisible, setStickyFeedbackVisible] = useState(false);
+        const [stickyFeedbackDismissed, setStickyFeedbackDismissed] = useState(false);
+        const feedbackWidgetRef = useRef(null);
+
+        useEffect(() => {
+            if (feedbackStep !== 0 || stickyFeedbackDismissed) return;
+            const t = setTimeout(() => setStickyFeedbackVisible(true), 20000);
+            return () => clearTimeout(t);
+        }, [feedbackStep, stickyFeedbackDismissed]);
+
+        useEffect(() => {
+            // Si el usuario empieza a responder por el widget de abajo,
+            // ocultar la barra sticky.
+            if (feedbackStep > 0) setStickyFeedbackVisible(false);
+        }, [feedbackStep]);
+
+        const responderDesdeSticky = (valor) => {
+            setFeedbackCoincide(valor);
+            setFeedbackStep(1);
+            setStickyFeedbackVisible(false);
+            // Pequeño delay para que React renderice el step 1 antes de scrollear
+            setTimeout(() => {
+                feedbackWidgetRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 60);
+        };
+
         // Tutoriales para este diagnóstico
         const diagId = r.diagnostico_principal?.id || 'sin_diagnostico';
         const tutoriales = TUTORIALES_MAP[diagId] || TUTORIALES_MAP['sin_diagnostico'] || [];
@@ -1185,6 +1216,7 @@
 
 
                     {/* ===== FEEDBACK POST-ANÁLISIS — Calibración ===== */}
+                    <div ref={feedbackWidgetRef}>
                     {feedbackStep === 0 && (
                         <div className="card p-6 mb-6 text-center">
                             <p className="text-gray-300 text-sm mb-2">¿El diagnóstico coincide con lo que percibías como problema?</p>
@@ -1373,6 +1405,7 @@
                             )}
                         </div>
                     )}
+                    </div>
 
                     {/* Acciones */}
                     <div className="text-center mt-4 mb-4 flex flex-col items-center gap-3">
@@ -1581,6 +1614,55 @@
                         <p className="text-gray-600 text-xs">Mentotrack no almacena el archivo de tu canción, solo los datos extraídos tras el análisis.</p>
                     </div>
                 </div>
+
+                {/* Sticky feedback bar — aparece tras 20s si el usuario no ha respondido */}
+                {stickyFeedbackVisible && (
+                    <div
+                        className="fixed left-0 right-0 z-40 fade-in"
+                        style={{
+                            bottom: 0,
+                            background: 'rgba(15, 15, 17, 0.96)',
+                            backdropFilter: 'blur(10px)',
+                            borderTop: '1px solid rgba(139, 92, 246, 0.35)',
+                            boxShadow: '0 -8px 24px rgba(0,0,0,0.4)',
+                        }}
+                    >
+                        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
+                            <p className="text-gray-200 text-sm flex-1 min-w-0">
+                                <span className="hidden sm:inline">¿Te ha servido el diagnóstico? </span>
+                                <span className="sm:hidden">¿Útil? </span>
+                                <span className="text-gray-500 text-xs">Tu respuesta calibra el motor.</span>
+                            </p>
+                            <div className="flex gap-1.5 flex-shrink-0">
+                                <button
+                                    onClick={() => responderDesdeSticky('si')}
+                                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-green-900/40 hover:bg-green-900/60 accent-green transition-colors"
+                                >
+                                    Sí
+                                </button>
+                                <button
+                                    onClick={() => responderDesdeSticky('masomenos')}
+                                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-yellow-900/30 hover:bg-yellow-900/50 text-yellow-400 transition-colors"
+                                >
+                                    Parcial
+                                </button>
+                                <button
+                                    onClick={() => responderDesdeSticky('no')}
+                                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors"
+                                >
+                                    No
+                                </button>
+                                <button
+                                    onClick={() => { setStickyFeedbackVisible(false); setStickyFeedbackDismissed(true); }}
+                                    className="px-2 py-1.5 rounded-lg text-xs text-gray-600 hover:text-gray-400 transition-colors"
+                                    aria-label="Cerrar"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         );
     }
