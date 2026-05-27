@@ -7,7 +7,7 @@ Esto facilita testing y evita estado global escondido.
 """
 import asyncio
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 from typing import Optional
 from uuid import UUID
@@ -205,6 +205,88 @@ async def stats_usuarios_migrated(pool: asyncpg.Pool) -> dict:
         "migrated_con_actividad_alguna_vez": int(con_actividad or 0),
         "migrated_con_actividad_ultimos_30d": int(recientes or 0),
         "ultima_actividad_migrated": ultima.isoformat() if ultima else None,
+    }
+
+
+# =============================================================================
+# MÉTRICAS PÚBLICAS — para página /metricas (cache en main.py)
+# =============================================================================
+
+@with_retry()
+async def get_public_metrics(pool: asyncpg.Pool) -> dict:
+    """Devuelve totales agregados + serie de 30 días + top géneros para la
+    página pública de métricas. Sin PII (emails, nombres). Pensado para
+    cachearse 6h en memoria — no es una query barata si la tabla crece."""
+    today = datetime.now(timezone.utc).date()
+    rango_inicio = today - timedelta(days=29)  # 30 días incluyendo hoy
+
+    async with pool.acquire() as conn:
+        total_analisis = await conn.fetchval("SELECT COUNT(*) FROM analisis")
+        total_usuarios = await conn.fetchval("SELECT COUNT(*) FROM usuarios")
+        total_proyectos = await conn.fetchval("SELECT COUNT(*) FROM proyectos")
+
+        # Acumulados ANTES del rango (para construir la línea desde el día 0)
+        base_analisis = await conn.fetchval(
+            "SELECT COUNT(*) FROM analisis WHERE timestamp::date < $1", rango_inicio,
+        ) or 0
+        base_usuarios = await conn.fetchval(
+            "SELECT COUNT(*) FROM usuarios WHERE fecha_registro::date < $1", rango_inicio,
+        ) or 0
+
+        # Conteos diarios dentro del rango
+        analisis_rows = await conn.fetch(
+            """SELECT timestamp::date AS d, COUNT(*) AS n
+               FROM analisis WHERE timestamp::date >= $1
+               GROUP BY 1 ORDER BY 1""",
+            rango_inicio,
+        )
+        usuarios_rows = await conn.fetch(
+            """SELECT fecha_registro::date AS d, COUNT(*) AS n
+               FROM usuarios WHERE fecha_registro::date >= $1
+               GROUP BY 1 ORDER BY 1""",
+            rango_inicio,
+        )
+
+        # Top géneros (formulario JSONB, key 'genero' = label en ES)
+        generos_rows = await conn.fetch(
+            """SELECT COALESCE(NULLIF(TRIM(formulario->>'genero'), ''), '—') AS genero,
+                      COUNT(*) AS n
+               FROM analisis
+               WHERE formulario IS NOT NULL
+               GROUP BY 1
+               ORDER BY 2 DESC
+               LIMIT 12"""
+        )
+
+    # Construir serie acumulada en Python (más simple y rápido que SQL recursivo)
+    analisis_por_dia = {r["d"]: int(r["n"]) for r in analisis_rows}
+    usuarios_por_dia = {r["d"]: int(r["n"]) for r in usuarios_rows}
+
+    serie = []
+    acum_a = int(base_analisis)
+    acum_u = int(base_usuarios)
+    for i in range(30):
+        d = rango_inicio + timedelta(days=i)
+        acum_a += analisis_por_dia.get(d, 0)
+        acum_u += usuarios_por_dia.get(d, 0)
+        serie.append({
+            "date": d.isoformat(),
+            "analisis": acum_a,
+            "usuarios": acum_u,
+        })
+
+    generos_top = [
+        {"genero": r["genero"], "n": int(r["n"])} for r in generos_rows
+    ]
+
+    return {
+        "totales": {
+            "analisis": int(total_analisis or 0),
+            "usuarios": int(total_usuarios or 0),
+            "proyectos": int(total_proyectos or 0),
+        },
+        "serie_30d": serie,
+        "generos_top": generos_top,
     }
 
 

@@ -1,6 +1,17 @@
 {
   "entries": [
     {
+      "version": "0.5.25",
+      "date": "2026-05-27",
+      "title": "Página pública /metricas con gráficas de crecimiento",
+      "changes": [
+        "Nueva página pública en `/metricas` con totales (análisis hechos, productores registrados, proyectos), un pie chart con la distribución de géneros más analizados y una gráfica de crecimiento de los últimos 30 días con doble eje (análisis acumulados a la izquierda, usuarios registrados a la derecha). Estética cálida minimalista (#F5F1EA) inspirada en dashboards SaaS modernos tipo Linear/Notion.",
+        "Nuevo endpoint `/api/metricas/public` (sin auth, solo aggregates, sin PII): totales globales, serie diaria acumulada de los últimos 30 días y top 12 géneros. Cache en memoria de 6h para no machacar Postgres con cada visita.",
+        "Stack frontend: HTML standalone con React + Recharts + Tailwind vía CDN (no toca el SPA grande). Gráficas responsive con animaciones de carga, tooltips on hover, skeleton states y soporte de modo oscuro automático según preferencia del navegador.",
+        "Las fechas del eje X de la gráfica de crecimiento se generan dinámicamente desde la fecha actual — el extremo derecho siempre es hoy. No hay fechas hardcodeadas: si abres la página dentro de 3 meses, la ventana se desliza sola."
+      ]
+    },
+    {
       "version": "0.5.24",
       "date": "2026-05-27",
       "title": "Campo de género libre obligatorio al seleccionar 'Otro'",
