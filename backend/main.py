@@ -48,7 +48,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.20")
+app = FastAPI(title="Mentotrack API", version="0.5.21")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -198,7 +198,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.20"}
+    return {"status": "ok", "version": "0.5.21"}
 
 
 @app.post("/api/diagnostico")
@@ -2162,6 +2162,82 @@ async def admin_cutover_b(request: Request):
         print(f"[CUTOVER-B] error: {e}")
         return JSONResponse(status_code=503, content={"error": "Error consultando DB"})
     return {"ok": True, "sheets_webhook_activo": bool(SHEETS_WEBHOOK), **stats}
+
+
+@app.post("/api/admin/cutover-b/heal")
+@limiter.limit("3/hour")
+async def admin_cutover_b_heal(request: Request):
+    """Self-heal bulk: pasa cada usuario __MIGRATED__ por Sheets, obtiene su
+    hash real y lo copia a Postgres. Soporta dry-run vía query ?dry_run=1.
+
+    Iteración en batches paralelos pequeños (5 a la vez) para no saturar el
+    Apps Script de Sheets. Devuelve resumen con counts por categoría."""
+    if not _admin_email_from_cookie(request):
+        return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Postgres no disponible"})
+    if not SHEETS_WEBHOOK:
+        return JSONResponse(
+            status_code=503,
+            content={"error": "SHEETS_WEBHOOK no configurado — no se puede pedir hashes a Sheets"},
+        )
+
+    dry_run = request.query_params.get("dry_run") in ("1", "true", "yes")
+
+    try:
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+        emails = await repo.list_emails_migrated(pool)
+    except Exception as e:
+        print(f"[CUTOVER-B-HEAL] listado falló: {e}")
+        return JSONResponse(status_code=503, content={"error": "Error listando usuarios"})
+
+    print(f"[CUTOVER-B-HEAL] iniciando heal sobre {len(emails)} usuarios (dry_run={dry_run})")
+
+    counters = {
+        "total": len(emails),
+        "healed": 0,                      # Hash real copiado a Postgres
+        "sheets_not_found": 0,            # Sheets dice que ese email no existe
+        "sheets_still_migrated": 0,       # Sheets también tiene __MIGRATED__
+        "sheets_empty_hash": 0,           # Sheets responde pero sin hash usable
+        "sheets_error": 0,                # Sheets no respondió o dio error
+    }
+
+    async def heal_one(email: str) -> str:
+        try:
+            sheets_resp = await _sheets_get({"action": "get_user", "email": email})
+        except Exception as e:
+            print(f"[CUTOVER-B-HEAL] {email}: error Sheets: {e}")
+            return "sheets_error"
+        if sheets_resp.get("_connection_error"):
+            return "sheets_error"
+        if not sheets_resp.get("found"):
+            return "sheets_not_found"
+        sheets_hash = (sheets_resp.get("password_hash") or "").strip()
+        if not sheets_hash:
+            return "sheets_empty_hash"
+        if sheets_hash == "__MIGRATED__":
+            return "sheets_still_migrated"
+        # Tenemos un hash real — actualizamos Postgres (salvo dry-run)
+        if not dry_run:
+            try:
+                await _heal_postgres_user_password(email, sheets_hash)
+            except Exception as e:
+                print(f"[CUTOVER-B-HEAL] {email}: update Postgres falló: {e}")
+                return "sheets_error"
+        return "healed"
+
+    # Batches de 5 para limitar concurrencia contra Sheets.
+    BATCH_SIZE = 5
+    for i in range(0, len(emails), BATCH_SIZE):
+        chunk = emails[i:i + BATCH_SIZE]
+        results = await asyncio.gather(*(heal_one(e) for e in chunk), return_exceptions=False)
+        for r in results:
+            counters[r] = counters.get(r, 0) + 1
+
+    print(f"[CUTOVER-B-HEAL] resumen: {counters}")
+    return {"ok": True, "dry_run": dry_run, **counters}
 
 
 @app.get("/api/admin/reanalisis")

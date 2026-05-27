@@ -158,6 +158,18 @@ async def is_username_available(pool: asyncpg.Pool, username: str) -> bool:
 
 
 @with_retry()
+async def list_emails_migrated(pool: asyncpg.Pool) -> list[str]:
+    """Devuelve todos los emails de usuarios con password_hash placeholder.
+    Se usa para el self-heal bulk del cutover B: cada email se consulta a
+    Sheets para obtener el hash real y copiarlo a Postgres."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT email FROM usuarios WHERE password_hash = '__MIGRATED__' ORDER BY email"
+        )
+    return [r["email"] for r in rows]
+
+
+@with_retry()
 async def stats_usuarios_migrated(pool: asyncpg.Pool) -> dict:
     """Inventario del cierre del cutover B. Devuelve cuántos usuarios tienen
     password_hash placeholder (__MIGRATED__) — los que todavía dependen del

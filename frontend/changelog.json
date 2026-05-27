@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "version": "0.5.21",
+      "date": "2026-05-27",
+      "title": "Self-heal bulk del cutover B (con dry-run)",
+      "changes": [
+        "Nuevo endpoint admin `POST /api/admin/cutover-b/heal` que itera todos los usuarios __MIGRATED__ (316 sobre 510 hoy), pide a Sheets el hash real de cada uno y lo copia a Postgres. Procesa en batches paralelos de 5 para no saturar el Apps Script.",
+        "Soporta dry-run vía `?dry_run=1`: consulta Sheets sin escribir en Postgres y devuelve cuántos se pueden sanar realmente vs cuántos también tienen `__MIGRATED__` en Sheets (los que no se pueden sanar por esta vía).",
+        "Botones en la card del cutover B del dashboard: \"Lanzar dry-run\" (no destructivo) y \"Lanzar heal REAL\" (con confirmación). Tras un heal real, refresca el inventario automáticamente para ver el delta."
+      ]
+    },
+    {
       "version": "0.5.20",
       "date": "2026-05-27",
       "title": "Cierre del cutover B (inventario) + aviso de género fuera de scope",

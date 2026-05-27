@@ -755,6 +755,34 @@
             }
         };
 
+        // Self-heal bulk del cutover B (dry-run o real)
+        const [healData, setHealData] = useState(null);
+        const [healLoading, setHealLoading] = useState(false);
+
+        const lanzarHealCutoverB = async (dryRun) => {
+            const total = cutoverData?.migrated_pending || 0;
+            if (!dryRun && total > 0) {
+                if (!confirm(`Heal REAL sobre ${total} usuarios __MIGRATED__: escribe en Postgres los hashes que devuelva Sheets. ¿Continuar?`)) return;
+            }
+            setHealLoading(true);
+            setHealData(null);
+            try {
+                const url = `${API_URL}/api/admin/cutover-b/heal${dryRun ? '?dry_run=1' : ''}`;
+                const resp = await fetch(url, { method: 'POST', credentials: 'same-origin' });
+                if (resp.ok) {
+                    setHealData(await resp.json());
+                    // Refrescar el inventario tras el heal real
+                    if (!dryRun) await comprobarCutoverB();
+                } else {
+                    setHealData({ error: `HTTP ${resp.status}` });
+                }
+            } catch (e) {
+                setHealData({ error: String(e) });
+            } finally {
+                setHealLoading(false);
+            }
+        };
+
         const inRange = (date, fromStr, toStr) => {
             if (!date) return false;
             const fromD = new Date(fromStr + 'T00:00:00Z');
@@ -1505,6 +1533,91 @@
                             {cutoverData.migrated_con_actividad_ultimos_30d === 0 && (
                                 <div className="col-span-2 md:col-span-4 text-xs text-green-400 pt-1">
                                     ✓ 0 usuarios __MIGRATED__ activos en los últimos 30 días — seguro eliminar el fallback Sheets.
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Self-heal bulk: pasa los __MIGRATED__ por Sheets para obtener hash real */}
+                    {cutoverData && !cutoverData.error && cutoverData.migrated_pending > 0 && cutoverData.sheets_webhook_activo && (
+                        <div className="mt-4 pt-4 border-t border-gray-800">
+                            <p className="text-xs text-gray-400 mb-3">
+                                <span className="text-gray-300 font-medium">Self-heal bulk:</span> consulta Sheets por cada uno de los
+                                {' '}{cutoverData.migrated_pending} usuarios y copia a Postgres el hash real que tengan.
+                                Lanza primero el dry-run para ver qué devolvería Sheets sin tocar nada.
+                            </p>
+                            <div className="flex flex-wrap gap-2 mb-3">
+                                <button
+                                    onClick={() => lanzarHealCutoverB(true)}
+                                    disabled={healLoading}
+                                    className="text-xs px-3 py-2 rounded-lg"
+                                    style={{
+                                        background: healLoading ? '#3f3f46' : 'rgba(96,165,250,0.2)',
+                                        color: healLoading ? '#9ca3af' : '#60a5fa',
+                                        border: '1px solid rgba(96,165,250,0.4)',
+                                        cursor: healLoading ? 'not-allowed' : 'pointer',
+                                    }}
+                                >
+                                    {healLoading ? 'Ejecutando…' : 'Lanzar dry-run'}
+                                </button>
+                                <button
+                                    onClick={() => lanzarHealCutoverB(false)}
+                                    disabled={healLoading}
+                                    className="text-xs px-3 py-2 rounded-lg"
+                                    style={{
+                                        background: healLoading ? '#3f3f46' : '#dc2626',
+                                        color: '#fff',
+                                        cursor: healLoading ? 'not-allowed' : 'pointer',
+                                    }}
+                                >
+                                    {healLoading ? 'Ejecutando…' : 'Lanzar heal REAL'}
+                                </button>
+                            </div>
+                            {healData && healData.error && (
+                                <p className="text-xs text-red-400">Error: {healData.error}</p>
+                            )}
+                            {healData && !healData.error && (
+                                <div className="text-xs text-gray-400 space-y-1.5">
+                                    <p className="text-gray-300 font-medium">
+                                        {healData.dry_run ? 'Dry-run completado:' : 'Heal completado:'}
+                                        <span className="text-gray-500 font-normal ml-2">{healData.total} usuarios procesados</span>
+                                    </p>
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2">
+                                        <div className="bg-gray-900/40 rounded p-2"
+                                             style={{ borderLeft: '3px solid #4ade80' }}>
+                                            <div className="text-[10px] uppercase tracking-wide text-gray-500">{healData.dry_run ? 'Healeables' : 'Healed'}</div>
+                                            <div className="text-green-400 text-base font-semibold">{healData.healed}</div>
+                                        </div>
+                                        <div className="bg-gray-900/40 rounded p-2"
+                                             style={{ borderLeft: '3px solid #facc15' }}>
+                                            <div className="text-[10px] uppercase tracking-wide text-gray-500">Sheets también __MIGRATED__</div>
+                                            <div className="text-yellow-400 text-base font-semibold">{healData.sheets_still_migrated}</div>
+                                        </div>
+                                        <div className="bg-gray-900/40 rounded p-2">
+                                            <div className="text-[10px] uppercase tracking-wide text-gray-500">No existe en Sheets</div>
+                                            <div className="text-gray-300 text-base font-semibold">{healData.sheets_not_found}</div>
+                                        </div>
+                                        <div className="bg-gray-900/40 rounded p-2">
+                                            <div className="text-[10px] uppercase tracking-wide text-gray-500">Hash vacío</div>
+                                            <div className="text-gray-300 text-base font-semibold">{healData.sheets_empty_hash}</div>
+                                        </div>
+                                        <div className="bg-gray-900/40 rounded p-2"
+                                             style={{ borderLeft: '3px solid #f87171' }}>
+                                            <div className="text-[10px] uppercase tracking-wide text-gray-500">Errores de red</div>
+                                            <div className="text-red-400 text-base font-semibold">{healData.sheets_error}</div>
+                                        </div>
+                                    </div>
+                                    {healData.dry_run && healData.healed === 0 && (
+                                        <p className="text-yellow-400 text-[11px] mt-2 leading-relaxed">
+                                            ⚠ El bulk-heal no resuelve nada — Sheets no tiene hashes reales para ningún __MIGRATED__.
+                                            Necesitarías otra vía (forgot password con email transaccional, o asumir el corte).
+                                        </p>
+                                    )}
+                                    {healData.dry_run && healData.healed > 0 && (
+                                        <p className="text-green-400 text-[11px] mt-2 leading-relaxed">
+                                            ✓ Sheets puede sanar {healData.healed} de {healData.total}. Lanza el heal REAL para escribirlos en Postgres.
+                                        </p>
+                                    )}
                                 </div>
                             )}
                         </div>
