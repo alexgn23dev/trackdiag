@@ -162,55 +162,40 @@ function StatCard({ label, value, sub, loading }) {
 // =============================================================================
 // Growth chart — SVG hand-crafted
 // =============================================================================
-function GrowthChart({ serie, loading }) {
+// Gráfico genérico de una sola línea con eje Y a la izquierda.
+// Recibe la serie ya preparada (array de {date, value}) y se renderiza
+// independientemente. Lo usamos dos veces (análisis y productores) para
+// evitar la confusión del doble eje Y.
+function LineChart({ title, sub, color, data, valueKey, gradientId, animDelay }) {
   const [hoverIdx, setHoverIdx] = useState(null);
   const svgRef = useRef(null);
 
-  // ViewBox virtual: 800x340 lógico; el SVG escala responsive.
-  const W = 800, H = 340;
-  const padding = { top: 24, right: 56, bottom: 36, left: 56 };
+  const W = 700, H = 280;
+  const padding = { top: 20, right: 18, bottom: 32, left: 56 };
   const plotW = W - padding.left - padding.right;
   const plotH = H - padding.top - padding.bottom;
 
-  if (loading) {
-    return (
-      <div className="card p-6 md:p-8">
-        <div className="skeleton h-5 w-56 mb-2"></div>
-        <div className="skeleton h-3 w-72 mb-6"></div>
-        <div className="skeleton" style={{ height: 340, borderRadius: 12 }}></div>
-      </div>
-    );
-  }
-
-  const data = serie || [];
-  if (data.length === 0) {
+  if (!data || data.length === 0) {
     return <div className="card p-6 text-sm" style={{ color: 'var(--text-soft)' }}>Sin datos todavía.</div>;
   }
 
-  const analisisValues = data.map(d => d.analisis);
-  const usuariosValues = data.map(d => d.usuarios);
-  const aScale = niceTicks(Math.min(...analisisValues), Math.max(...analisisValues), 5);
-  const uScale = niceTicks(Math.min(...usuariosValues), Math.max(...usuariosValues), 5);
+  const values = data.map(d => d[valueKey]);
+  const scale = niceTicks(Math.min(...values), Math.max(...values), 4);
 
   const xAt = (i) => padding.left + (i / Math.max(1, data.length - 1)) * plotW;
-  const yAt = (val, scale) => padding.top + plotH - ((val - scale.min) / (scale.max - scale.min)) * plotH;
+  const yAt = (val) => padding.top + plotH - ((val - scale.min) / (scale.max - scale.min || 1)) * plotH;
 
-  const analisisPts = data.map((d, i) => ({ x: xAt(i), y: yAt(d.analisis, aScale) }));
-  const usuariosPts = data.map((d, i) => ({ x: xAt(i), y: yAt(d.usuarios, uScale) }));
-
-  const analisisPath = smoothPath(analisisPts);
-  const usuariosPath = smoothPath(usuariosPts);
-  const areaPath = analisisPath
-    ? `${analisisPath} L ${analisisPts[analisisPts.length - 1].x},${padding.top + plotH} L ${analisisPts[0].x},${padding.top + plotH} Z`
+  const pts = data.map((d, i) => ({ x: xAt(i), y: yAt(d[valueKey]) }));
+  const linePath = smoothPath(pts);
+  const areaPath = linePath
+    ? `${linePath} L ${pts[pts.length - 1].x},${padding.top + plotH} L ${pts[0].x},${padding.top + plotH} Z`
     : '';
 
-  // Decide qué fechas mostrar en eje X (cada ~5 días para no saturar)
-  const tickInterval = Math.max(1, Math.floor(data.length / 6));
+  const tickInterval = Math.max(1, Math.floor(data.length / 5));
   const xTicks = data
     .map((d, i) => ({ i, date: d.date }))
     .filter((t) => t.i % tickInterval === 0 || t.i === data.length - 1);
 
-  // Hover: mapeo de coord X de mouse → índice
   const handleMouseMove = (e) => {
     if (!svgRef.current) return;
     const rect = svgRef.current.getBoundingClientRect();
@@ -219,25 +204,25 @@ function GrowthChart({ serie, loading }) {
     setHoverIdx(Math.max(0, Math.min(data.length - 1, idx)));
   };
 
+  // Tooltip: alinear según posición del punto. Si está a la izquierda,
+  // tooltip a la derecha del punto; y viceversa.
+  const tooltipStyle = hoverIdx !== null ? (() => {
+    const xPct = (pts[hoverIdx].x / W) * 100;
+    const isLeft = xPct < 50;
+    return { [isLeft ? 'left' : 'right']: `${isLeft ? xPct + 2 : 100 - xPct + 2}%` };
+  })() : null;
+
   return (
-    <div className="card p-6 md:p-8 fade-in">
-      <div className="flex items-start justify-between gap-4 mb-6 flex-wrap">
+    <div className="card p-6 md:p-7 fade-in">
+      <div className="flex items-start justify-between gap-3 mb-5">
         <div>
-          <h2 className="text-lg font-semibold" style={{ color: 'var(--text)' }}>Crecimiento (últimos 30 días)</h2>
-          <p className="text-sm mt-1" style={{ color: 'var(--text-soft)' }}>
-            Análisis acumulados (eje izquierdo) y productores que han usado la app (eje derecho).
-          </p>
+          <h2 className="text-base font-semibold" style={{ color: 'var(--text)' }}>{title}</h2>
+          <p className="text-xs mt-1" style={{ color: 'var(--text-soft)' }}>{sub}</p>
         </div>
-        <div className="flex items-center gap-4 text-xs" style={{ color: 'var(--text-soft)' }}>
-          <span className="flex items-center gap-2">
-            <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: 'var(--accent)' }}></span>
-            Análisis
-          </span>
-          <span className="flex items-center gap-2">
-            <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: 'var(--accent-warm)' }}></span>
-            Productores
-          </span>
-        </div>
+        <span className="inline-flex items-center gap-1.5 text-xs flex-shrink-0" style={{ color: 'var(--text-soft)' }}>
+          <span className="inline-block w-2 h-2 rounded-full" style={{ background: color }}></span>
+          Acumulado
+        </span>
       </div>
 
       <div style={{ position: 'relative' }}>
@@ -250,15 +235,15 @@ function GrowthChart({ serie, loading }) {
           onMouseLeave={() => setHoverIdx(null)}
         >
           <defs>
-            <linearGradient id="analisisFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.22" />
-              <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity="0.22" />
+              <stop offset="100%" stopColor={color} stopOpacity="0" />
             </linearGradient>
           </defs>
 
-          {/* Grid horizontal */}
-          {aScale.ticks.map((t, i) => {
-            const y = yAt(t, aScale);
+          {/* Grid horizontal + Y ticks (izquierda) */}
+          {scale.ticks.map((t, i) => {
+            const y = yAt(t);
             return (
               <g key={i}>
                 <line x1={padding.left} y1={y} x2={W - padding.right} y2={y}
@@ -269,48 +254,28 @@ function GrowthChart({ serie, loading }) {
             );
           })}
 
-          {/* Eje derecho (usuarios) — solo etiquetas */}
-          {uScale.ticks.map((t, i) => {
-            const y = yAt(t, uScale);
-            return (
-              <text key={i} x={W - padding.right + 10} y={y + 4}
-                    fontSize="11" fill="var(--text-muted)">{formatNum(t)}</text>
-            );
-          })}
-
           {/* Eje X — fechas */}
           {xTicks.map(({ i, date }) => (
-            <text key={i} x={xAt(i)} y={H - padding.bottom + 22} textAnchor="middle"
+            <text key={i} x={xAt(i)} y={H - padding.bottom + 20} textAnchor="middle"
                   fontSize="11" fill="var(--text-muted)">{formatShortDate(date)}</text>
           ))}
 
-          {/* Área bajo análisis */}
-          {areaPath && <path d={areaPath} fill="url(#analisisFill)" />}
+          {/* Área */}
+          {areaPath && <path d={areaPath} fill={`url(#${gradientId})`} />}
 
-          {/* Línea análisis */}
+          {/* Línea */}
           <path
             className="draw-path"
-            d={analisisPath}
-            stroke="var(--accent)"
+            style={animDelay ? { animationDelay: `${animDelay}s` } : {}}
+            d={linePath}
+            stroke={color}
             strokeWidth="2.5"
             fill="none"
             strokeLinecap="round"
             strokeLinejoin="round"
           />
 
-          {/* Línea usuarios */}
-          <path
-            className="draw-path"
-            style={{ animationDelay: '0.15s' }}
-            d={usuariosPath}
-            stroke="var(--accent-warm)"
-            strokeWidth="2.5"
-            fill="none"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-
-          {/* Hover line + puntos */}
+          {/* Hover crosshair + punto */}
           {hoverIdx !== null && (
             <g>
               <line
@@ -318,56 +283,82 @@ function GrowthChart({ serie, loading }) {
                 x2={xAt(hoverIdx)} y2={H - padding.bottom}
                 stroke="var(--border)" strokeWidth="1" strokeDasharray="3 3"
               />
-              <circle cx={analisisPts[hoverIdx].x} cy={analisisPts[hoverIdx].y}
-                      r="5" fill="var(--accent)" stroke="var(--bg-card)" strokeWidth="2" />
-              <circle cx={usuariosPts[hoverIdx].x} cy={usuariosPts[hoverIdx].y}
-                      r="5" fill="var(--accent-warm)" stroke="var(--bg-card)" strokeWidth="2" />
+              <circle cx={pts[hoverIdx].x} cy={pts[hoverIdx].y}
+                      r="5" fill={color} stroke="var(--bg-card)" strokeWidth="2" />
             </g>
           )}
         </svg>
 
-        {/* Tooltip flotante */}
-        {hoverIdx !== null && (() => {
-          const point = data[hoverIdx];
-          const xPct = ((analisisPts[hoverIdx].x) / W) * 100;
-          const isLeft = xPct < 50;
-          return (
-            <div
-              style={{
-                position: 'absolute',
-                top: 0,
-                [isLeft ? 'left' : 'right']: `${isLeft ? xPct + 2 : 100 - xPct + 2}%`,
-                background: 'var(--bg-card)',
-                border: '1px solid var(--border)',
-                borderRadius: 10,
-                padding: '10px 14px',
-                boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
-                pointerEvents: 'none',
-                fontSize: 12,
-                minWidth: 140,
-              }}
-            >
-              <div style={{ color: 'var(--text-muted)', fontSize: 11, marginBottom: 6 }}>
-                {formatShortDate(point.date)}
-              </div>
-              <div className="flex items-center justify-between gap-3" style={{ color: 'var(--text)' }}>
-                <span className="flex items-center gap-1.5">
-                  <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)' }}></span>
-                  Análisis
-                </span>
-                <span className="num font-medium">{formatNum(point.analisis)}</span>
-              </div>
-              <div className="flex items-center justify-between gap-3 mt-1" style={{ color: 'var(--text)' }}>
-                <span className="flex items-center gap-1.5">
-                  <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'var(--accent-warm)' }}></span>
-                  Productores
-                </span>
-                <span className="num font-medium">{formatNum(point.usuarios)}</span>
-              </div>
+        {/* Tooltip */}
+        {hoverIdx !== null && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              ...tooltipStyle,
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border)',
+              borderRadius: 10,
+              padding: '8px 12px',
+              boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
+              pointerEvents: 'none',
+              fontSize: 12,
+              minWidth: 110,
+            }}
+          >
+            <div style={{ color: 'var(--text-muted)', fontSize: 11, marginBottom: 4 }}>
+              {formatShortDate(data[hoverIdx].date)}
             </div>
-          );
-        })()}
+            <div className="flex items-center justify-between gap-3" style={{ color: 'var(--text)' }}>
+              <span className="flex items-center gap-1.5">
+                <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: color }}></span>
+                {title}
+              </span>
+              <span className="num font-medium">{formatNum(data[hoverIdx][valueKey])}</span>
+            </div>
+          </div>
+        )}
       </div>
+    </div>
+  );
+}
+
+// Contenedor que renderiza las dos gráficas (análisis y productores)
+// en grid responsive: una al lado de otra en desktop, apiladas en móvil.
+function GrowthCharts({ serie, loading }) {
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5">
+        {[0, 1].map(i => (
+          <div className="card p-6 md:p-7" key={i}>
+            <div className="skeleton h-4 w-40 mb-2"></div>
+            <div className="skeleton h-3 w-56 mb-5"></div>
+            <div className="skeleton" style={{ height: 240, borderRadius: 12 }}></div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5">
+      <LineChart
+        title="Análisis"
+        sub="Diagnósticos acumulados en los últimos 30 días."
+        color="var(--accent)"
+        data={serie || []}
+        valueKey="analisis"
+        gradientId="fill-analisis"
+        animDelay={0}
+      />
+      <LineChart
+        title="Productores"
+        sub="Productores que han usado la app en los últimos 30 días."
+        color="var(--accent-warm)"
+        data={serie || []}
+        valueKey="usuarios"
+        gradientId="fill-productores"
+        animDelay={0.15}
+      />
     </div>
   );
 }
@@ -540,7 +531,7 @@ function App() {
       </section>
 
       <section className="mb-8 md:mb-10">
-        <GrowthChart serie={data?.serie_30d} loading={loading} />
+        <GrowthCharts serie={data?.serie_30d} loading={loading} />
       </section>
 
       <section className="mb-12">
