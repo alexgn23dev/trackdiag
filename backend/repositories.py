@@ -209,6 +209,79 @@ async def stats_usuarios_migrated(pool: asyncpg.Pool) -> dict:
 
 
 # =============================================================================
+# PASSWORD RESET TOKENS — reset de contraseña vía email transaccional
+# =============================================================================
+
+@with_retry()
+async def create_password_reset_token(
+    pool: asyncpg.Pool, usuario_id: UUID, token: str, expires_at: datetime
+) -> dict:
+    """Inserta un token de reset. El token se genera fuera con
+    secrets.token_urlsafe(48). expires_at: TZ-aware (UTC)."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """INSERT INTO password_reset_tokens (usuario_id, token, expires_at)
+               VALUES ($1, $2, $3)
+               RETURNING id, usuario_id, token, expires_at, created_at""",
+            usuario_id, token, expires_at,
+        )
+    return dict(row)
+
+
+@with_retry()
+async def get_password_reset_token(
+    pool: asyncpg.Pool, token: str
+) -> Optional[dict]:
+    """Devuelve el token si existe, NO está usado y NO ha expirado, junto
+    con el email del usuario asociado. None si no es válido."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """SELECT t.id, t.usuario_id, t.token, t.expires_at, t.used_at,
+                      u.email
+               FROM password_reset_tokens t
+               JOIN usuarios u ON u.id = t.usuario_id
+               WHERE t.token = $1
+                 AND t.used_at IS NULL
+                 AND t.expires_at > now()""",
+            token,
+        )
+    return dict(row) if row else None
+
+
+@with_retry()
+async def mark_password_reset_token_used(
+    pool: asyncpg.Pool, token_id: UUID
+) -> bool:
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            "UPDATE password_reset_tokens SET used_at = now() WHERE id = $1",
+            token_id,
+        )
+    return result.endswith(" 1")
+
+
+@with_retry()
+async def invalidate_active_tokens_for_user(
+    pool: asyncpg.Pool, usuario_id: UUID
+) -> int:
+    """Marca como usados todos los tokens activos del usuario.
+    Se llama antes de generar uno nuevo, por si pide varios resets seguidos."""
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            """UPDATE password_reset_tokens
+               SET used_at = now()
+               WHERE usuario_id = $1
+                 AND used_at IS NULL
+                 AND expires_at > now()""",
+            usuario_id,
+        )
+    try:
+        return int(result.split()[-1])
+    except (ValueError, IndexError):
+        return 0
+
+
+# =============================================================================
 # PROYECTOS
 # =============================================================================
 

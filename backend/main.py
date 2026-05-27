@@ -48,7 +48,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.22")
+app = FastAPI(title="Mentotrack API", version="0.5.23")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -199,7 +199,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.22"}
+    return {"status": "ok", "version": "0.5.23"}
 
 
 @app.post("/api/diagnostico")
@@ -749,6 +749,83 @@ def _verify_password(password: str, hashed: str) -> bool:
         return False
 
 
+# -------------------------------------------------------------------------
+# Email transaccional vía Resend (resend.com)
+# -------------------------------------------------------------------------
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
+RESEND_FROM = os.environ.get("RESEND_FROM", "Mentotrack <noreply@mentotrack.com>")
+# Base URL del frontend para construir el link de reset. En local apunta a 8000
+# (donde corre uvicorn), en prod a https://www.mentotrack.com.
+APP_BASE_URL = os.environ.get("APP_BASE_URL", "https://www.mentotrack.com")
+
+
+def _resend_disponible() -> bool:
+    """Devuelve True si Resend está configurado y la lib está instalada."""
+    if not RESEND_API_KEY:
+        return False
+    try:
+        import resend  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def _enviar_email_reset_password(email: str, token: str) -> bool:
+    """Envía el email de reset password vía Resend. Devuelve True si OK,
+    False si falló (sin lanzar excepción al caller). El caller decide
+    qué mensaje devolver al usuario."""
+    if not _resend_disponible():
+        print("[RESET] RESEND no disponible — no se envía email")
+        return False
+    try:
+        import resend
+        resend.api_key = RESEND_API_KEY
+        link = f"{APP_BASE_URL.rstrip('/')}/reset?token={token}"
+        html = f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Restablece tu contraseña</title></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;background:#0a0a0b;color:#e5e5e5;padding:40px 20px;margin:0;">
+  <div style="max-width:480px;margin:0 auto;background:#141416;border:1px solid #27272a;border-radius:12px;padding:32px;">
+    <h1 style="color:#fff;font-size:20px;font-weight:600;margin:0 0 16px;">Restablece tu contraseña</h1>
+    <p style="color:#a1a1aa;font-size:14px;line-height:1.6;margin:0 0 24px;">
+      Has solicitado restablecer la contraseña de tu cuenta de Mentotrack.
+      Pulsa el botón de abajo para elegir una nueva. El enlace caduca en 1 hora.
+    </p>
+    <a href="{link}" style="display:inline-block;background:#8b5cf6;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;font-size:14px;">Elegir nueva contraseña</a>
+    <p style="color:#71717a;font-size:12px;line-height:1.6;margin:24px 0 0;">
+      Si no has pedido este reset, ignora este email — tu contraseña no cambiará.
+      Si ves comportamiento sospechoso en tu cuenta, escríbenos a
+      <a href="mailto:soporte@producciononline.com" style="color:#a78bfa;">soporte@producciononline.com</a>.
+    </p>
+    <p style="color:#52525b;font-size:11px;margin:24px 0 0;word-break:break-all;">
+      Si el botón no funciona, copia este enlace en tu navegador:<br>
+      <span style="color:#71717a;">{link}</span>
+    </p>
+  </div>
+  <p style="color:#52525b;font-size:11px;text-align:center;margin:24px 0 0;">
+    Mentotrack · Producción Online · <a href="https://www.mentotrack.com" style="color:#71717a;">mentotrack.com</a>
+  </p>
+</body>
+</html>"""
+        text = (
+            f"Has solicitado restablecer tu contraseña de Mentotrack.\n\n"
+            f"Abre este enlace para elegir una nueva (caduca en 1 hora):\n{link}\n\n"
+            f"Si no has pedido este reset, ignora este email.\n\n"
+            f"Si necesitas ayuda, escribe a soporte@producciononline.com.\n"
+        )
+        resend.Emails.send({
+            "from": RESEND_FROM,
+            "to": email,
+            "subject": "Restablece tu contraseña de Mentotrack",
+            "html": html,
+            "text": text,
+        })
+        return True
+    except Exception as e:
+        print(f"[RESET] Resend falló: {type(e).__name__}: {e}")
+        return False
+
+
 async def _sheets_get(params: dict) -> dict:
     """Envía operaciones al Apps Script via POST (datos sensibles en body, no en URL).
     Devuelve la respuesta JSON del Apps Script.
@@ -1091,21 +1168,118 @@ async def auth_set_username(request: Request, data: dict):
 
 
 # -------------------------------------------------------------------------
-# /api/auth/forgot — placeholder (recuperación manual por email)
+# /api/auth/forgot — genera token + manda email vía Resend
 # -------------------------------------------------------------------------
+_MENSAJE_FORGOT_MANUAL = (
+    "Para recuperar el acceso, escríbenos a soporte@producciononline.com "
+    "indicando el email con el que te registraste. Te ayudaremos manualmente."
+)
+_MENSAJE_FORGOT_OK = (
+    "Si ese email corresponde a una cuenta, te hemos enviado un enlace para "
+    "elegir nueva contraseña. Revisa tu bandeja (y la carpeta de spam). El "
+    "enlace caduca en 1 hora."
+)
+
+
 @app.post("/api/auth/forgot")
 @limiter.limit("3/minute")
 async def auth_forgot(request: Request, data: dict):
-    """Placeholder: dirige al usuario a contactar por email para reset manual.
-    Iteración futura: token único + email transaccional."""
-    return {
-        "ok": True,
-        "message": (
-            "Para recuperar el acceso, escríbenos a soporte@producciononline.com "
-            "indicando el email con el que te registraste. Te ayudaremos manualmente."
-        ),
-        "contact_email": "soporte@producciononline.com",
-    }
+    """Pide reset de contraseña. Si Resend está configurado, genera token
+    de un solo uso (1h de vida), invalida tokens activos previos del usuario
+    y envía email con el enlace de reset. Si Resend no está configurado,
+    fallback al mensaje manual (contactar soporte).
+
+    Siempre devuelve OK aunque el email no exista — para no leakear si una
+    cuenta está registrada o no."""
+    email = (data.get("email") or "").strip().lower()
+    if not email or "@" not in email:
+        return JSONResponse(status_code=400, content={"error": "Email inválido"})
+
+    # Si no hay Resend configurado, fallback al mensaje manual (sin tocar DB)
+    if not _resend_disponible():
+        return {"ok": True, "message": _MENSAJE_FORGOT_MANUAL,
+                "contact_email": "soporte@producciononline.com"}
+
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={
+            "error": "No se pudo conectar con la base de datos. Inténtalo en unos segundos."
+        })
+
+    # Buscar usuario y generar token solo si existe — pero respondemos lo
+    # mismo en ambos casos para no leakear existencia de cuentas.
+    try:
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+        user = await repo.get_user_by_email(pool, email)
+        if user:
+            # Anular cualquier token activo previo del mismo usuario antes
+            # de generar uno nuevo (evita acumulación si pide varios resets).
+            await repo.invalidate_active_tokens_for_user(pool, user["id"])
+            token = secrets.token_urlsafe(48)
+            expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+            await repo.create_password_reset_token(pool, user["id"], token, expires_at)
+            _enviar_email_reset_password(user["email"], token)
+            # Aunque falle el envío del email, respondemos OK al usuario
+            # (queda registrado en logs). El usuario puede pedir otro reset.
+    except Exception as e:
+        print(f"[FORGOT] error: {type(e).__name__}: {e}")
+        # Aún así, respondemos OK para no leakear
+
+    return {"ok": True, "message": _MENSAJE_FORGOT_OK}
+
+
+# -------------------------------------------------------------------------
+# /api/auth/reset — consume token y actualiza contraseña
+# -------------------------------------------------------------------------
+@app.post("/api/auth/reset")
+@limiter.limit("5/minute")
+async def auth_reset(request: Request, data: dict):
+    """Recibe { token, password }. Valida el token (no usado, no expirado),
+    actualiza el hash bcrypt del usuario en Postgres, marca el token como
+    usado. Devuelve un JWT al usuario para login automático."""
+    token = (data.get("token") or "").strip()
+    password = (data.get("password") or "").strip()
+
+    if not token:
+        return JSONResponse(status_code=400, content={"error": "Token requerido"})
+    if len(password) < 8:
+        return JSONResponse(status_code=400, content={
+            "error": "La contraseña debe tener al menos 8 caracteres"
+        })
+
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={
+            "error": "No se pudo conectar con la base de datos."
+        })
+
+    try:
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+        token_row = await repo.get_password_reset_token(pool, token)
+        if not token_row:
+            return JSONResponse(status_code=400, content={
+                "error": "Este enlace ya no es válido (caducado o usado). Pide otro reset."
+            })
+
+        # Actualizar hash y marcar token usado en operaciones separadas;
+        # si el update_user_password falla, el token sigue siendo válido
+        # para reintentar.
+        new_hash = _hash_password(password)
+        await repo.update_user_password(pool, token_row["usuario_id"], new_hash)
+        await repo.mark_password_reset_token_used(pool, token_row["id"])
+    except Exception as e:
+        print(f"[RESET] error: {type(e).__name__}: {e}")
+        return JSONResponse(status_code=503, content={
+            "error": "Error al cambiar la contraseña. Inténtalo de nuevo."
+        })
+
+    # Login automático tras reset
+    email = token_row["email"]
+    historial = await _obtener_historial(email)
+    jwt_token = _create_token(email)
+    return {"ok": True, "email": email, "token": jwt_token, "historial": historial}
 
 
 async def _heal_postgres_user_password(email: str, real_hash: str) -> None:
@@ -2368,6 +2542,17 @@ def _serve_legal(slug: str):
         return JSONResponse(status_code=404, content={"error": "Página no encontrada"})
     # Cache 1h en navegador (textos legales cambian poco pero deben poder actualizarse)
     return FileResponse(page_path, headers={"Cache-Control": "public, max-age=3600"})
+
+
+@app.get("/reset")
+def serve_reset(request: Request):
+    """Página de reset de contraseña. Sirve siempre el HTML — el token se
+    valida en POST /api/auth/reset. Sin cache para evitar problemas si
+    abren un link viejo y vuelven al actual."""
+    reset_path = FRONTEND_DIR / "reset.html"
+    if not reset_path.is_file():
+        return JSONResponse(status_code=404, content={"error": "Página no encontrada"})
+    return FileResponse(reset_path, headers={"Cache-Control": "no-cache, no-store"})
 
 
 @app.get("/aviso-legal")

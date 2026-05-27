@@ -1,6 +1,18 @@
 {
   "entries": [
     {
+      "version": "0.5.23",
+      "date": "2026-05-27",
+      "title": "Reset de contraseña vía email transaccional (Resend)",
+      "changes": [
+        "Nueva tabla `password_reset_tokens` (migración Alembic auto-aplicada): token único de un solo uso vinculado al usuario, expira en 1 hora. Cada reset invalida los tokens previos del mismo usuario para evitar acumulación.",
+        "/api/auth/forgot reescrito: recibe email, genera token, envía email transaccional vía Resend (resend.com) con un enlace seguro al usuario. Si Resend no está configurado (falta `RESEND_API_KEY`), fallback automático al mensaje manual de soporte. Respuesta uniforme aunque el email no exista — no se leakea si la cuenta está registrada.",
+        "Nuevo endpoint /api/auth/reset (POST): consume token + password nueva, actualiza el hash bcrypt en Postgres, marca el token como usado y devuelve un JWT para login automático tras el reset.",
+        "Nueva página `/reset?token=X` (HTML standalone) con formulario para elegir contraseña nueva. Tras éxito, guarda el JWT y redirige a la app. Sin token o token inválido muestra mensaje claro.",
+        "Modal de \"¿olvidaste tu contraseña?\" en el SPA principal actualizado: ahora pide email y muestra confirmación de envío en lugar del placeholder antiguo. Plantilla de email HTML+texto con el branding de Mentotrack y link de soporte por si algo va mal."
+      ]
+    },
+    {
       "version": "0.5.22",
       "date": "2026-05-27",
       "title": "Cutover B cerrado: fallback Sheets eliminado de los flujos de auth",

@@ -2751,18 +2751,23 @@
             } catch (e) { setAuthError('No se pudo conectar.'); setAuthLoading(false); }
         };
 
-        // ---- Forgot password (placeholder) ----
+        // ---- Forgot password ----
         const handleForgot = async () => {
+            if (!authEmail.includes('@')) { setAuthError('Email inválido'); return; }
             setAuthLoading(true); setAuthError(''); setAuthInfo('');
             try {
                 const resp = await fetch(`${API_URL}/api/auth/forgot`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({}),
+                    body: JSON.stringify({ email: authEmail.trim().toLowerCase() }),
                 });
                 const data = await resp.json();
-                setAuthInfo(data.message || 'Escríbenos a soporte@producciononline.com.');
-                trackEvent('auth_forgot_clicked');
+                if (!resp.ok) {
+                    setAuthError(data.error || 'No se pudo procesar.');
+                } else {
+                    setAuthInfo(data.message || 'Si esa cuenta existe, te hemos enviado un email.');
+                    trackEvent('auth_forgot_clicked');
+                }
             } catch (e) { setAuthError('No se pudo conectar.'); }
             setAuthLoading(false);
         };
@@ -3020,19 +3025,30 @@
                                 </div>
                             )}
 
-                            {/* ===== FORGOT (placeholder) ===== */}
+                            {/* ===== FORGOT password ===== */}
                             {authMode === 'forgot' && (
                                 <div>
                                     <h2 id="authTitle" className="text-lg font-bold text-white mb-1">¿Olvidaste tu contraseña?</h2>
-                                    <p className="text-gray-500 text-xs mb-5">De momento gestionamos los reseteos manualmente — te respondemos rápido.</p>
+                                    <p className="text-gray-500 text-xs mb-5">Indica tu email y te enviaremos un enlace para elegir una nueva. El enlace caduca en 1 hora.</p>
 
                                     {!authInfo ? (
-                                        <button
-                                            onClick={handleForgot}
-                                            disabled={authLoading}
-                                            className="w-full py-3 rounded-xl font-medium btn-primary text-sm transition-colors mb-3"
-                                            style={{ opacity: authLoading ? 0.6 : 1 }}
-                                        >{authLoading ? 'Cargando…' : 'Solicitar ayuda'}</button>
+                                        <>
+                                            <input
+                                                type="email"
+                                                autoFocus
+                                                value={authEmail}
+                                                onChange={(e) => { setAuthEmail(e.target.value); setAuthError(''); }}
+                                                onKeyDown={(e) => { if (e.key === 'Enter' && authEmail.includes('@') && !authLoading) handleForgot(); }}
+                                                placeholder="tu@email.com"
+                                                className="w-full px-3 py-2.5 text-sm input-field mb-3"
+                                            />
+                                            <button
+                                                onClick={handleForgot}
+                                                disabled={!authEmail.includes('@') || authLoading}
+                                                className="w-full py-3 rounded-xl font-medium btn-primary text-sm transition-colors mb-3"
+                                                style={{ opacity: (!authEmail.includes('@') || authLoading) ? 0.6 : 1 }}
+                                            >{authLoading ? 'Enviando…' : 'Enviar enlace'}</button>
+                                        </>
                                     ) : (
                                         <div className="rounded-lg p-3 mb-3" style={{ background: 'rgba(37,244,100,0.06)', border: '1px solid rgba(37,244,100,0.18)' }}>
                                             <p className="text-sm text-gray-300 leading-relaxed">{authInfo}</p>
