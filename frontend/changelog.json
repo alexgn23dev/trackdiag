@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "version": "0.5.24",
+      "date": "2026-05-27",
+      "title": "Campo de género libre obligatorio al seleccionar 'Otro'",
+      "changes": [
+        "En el análisis histórico, 64 de 95 usuarios que marcaron 'Otro' (67%) dejaron el campo de texto vacío — información perdida sobre qué género real estaban produciendo.",
+        "El campo de género libre ahora es obligatorio cuando se selecciona 'Otro' en el cuestionario: validación tanto en frontend (botón 'Analizar' deshabilitado hasta escribir ≥2 caracteres + mensaje rojo bajo el input) como en backend (rechaza con 400 si llega vacío). Asterisco rojo en el label para indicar obligatoriedad.",
+        "Placeholder actualizado con ejemplos más concretos (drum and bass, UK garage, afrobeat, nu disco) extraídos de los géneros que más se han escrito hasta ahora. Autofocus en el input al seleccionar 'Otro' para reducir fricción."
+      ]
+    },
+    {
       "version": "0.5.23",
       "date": "2026-05-27",
       "title": "Reset de contraseña vía email transaccional (Resend)",

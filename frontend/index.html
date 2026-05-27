@@ -595,18 +595,33 @@
                         name="genero"
                     />
 
-                    {contexto.genero === 'otro' && (
-                        <div className="mb-5 -mt-2">
-                            <input
-                                type="text"
-                                value={contexto.genero_custom || ''}
-                                onChange={(e) => onChange('genero_custom', e.target.value)}
-                                placeholder="Escribe tu género (ej: afro house, UK garage, jungle...)"
-                                maxLength={60}
-                                className="w-full px-4 py-3 rounded-lg text-sm input-field"
-                            />
-                        </div>
-                    )}
+                    {contexto.genero === 'otro' && (() => {
+                        const customTxt = (contexto.genero_custom || '').trim();
+                        const customVacio = customTxt.length < 2;
+                        return (
+                            <div className="mb-5 -mt-2">
+                                <label className="block text-xs text-gray-500 mb-1.5">
+                                    ¿Qué género exactamente? <span className="text-red-400">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    required
+                                    autoFocus
+                                    value={contexto.genero_custom || ''}
+                                    onChange={(e) => onChange('genero_custom', e.target.value)}
+                                    placeholder="Ej: drum and bass, UK garage, afrobeat, nu disco…"
+                                    maxLength={60}
+                                    className="w-full px-4 py-3 rounded-lg text-sm input-field"
+                                    style={customVacio ? { borderColor: 'rgba(248,113,113,0.4)' } : {}}
+                                />
+                                {customVacio && (
+                                    <p className="text-xs text-red-400 mt-1">
+                                        Escribe el género para poder analizar correctamente tu track.
+                                    </p>
+                                )}
+                            </div>
+                        );
+                    })()}
 
                     <SelectField
                         label="¿En qué fase crees que está el track?"
@@ -2364,7 +2379,11 @@
             return () => ac.abort();
         }, [screen, proyectoMode, proyectoSeleccionadoId, opciones]);
 
-        const isQuestionnaireValid = contexto.genero && contexto.fase && contexto.objetivo && contexto.experiencia && contexto.dificultad_habitual;
+        // Si selecciona "Otro", debe escribir el género en el campo libre.
+        // 64 de 95 usuarios marcaban "Otro" sin texto en la versión anterior;
+        // hacerlo obligatorio nos da info real para futuras decisiones de catálogo.
+        const otroGeneroValido = contexto.genero !== 'otro' || (contexto.genero_custom || '').trim().length >= 2;
+        const isQuestionnaireValid = contexto.genero && otroGeneroValido && contexto.fase && contexto.objetivo && contexto.experiencia && contexto.dificultad_habitual;
 
         // ---- Cuestionario completo: si hay sesión analiza ya, si no abre modal de auth ----
         const handleGoToEmail = () => {
