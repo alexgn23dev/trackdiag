@@ -48,7 +48,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.23")
+app = FastAPI(title="Mentotrack API", version="0.5.24")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -199,7 +199,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.23"}
+    return {"status": "ok", "version": "0.5.24"}
 
 
 @app.post("/api/diagnostico")
@@ -222,6 +222,14 @@ async def diagnosticar(
     Recibe un archivo de audio + contexto del cuestionario.
     Retorna un diagnóstico estructurado.
     """
+    # Si el usuario seleccionó "Otro", el campo libre es obligatorio.
+    # 67% de usuarios "Otro" lo dejaban vacío en versiones previas — info perdida.
+    if genero == "otro" and len((genero_custom or "").strip()) < 2:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Si seleccionas 'Otro' como género, escribe en el campo de texto qué género estás produciendo (mínimo 2 caracteres)."},
+        )
+
     # Validar extensión
     extension = os.path.splitext(audio.filename or "")[1].lower()
     if extension not in [".mp3", ".wav", ".flac", ".aiff", ".aif", ".ogg"]:
