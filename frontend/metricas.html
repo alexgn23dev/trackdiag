@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Open Metrics — Mentotrack</title>
+<meta name="description" content="Métricas públicas de Mentotrack: análisis hechos, usuarios registrados y géneros producidos por la comunidad.">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="theme-color" content="#F5F1EA">
+
+<!-- Tailwind via CDN (igual que el resto del SPA) -->
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- React + Babel para JSX en cliente (consistente con index.html) -->
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<!-- Recharts UMD (incluye sus deps internas). Pinning a 2.12.x estable. -->
+<script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+
+<style>
+  :root {
+    --bg: #F5F1EA;
+    --bg-card: #FFFFFF;
+    --text: #1F2937;
+    --text-soft: #6B7280;
+    --text-muted: #9CA3AF;
+    --border: rgba(31, 41, 55, 0.08);
+    --accent: #6366F1;   /* analyses */
+    --accent-warm: #F59E0B; /* users */
+    --accent-purple: #8B5CF6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0a0a0b;
+      --bg-card: #141416;
+      --text: #f4f4f5;
+      --text-soft: #a1a1aa;
+      --text-muted: #71717a;
+      --border: rgba(255,255,255,0.06);
+    }
+  }
+  html, body { background: var(--bg); color: var(--text); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Helvetica Neue', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+  }
+  .num {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+  .fade-in { animation: fadeIn 0.5s ease-out both; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  .skeleton {
+    background: linear-gradient(90deg, rgba(0,0,0,0.04) 0%, rgba(0,0,0,0.07) 50%, rgba(0,0,0,0.04) 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.2s ease-in-out infinite;
+    border-radius: 8px;
+  }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  @media (prefers-color-scheme: dark) {
+    .skeleton {
+      background: linear-gradient(90deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.07) 50%, rgba(255,255,255,0.04) 100%);
+    }
+  }
+  .header-link { color: var(--text-soft); transition: color 0.15s; }
+  .header-link:hover { color: var(--text); }
+  /* Recharts overrides — quitar focus outline feo en tooltips */
+  .recharts-default-tooltip { background: var(--bg-card) !important; border: 1px solid var(--border) !important; border-radius: 10px !important; padding: 10px 12px !important; box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important; }
+  .recharts-tooltip-label { color: var(--text-soft) !important; font-size: 11px !important; font-weight: 500 !important; margin-bottom: 4px !important; }
+  .recharts-tooltip-item { color: var(--text) !important; font-size: 13px !important; }
+  .recharts-cartesian-axis-tick text { fill: var(--text-muted) !important; font-size: 11px !important; }
+  .recharts-legend-item-text { color: var(--text-soft) !important; font-size: 12px !important; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useMemo } = React;
+const {
+  ResponsiveContainer, ComposedChart, Line, Area, XAxis, YAxis,
+  CartesianGrid, Tooltip, Legend,
+  PieChart, Pie, Cell,
+} = Recharts;
+
+// =============================================================================
+// Helpers
+// =============================================================================
+const formatNum = (n) => {
+  if (n == null) return '—';
+  return new Intl.NumberFormat('es-ES').format(n);
+};
+const formatShortDate = (iso) => {
+  const d = new Date(iso + 'T00:00:00Z');
+  return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+};
+const formatGeneratedAt = (iso) => {
+  if (!iso) return '';
+  return new Date(iso).toLocaleString('es-ES', {
+    day: 'numeric', month: 'long', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+};
+
+// Paleta para el pie de géneros — armónica con el fondo cálido
+const GENRE_COLORS = [
+  '#8B5CF6', // purple
+  '#6366F1', // indigo
+  '#06B6D4', // cyan
+  '#10B981', // emerald
+  '#F59E0B', // amber
+  '#EF4444', // red
+  '#EC4899', // pink
+  '#F97316', // orange
+  '#84CC16', // lime
+  '#A855F7', // purple-lighter
+  '#0EA5E9', // sky
+  '#6B7280', // gray (resto)
+];
+
+// =============================================================================
+// Componentes
+// =============================================================================
+
+function StatCard({ label, value, sub, loading }) {
+  return (
+    <div className="card p-6 fade-in">
+      <p className="text-xs uppercase tracking-wider text-gray-500 mb-2" style={{ color: 'var(--text-muted)' }}>{label}</p>
+      {loading ? (
+        <div className="skeleton h-10 w-32"></div>
+      ) : (
+        <p className="text-4xl font-semibold num" style={{ color: 'var(--text)' }}>{formatNum(value)}</p>
+      )}
+      {sub && <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>{sub}</p>}
+    </div>
+  );
+}
+
+function GrowthChart({ serie, loading }) {
+  if (loading) {
+    return (
+      <div className="card p-6">
+        <div className="mb-4">
+          <div className="skeleton h-5 w-48 mb-2"></div>
+          <div className="skeleton h-3 w-72"></div>
+        </div>
+        <div className="skeleton" style={{ height: 320, borderRadius: 12 }}></div>
+      </div>
+    );
+  }
+
+  const data = serie || [];
+  const tickInterval = Math.max(1, Math.floor(data.length / 6));
+
+  return (
+    <div className="card p-6 md:p-8 fade-in">
+      <div className="flex items-start justify-between gap-4 mb-6 flex-wrap">
+        <div>
+          <h2 className="text-lg font-semibold" style={{ color: 'var(--text)' }}>Crecimiento (últimos 30 días)</h2>
+          <p className="text-sm mt-1" style={{ color: 'var(--text-soft)' }}>
+            Análisis acumulados (eje izquierdo) y usuarios registrados (eje derecho).
+          </p>
+        </div>
+      </div>
+
+      <div style={{ width: '100%', height: 340 }}>
+        <ResponsiveContainer>
+          <ComposedChart data={data} margin={{ top: 10, right: 16, left: -8, bottom: 0 }}>
+            <defs>
+              <linearGradient id="analisisFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.18} />
+                <stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
+            <XAxis
+              dataKey="date"
+              tickFormatter={formatShortDate}
+              interval={tickInterval}
+              tickLine={false}
+              axisLine={false}
+              dy={8}
+            />
+            <YAxis
+              yAxisId="left"
+              orientation="left"
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(v) => formatNum(v)}
+              dx={-4}
+            />
+            <YAxis
+              yAxisId="right"
+              orientation="right"
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(v) => formatNum(v)}
+              dx={4}
+            />
+            <Tooltip
+              labelFormatter={formatShortDate}
+              formatter={(value, name) => [formatNum(value), name]}
+              cursor={{ stroke: 'var(--border)', strokeWidth: 1 }}
+            />
+            <Legend
+              verticalAlign="top"
+              align="right"
+              iconType="circle"
+              iconSize={8}
+              wrapperStyle={{ paddingBottom: 12 }}
+            />
+            <Area
+              yAxisId="left"
+              type="monotone"
+              dataKey="analisis"
+              name="Análisis"
+              stroke="var(--accent)"
+              strokeWidth={2.5}
+              fill="url(#analisisFill)"
+              activeDot={{ r: 5, strokeWidth: 0 }}
+              animationDuration={900}
+            />
+            <Line
+              yAxisId="right"
+              type="monotone"
+              dataKey="usuarios"
+              name="Usuarios"
+              stroke="var(--accent-warm)"
+              strokeWidth={2.5}
+              dot={false}
+              activeDot={{ r: 5, strokeWidth: 0 }}
+              animationDuration={1000}
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+function GenresPie({ generos, loading }) {
+  if (loading) {
+    return (
+      <div className="card p-6">
+        <div className="skeleton h-5 w-44 mb-4"></div>
+        <div className="skeleton" style={{ height: 280, borderRadius: 12 }}></div>
+      </div>
+    );
+  }
+
+  const data = (generos || []).slice(0, 10);
+  const total = data.reduce((acc, g) => acc + g.n, 0);
+
+  return (
+    <div className="card p-6 md:p-8 fade-in">
+      <h2 className="text-lg font-semibold mb-1" style={{ color: 'var(--text)' }}>Géneros más analizados</h2>
+      <p className="text-sm mb-6" style={{ color: 'var(--text-soft)' }}>
+        Distribución de los {formatNum(total)} análisis con género indicado.
+      </p>
+
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-6 items-center">
+        {/* Pie */}
+        <div className="md:col-span-2" style={{ height: 240 }}>
+          <ResponsiveContainer>
+            <PieChart>
+              <Pie
+                data={data}
+                dataKey="n"
+                nameKey="genero"
+                cx="50%"
+                cy="50%"
+                innerRadius={48}
+                outerRadius={92}
+                paddingAngle={2}
+                animationDuration={900}
+              >
+                {data.map((_, i) => (
+                  <Cell key={i} fill={GENRE_COLORS[i % GENRE_COLORS.length]} stroke="var(--bg-card)" strokeWidth={2} />
+                ))}
+              </Pie>
+              <Tooltip
+                formatter={(value, name) => [`${formatNum(value)} análisis`, name]}
+                cursor={false}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Leyenda detallada */}
+        <div className="md:col-span-3 space-y-2">
+          {data.map((g, i) => {
+            const pct = total > 0 ? (g.n / total) * 100 : 0;
+            return (
+              <div key={g.genero} className="flex items-center gap-3 text-sm">
+                <span
+                  className="flex-shrink-0 rounded-full"
+                  style={{ width: 10, height: 10, background: GENRE_COLORS[i % GENRE_COLORS.length] }}
+                />
+                <span className="flex-1 truncate" style={{ color: 'var(--text)' }}>{g.genero || '—'}</span>
+                <span className="num text-sm" style={{ color: 'var(--text-soft)' }}>{formatNum(g.n)}</span>
+                <span className="num text-xs w-12 text-right" style={{ color: 'var(--text-muted)' }}>{pct.toFixed(1)}%</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// App
+// =============================================================================
+function App() {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/metricas/public')
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+      .then(d => { if (!cancelled) setData(d); })
+      .catch(e => { if (!cancelled) setError(String(e)); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const loading = !data && !error;
+
+  return (
+    <div className="max-w-6xl mx-auto px-5 md:px-8 py-10 md:py-16">
+      {/* Header */}
+      <header className="mb-10 md:mb-14 flex items-end justify-between gap-4 flex-wrap">
+        <div>
+          <p className="text-xs uppercase tracking-[0.18em] mb-3" style={{ color: 'var(--text-muted)' }}>
+            Open metrics
+          </p>
+          <h1 className="text-3xl md:text-4xl font-semibold tracking-tight" style={{ color: 'var(--text)' }}>
+            La comunidad de Mentotrack en números
+          </h1>
+          <p className="mt-3 text-sm md:text-base max-w-2xl" style={{ color: 'var(--text-soft)' }}>
+            Estadísticas abiertas y actualizadas diariamente.
+            Cuántos productores la usan, cuántos tracks pasan por el motor cada día,
+            y en qué géneros se mueve la comunidad.
+          </p>
+        </div>
+        <div className="flex items-center gap-4 text-sm">
+          <a href="/" className="header-link">← Volver a la app</a>
+        </div>
+      </header>
+
+      {/* Error */}
+      {error && (
+        <div className="card p-6 mb-10 text-sm" style={{ color: '#ef4444' }}>
+          No se pudieron cargar las métricas: {error}
+        </div>
+      )}
+
+      {/* Stat cards */}
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-5 mb-8 md:mb-10">
+        <StatCard
+          label="Análisis hechos"
+          value={data?.totales?.analisis}
+          sub="Diagnósticos generados desde el inicio"
+          loading={loading}
+        />
+        <StatCard
+          label="Productores registrados"
+          value={data?.totales?.usuarios}
+          sub="Cuentas activas con al menos un acceso"
+          loading={loading}
+        />
+        <StatCard
+          label="Proyectos creados"
+          value={data?.totales?.proyectos}
+          sub="Carpetas con versiones del mismo track"
+          loading={loading}
+        />
+      </section>
+
+      {/* Growth chart */}
+      <section className="mb-8 md:mb-10">
+        <GrowthChart serie={data?.serie_30d} loading={loading} />
+      </section>
+
+      {/* Genres pie */}
+      <section className="mb-12">
+        <GenresPie generos={data?.generos_top} loading={loading} />
+      </section>
+
+      {/* Footer */}
+      <footer className="text-center text-xs space-y-1" style={{ color: 'var(--text-muted)' }}>
+        {data?.generated_at && (
+          <p>Datos generados el {formatGeneratedAt(data.generated_at)} · Se actualizan cada 6 horas</p>
+        )}
+        <p>
+          Mentotrack · Producción Online ·{' '}
+          <a href="/privacidad" className="header-link underline">Privacidad</a> ·{' '}
+          <a href="/changelog" className="header-link underline">Changelog</a>
+        </p>
+      </footer>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

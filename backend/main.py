@@ -48,7 +48,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.24")
+app = FastAPI(title="Mentotrack API", version="0.5.25")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -199,7 +199,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.24"}
+    return {"status": "ok", "version": "0.5.25"}
 
 
 @app.post("/api/diagnostico")
@@ -2507,6 +2507,55 @@ def serve_calibrar(request: Request):
     if not calibrar_path.is_file():
         return JSONResponse(status_code=404, content={"error": "Página no encontrada"})
     return FileResponse(calibrar_path, headers={"Cache-Control": "no-cache"})
+
+
+# =========================================================================
+# Métricas públicas — página /metricas
+# =========================================================================
+# Cache en memoria de las métricas (recalcular cada 6h es suficiente para
+# una página pública orientativa).
+_PUBLIC_METRICS_CACHE: dict = {"data": None, "fetched_at": None}
+_PUBLIC_METRICS_TTL = timedelta(hours=6)
+
+
+@app.get("/api/metricas/public")
+@limiter.limit("30/minute")
+async def public_metrics(request: Request):
+    """Métricas agregadas para la página pública /metricas. SOLO aggregates,
+    sin PII. Cacheado 6h en memoria — la página marca cuándo se generó."""
+    now = datetime.now(timezone.utc)
+    cached = _PUBLIC_METRICS_CACHE.get("data")
+    fetched_at = _PUBLIC_METRICS_CACHE.get("fetched_at")
+    if cached and fetched_at and (now - fetched_at) < _PUBLIC_METRICS_TTL:
+        return cached
+
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Postgres no disponible"})
+    try:
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+        data = await repo.get_public_metrics(pool)
+    except Exception as e:
+        print(f"[METRICAS] error: {type(e).__name__}: {e}")
+        # Si tenemos cache antiguo lo devolvemos antes de fallar
+        if cached:
+            return cached
+        return JSONResponse(status_code=503, content={"error": "Error calculando métricas"})
+
+    data["generated_at"] = now.isoformat()
+    _PUBLIC_METRICS_CACHE["data"] = data
+    _PUBLIC_METRICS_CACHE["fetched_at"] = now
+    return data
+
+
+@app.get("/metricas")
+def serve_metricas():
+    """Página pública con gráficas de crecimiento."""
+    metricas_path = FRONTEND_DIR / "metricas.html"
+    if not metricas_path.is_file():
+        return JSONResponse(status_code=404, content={"error": "Página no encontrada"})
+    return FileResponse(metricas_path, headers={"Cache-Control": "public, max-age=300"})
 
 
 # Changelog: HTML lee el JSON y renderiza las entradas en cliente
