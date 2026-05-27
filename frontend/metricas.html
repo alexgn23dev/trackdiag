@@ -8,16 +8,10 @@
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta name="theme-color" content="#F5F1EA">
 
-<!-- Tailwind via CDN (igual que el resto del SPA) -->
 <script src="https://cdn.tailwindcss.com"></script>
-
-<!-- React + Babel para JSX en cliente (consistente con index.html) -->
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
-<!-- Recharts UMD (incluye sus deps internas). Pinning a 2.12.x estable. -->
-<script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
 
 <style>
   :root {
@@ -27,9 +21,9 @@
     --text-soft: #6B7280;
     --text-muted: #9CA3AF;
     --border: rgba(31, 41, 55, 0.08);
-    --accent: #6366F1;   /* analyses */
-    --accent-warm: #F59E0B; /* users */
-    --accent-purple: #8B5CF6;
+    --grid: rgba(31, 41, 55, 0.06);
+    --accent: #6366F1;
+    --accent-warm: #F59E0B;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -39,6 +33,7 @@
       --text-soft: #a1a1aa;
       --text-muted: #71717a;
       --border: rgba(255,255,255,0.06);
+      --grid: rgba(255,255,255,0.05);
     }
   }
   html, body { background: var(--bg); color: var(--text); }
@@ -53,88 +48,107 @@
     border-radius: 20px;
     box-shadow: 0 1px 2px rgba(0,0,0,0.02);
   }
-  .num {
-    font-variant-numeric: tabular-nums;
-    letter-spacing: -0.02em;
-  }
+  .num { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
   .fade-in { animation: fadeIn 0.5s ease-out both; }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  .draw-path {
+    stroke-dasharray: 3000;
+    stroke-dashoffset: 3000;
+    animation: drawPath 1.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+  @keyframes drawPath { to { stroke-dashoffset: 0; } }
   .skeleton {
     background: linear-gradient(90deg, rgba(0,0,0,0.04) 0%, rgba(0,0,0,0.07) 50%, rgba(0,0,0,0.04) 100%);
     background-size: 200% 100%;
     animation: shimmer 1.2s ease-in-out infinite;
     border-radius: 8px;
   }
-  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
   @media (prefers-color-scheme: dark) {
     .skeleton {
       background: linear-gradient(90deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.07) 50%, rgba(255,255,255,0.04) 100%);
     }
   }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
   .header-link { color: var(--text-soft); transition: color 0.15s; }
   .header-link:hover { color: var(--text); }
-  /* Recharts overrides — quitar focus outline feo en tooltips */
-  .recharts-default-tooltip { background: var(--bg-card) !important; border: 1px solid var(--border) !important; border-radius: 10px !important; padding: 10px 12px !important; box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important; }
-  .recharts-tooltip-label { color: var(--text-soft) !important; font-size: 11px !important; font-weight: 500 !important; margin-bottom: 4px !important; }
-  .recharts-tooltip-item { color: var(--text) !important; font-size: 13px !important; }
-  .recharts-cartesian-axis-tick text { fill: var(--text-muted) !important; font-size: 11px !important; }
-  .recharts-legend-item-text { color: var(--text-soft) !important; font-size: 12px !important; }
+  .chart-svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .hover-target { cursor: crosshair; }
 </style>
 </head>
 <body>
-<div id="root"></div>
+<div id="root">
+  <!-- Estado pre-React: si JS falla ves al menos esto -->
+  <div style="text-align:center; padding: 100px 16px; color: var(--text-soft); font-family: inherit;">
+    Cargando métricas…
+  </div>
+</div>
 
 <script type="text/babel">
-const { useState, useEffect, useMemo } = React;
-const {
-  ResponsiveContainer, ComposedChart, Line, Area, XAxis, YAxis,
-  CartesianGrid, Tooltip, Legend,
-  PieChart, Pie, Cell,
-} = Recharts;
+const { useState, useEffect, useMemo, useRef } = React;
 
 // =============================================================================
 // Helpers
 // =============================================================================
-const formatNum = (n) => {
-  if (n == null) return '—';
-  return new Intl.NumberFormat('es-ES').format(n);
-};
-const formatShortDate = (iso) => {
-  const d = new Date(iso + 'T00:00:00Z');
-  return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
-};
-const formatGeneratedAt = (iso) => {
-  if (!iso) return '';
-  return new Date(iso).toLocaleString('es-ES', {
+const formatNum = (n) => n == null ? '—' : new Intl.NumberFormat('es-ES').format(n);
+const parseISODate = (iso) => new Date(iso + 'T00:00:00Z');
+const formatShortDate = (iso) =>
+  parseISODate(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+const formatGeneratedAt = (iso) => !iso ? '' :
+  new Date(iso).toLocaleString('es-ES', {
     day: 'numeric', month: 'long', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
   });
-};
 
-// Paleta para el pie de géneros — armónica con el fondo cálido
 const GENRE_COLORS = [
-  '#8B5CF6', // purple
-  '#6366F1', // indigo
-  '#06B6D4', // cyan
-  '#10B981', // emerald
-  '#F59E0B', // amber
-  '#EF4444', // red
-  '#EC4899', // pink
-  '#F97316', // orange
-  '#84CC16', // lime
-  '#A855F7', // purple-lighter
-  '#0EA5E9', // sky
-  '#6B7280', // gray (resto)
+  '#8B5CF6', '#6366F1', '#06B6D4', '#10B981', '#F59E0B',
+  '#EF4444', '#EC4899', '#F97316', '#84CC16', '#A855F7',
+  '#0EA5E9', '#6B7280',
 ];
 
-// =============================================================================
-// Componentes
-// =============================================================================
+// Suaviza polyline en bezier cubic (Catmull-Rom → bezier)
+function smoothPath(points) {
+  if (points.length < 2) return '';
+  const t = 0.25;
+  let path = `M ${points[0].x},${points[0].y}`;
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i - 1] || points[i];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[i + 2] || p2;
+    const c1x = p1.x + (p2.x - p0.x) * t;
+    const c1y = p1.y + (p2.y - p0.y) * t;
+    const c2x = p2.x - (p3.x - p1.x) * t;
+    const c2y = p2.y - (p3.y - p1.y) * t;
+    path += ` C ${c1x},${c1y} ${c2x},${c2y} ${p2.x},${p2.y}`;
+  }
+  return path;
+}
 
+// Pretty Y-axis ticks
+function niceTicks(min, max, count = 5) {
+  const range = max - min || 1;
+  const rawStep = range / count;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  const norm = rawStep / magnitude;
+  let step;
+  if (norm < 1.5) step = 1 * magnitude;
+  else if (norm < 3) step = 2 * magnitude;
+  else if (norm < 7) step = 5 * magnitude;
+  else step = 10 * magnitude;
+  const niceMin = Math.floor(min / step) * step;
+  const niceMax = Math.ceil(max / step) * step;
+  const ticks = [];
+  for (let v = niceMin; v <= niceMax + step * 0.01; v += step) ticks.push(Math.round(v));
+  return { ticks, min: niceMin, max: niceMax };
+}
+
+// =============================================================================
+// StatCard
+// =============================================================================
 function StatCard({ label, value, sub, loading }) {
   return (
     <div className="card p-6 fade-in">
-      <p className="text-xs uppercase tracking-wider text-gray-500 mb-2" style={{ color: 'var(--text-muted)' }}>{label}</p>
+      <p className="text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>{label}</p>
       {loading ? (
         <div className="skeleton h-10 w-32"></div>
       ) : (
@@ -145,21 +159,65 @@ function StatCard({ label, value, sub, loading }) {
   );
 }
 
+// =============================================================================
+// Growth chart — SVG hand-crafted
+// =============================================================================
 function GrowthChart({ serie, loading }) {
+  const [hoverIdx, setHoverIdx] = useState(null);
+  const svgRef = useRef(null);
+
+  // ViewBox virtual: 800x340 lógico; el SVG escala responsive.
+  const W = 800, H = 340;
+  const padding = { top: 24, right: 56, bottom: 36, left: 56 };
+  const plotW = W - padding.left - padding.right;
+  const plotH = H - padding.top - padding.bottom;
+
   if (loading) {
     return (
-      <div className="card p-6">
-        <div className="mb-4">
-          <div className="skeleton h-5 w-48 mb-2"></div>
-          <div className="skeleton h-3 w-72"></div>
-        </div>
-        <div className="skeleton" style={{ height: 320, borderRadius: 12 }}></div>
+      <div className="card p-6 md:p-8">
+        <div className="skeleton h-5 w-56 mb-2"></div>
+        <div className="skeleton h-3 w-72 mb-6"></div>
+        <div className="skeleton" style={{ height: 340, borderRadius: 12 }}></div>
       </div>
     );
   }
 
   const data = serie || [];
+  if (data.length === 0) {
+    return <div className="card p-6 text-sm" style={{ color: 'var(--text-soft)' }}>Sin datos todavía.</div>;
+  }
+
+  const analisisValues = data.map(d => d.analisis);
+  const usuariosValues = data.map(d => d.usuarios);
+  const aScale = niceTicks(Math.min(...analisisValues), Math.max(...analisisValues), 5);
+  const uScale = niceTicks(Math.min(...usuariosValues), Math.max(...usuariosValues), 5);
+
+  const xAt = (i) => padding.left + (i / Math.max(1, data.length - 1)) * plotW;
+  const yAt = (val, scale) => padding.top + plotH - ((val - scale.min) / (scale.max - scale.min)) * plotH;
+
+  const analisisPts = data.map((d, i) => ({ x: xAt(i), y: yAt(d.analisis, aScale) }));
+  const usuariosPts = data.map((d, i) => ({ x: xAt(i), y: yAt(d.usuarios, uScale) }));
+
+  const analisisPath = smoothPath(analisisPts);
+  const usuariosPath = smoothPath(usuariosPts);
+  const areaPath = analisisPath
+    ? `${analisisPath} L ${analisisPts[analisisPts.length - 1].x},${padding.top + plotH} L ${analisisPts[0].x},${padding.top + plotH} Z`
+    : '';
+
+  // Decide qué fechas mostrar en eje X (cada ~5 días para no saturar)
   const tickInterval = Math.max(1, Math.floor(data.length / 6));
+  const xTicks = data
+    .map((d, i) => ({ i, date: d.date }))
+    .filter((t) => t.i % tickInterval === 0 || t.i === data.length - 1);
+
+  // Hover: mapeo de coord X de mouse → índice
+  const handleMouseMove = (e) => {
+    if (!svgRef.current) return;
+    const rect = svgRef.current.getBoundingClientRect();
+    const xRel = (e.clientX - rect.left) / rect.width * W;
+    const idx = Math.round((xRel - padding.left) / plotW * (data.length - 1));
+    setHoverIdx(Math.max(0, Math.min(data.length - 1, idx)));
+  };
 
   return (
     <div className="card p-6 md:p-8 fade-in">
@@ -170,88 +228,161 @@ function GrowthChart({ serie, loading }) {
             Análisis acumulados (eje izquierdo) y usuarios registrados (eje derecho).
           </p>
         </div>
+        <div className="flex items-center gap-4 text-xs" style={{ color: 'var(--text-soft)' }}>
+          <span className="flex items-center gap-2">
+            <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: 'var(--accent)' }}></span>
+            Análisis
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: 'var(--accent-warm)' }}></span>
+            Usuarios
+          </span>
+        </div>
       </div>
 
-      <div style={{ width: '100%', height: 340 }}>
-        <ResponsiveContainer>
-          <ComposedChart data={data} margin={{ top: 10, right: 16, left: -8, bottom: 0 }}>
-            <defs>
-              <linearGradient id="analisisFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.18} />
-                <stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
-            <XAxis
-              dataKey="date"
-              tickFormatter={formatShortDate}
-              interval={tickInterval}
-              tickLine={false}
-              axisLine={false}
-              dy={8}
-            />
-            <YAxis
-              yAxisId="left"
-              orientation="left"
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={(v) => formatNum(v)}
-              dx={-4}
-            />
-            <YAxis
-              yAxisId="right"
-              orientation="right"
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={(v) => formatNum(v)}
-              dx={4}
-            />
-            <Tooltip
-              labelFormatter={formatShortDate}
-              formatter={(value, name) => [formatNum(value), name]}
-              cursor={{ stroke: 'var(--border)', strokeWidth: 1 }}
-            />
-            <Legend
-              verticalAlign="top"
-              align="right"
-              iconType="circle"
-              iconSize={8}
-              wrapperStyle={{ paddingBottom: 12 }}
-            />
-            <Area
-              yAxisId="left"
-              type="monotone"
-              dataKey="analisis"
-              name="Análisis"
-              stroke="var(--accent)"
-              strokeWidth={2.5}
-              fill="url(#analisisFill)"
-              activeDot={{ r: 5, strokeWidth: 0 }}
-              animationDuration={900}
-            />
-            <Line
-              yAxisId="right"
-              type="monotone"
-              dataKey="usuarios"
-              name="Usuarios"
-              stroke="var(--accent-warm)"
-              strokeWidth={2.5}
-              dot={false}
-              activeDot={{ r: 5, strokeWidth: 0 }}
-              animationDuration={1000}
-            />
-          </ComposedChart>
-        </ResponsiveContainer>
+      <div style={{ position: 'relative' }}>
+        <svg
+          ref={svgRef}
+          className="chart-svg hover-target"
+          viewBox={`0 0 ${W} ${H}`}
+          preserveAspectRatio="none"
+          onMouseMove={handleMouseMove}
+          onMouseLeave={() => setHoverIdx(null)}
+        >
+          <defs>
+            <linearGradient id="analisisFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.22" />
+              <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+
+          {/* Grid horizontal */}
+          {aScale.ticks.map((t, i) => {
+            const y = yAt(t, aScale);
+            return (
+              <g key={i}>
+                <line x1={padding.left} y1={y} x2={W - padding.right} y2={y}
+                      stroke="var(--grid)" strokeWidth="1" strokeDasharray="3 3" />
+                <text x={padding.left - 10} y={y + 4} textAnchor="end"
+                      fontSize="11" fill="var(--text-muted)">{formatNum(t)}</text>
+              </g>
+            );
+          })}
+
+          {/* Eje derecho (usuarios) — solo etiquetas */}
+          {uScale.ticks.map((t, i) => {
+            const y = yAt(t, uScale);
+            return (
+              <text key={i} x={W - padding.right + 10} y={y + 4}
+                    fontSize="11" fill="var(--text-muted)">{formatNum(t)}</text>
+            );
+          })}
+
+          {/* Eje X — fechas */}
+          {xTicks.map(({ i, date }) => (
+            <text key={i} x={xAt(i)} y={H - padding.bottom + 22} textAnchor="middle"
+                  fontSize="11" fill="var(--text-muted)">{formatShortDate(date)}</text>
+          ))}
+
+          {/* Área bajo análisis */}
+          {areaPath && <path d={areaPath} fill="url(#analisisFill)" />}
+
+          {/* Línea análisis */}
+          <path
+            className="draw-path"
+            d={analisisPath}
+            stroke="var(--accent)"
+            strokeWidth="2.5"
+            fill="none"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+
+          {/* Línea usuarios */}
+          <path
+            className="draw-path"
+            style={{ animationDelay: '0.15s' }}
+            d={usuariosPath}
+            stroke="var(--accent-warm)"
+            strokeWidth="2.5"
+            fill="none"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+
+          {/* Hover line + puntos */}
+          {hoverIdx !== null && (
+            <g>
+              <line
+                x1={xAt(hoverIdx)} y1={padding.top}
+                x2={xAt(hoverIdx)} y2={H - padding.bottom}
+                stroke="var(--border)" strokeWidth="1" strokeDasharray="3 3"
+              />
+              <circle cx={analisisPts[hoverIdx].x} cy={analisisPts[hoverIdx].y}
+                      r="5" fill="var(--accent)" stroke="var(--bg-card)" strokeWidth="2" />
+              <circle cx={usuariosPts[hoverIdx].x} cy={usuariosPts[hoverIdx].y}
+                      r="5" fill="var(--accent-warm)" stroke="var(--bg-card)" strokeWidth="2" />
+            </g>
+          )}
+        </svg>
+
+        {/* Tooltip flotante */}
+        {hoverIdx !== null && (() => {
+          const point = data[hoverIdx];
+          const xPct = ((analisisPts[hoverIdx].x) / W) * 100;
+          const isLeft = xPct < 50;
+          return (
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                [isLeft ? 'left' : 'right']: `${isLeft ? xPct + 2 : 100 - xPct + 2}%`,
+                background: 'var(--bg-card)',
+                border: '1px solid var(--border)',
+                borderRadius: 10,
+                padding: '10px 14px',
+                boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
+                pointerEvents: 'none',
+                fontSize: 12,
+                minWidth: 140,
+              }}
+            >
+              <div style={{ color: 'var(--text-muted)', fontSize: 11, marginBottom: 6 }}>
+                {formatShortDate(point.date)}
+              </div>
+              <div className="flex items-center justify-between gap-3" style={{ color: 'var(--text)' }}>
+                <span className="flex items-center gap-1.5">
+                  <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)' }}></span>
+                  Análisis
+                </span>
+                <span className="num font-medium">{formatNum(point.analisis)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3 mt-1" style={{ color: 'var(--text)' }}>
+                <span className="flex items-center gap-1.5">
+                  <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'var(--accent-warm)' }}></span>
+                  Usuarios
+                </span>
+                <span className="num font-medium">{formatNum(point.usuarios)}</span>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
 }
 
+// =============================================================================
+// Pie chart — SVG hand-crafted
+// =============================================================================
 function GenresPie({ generos, loading }) {
+  const [hoverIdx, setHoverIdx] = useState(null);
+
   if (loading) {
     return (
-      <div className="card p-6">
-        <div className="skeleton h-5 w-44 mb-4"></div>
+      <div className="card p-6 md:p-8">
+        <div className="skeleton h-5 w-44 mb-2"></div>
+        <div className="skeleton h-3 w-72 mb-6"></div>
         <div className="skeleton" style={{ height: 280, borderRadius: 12 }}></div>
       </div>
     );
@@ -259,6 +390,41 @@ function GenresPie({ generos, loading }) {
 
   const data = (generos || []).slice(0, 10);
   const total = data.reduce((acc, g) => acc + g.n, 0);
+  if (total === 0) {
+    return <div className="card p-6 text-sm" style={{ color: 'var(--text-soft)' }}>Sin géneros registrados todavía.</div>;
+  }
+
+  // Polar → cartesian helper
+  const arcPath = (cx, cy, rInner, rOuter, startAngle, endAngle) => {
+    // Ángulos en radianes desde el norte (12h), CW
+    const x1 = cx + rOuter * Math.sin(startAngle);
+    const y1 = cy - rOuter * Math.cos(startAngle);
+    const x2 = cx + rOuter * Math.sin(endAngle);
+    const y2 = cy - rOuter * Math.cos(endAngle);
+    const x3 = cx + rInner * Math.sin(endAngle);
+    const y3 = cy - rInner * Math.cos(endAngle);
+    const x4 = cx + rInner * Math.sin(startAngle);
+    const y4 = cy - rInner * Math.cos(startAngle);
+    const largeArc = (endAngle - startAngle) > Math.PI ? 1 : 0;
+    return [
+      `M ${x1},${y1}`,
+      `A ${rOuter},${rOuter} 0 ${largeArc} 1 ${x2},${y2}`,
+      `L ${x3},${y3}`,
+      `A ${rInner},${rInner} 0 ${largeArc} 0 ${x4},${y4}`,
+      'Z',
+    ].join(' ');
+  };
+
+  const CX = 100, CY = 100;
+  const R_OUT = 90, R_IN = 48;
+
+  let acc = 0;
+  const slices = data.map((g, i) => {
+    const start = (acc / total) * 2 * Math.PI;
+    acc += g.n;
+    const end = (acc / total) * 2 * Math.PI;
+    return { ...g, start, end, idx: i, color: GENRE_COLORS[i % GENRE_COLORS.length] };
+  });
 
   return (
     <div className="card p-6 md:p-8 fade-in">
@@ -268,42 +434,50 @@ function GenresPie({ generos, loading }) {
       </p>
 
       <div className="grid grid-cols-1 md:grid-cols-5 gap-6 items-center">
-        {/* Pie */}
-        <div className="md:col-span-2" style={{ height: 240 }}>
-          <ResponsiveContainer>
-            <PieChart>
-              <Pie
-                data={data}
-                dataKey="n"
-                nameKey="genero"
-                cx="50%"
-                cy="50%"
-                innerRadius={48}
-                outerRadius={92}
-                paddingAngle={2}
-                animationDuration={900}
-              >
-                {data.map((_, i) => (
-                  <Cell key={i} fill={GENRE_COLORS[i % GENRE_COLORS.length]} stroke="var(--bg-card)" strokeWidth={2} />
-                ))}
-              </Pie>
-              <Tooltip
-                formatter={(value, name) => [`${formatNum(value)} análisis`, name]}
-                cursor={false}
-              />
-            </PieChart>
-          </ResponsiveContainer>
+        {/* SVG donut */}
+        <div className="md:col-span-2 flex justify-center">
+          <svg viewBox="0 0 200 200" style={{ width: 220, height: 220, overflow: 'visible' }}>
+            {slices.map((s, i) => {
+              const hovered = hoverIdx === i;
+              return (
+                <path
+                  key={i}
+                  d={arcPath(CX, CY, R_IN, hovered ? R_OUT + 4 : R_OUT, s.start, s.end)}
+                  fill={s.color}
+                  stroke="var(--bg-card)"
+                  strokeWidth="2"
+                  style={{ transition: 'd 0.15s', cursor: 'pointer' }}
+                  onMouseEnter={() => setHoverIdx(i)}
+                  onMouseLeave={() => setHoverIdx(null)}
+                >
+                  <title>{`${s.genero}: ${formatNum(s.n)} (${(s.n / total * 100).toFixed(1)}%)`}</title>
+                </path>
+              );
+            })}
+          </svg>
         </div>
 
-        {/* Leyenda detallada */}
+        {/* Leyenda */}
         <div className="md:col-span-3 space-y-2">
-          {data.map((g, i) => {
-            const pct = total > 0 ? (g.n / total) * 100 : 0;
+          {slices.map((g, i) => {
+            const pct = (g.n / total) * 100;
+            const hovered = hoverIdx === i;
             return (
-              <div key={g.genero} className="flex items-center gap-3 text-sm">
+              <div
+                key={g.genero + i}
+                className="flex items-center gap-3 text-sm rounded-md"
+                style={{
+                  background: hovered ? 'var(--grid)' : 'transparent',
+                  padding: '4px 6px',
+                  cursor: 'pointer',
+                  transition: 'background 0.15s',
+                }}
+                onMouseEnter={() => setHoverIdx(i)}
+                onMouseLeave={() => setHoverIdx(null)}
+              >
                 <span
                   className="flex-shrink-0 rounded-full"
-                  style={{ width: 10, height: 10, background: GENRE_COLORS[i % GENRE_COLORS.length] }}
+                  style={{ width: 10, height: 10, background: g.color }}
                 />
                 <span className="flex-1 truncate" style={{ color: 'var(--text)' }}>{g.genero || '—'}</span>
                 <span className="num text-sm" style={{ color: 'var(--text-soft)' }}>{formatNum(g.n)}</span>
@@ -329,7 +503,7 @@ function App() {
     fetch('/api/metricas/public')
       .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
       .then(d => { if (!cancelled) setData(d); })
-      .catch(e => { if (!cancelled) setError(String(e)); });
+      .catch(e => { if (!cancelled) setError(String(e?.message || e)); });
     return () => { cancelled = true; };
   }, []);
 
@@ -337,18 +511,14 @@ function App() {
 
   return (
     <div className="max-w-6xl mx-auto px-5 md:px-8 py-10 md:py-16">
-      {/* Header */}
       <header className="mb-10 md:mb-14 flex items-end justify-between gap-4 flex-wrap">
         <div>
-          <p className="text-xs uppercase tracking-[0.18em] mb-3" style={{ color: 'var(--text-muted)' }}>
-            Open metrics
-          </p>
+          <p className="text-xs uppercase tracking-[0.18em] mb-3" style={{ color: 'var(--text-muted)' }}>Open metrics</p>
           <h1 className="text-3xl md:text-4xl font-semibold tracking-tight" style={{ color: 'var(--text)' }}>
             La comunidad de Mentotrack en números
           </h1>
           <p className="mt-3 text-sm md:text-base max-w-2xl" style={{ color: 'var(--text-soft)' }}>
-            Estadísticas abiertas y actualizadas diariamente.
-            Cuántos productores la usan, cuántos tracks pasan por el motor cada día,
+            Estadísticas abiertas y actualizadas. Cuántos productores la usan, cuántos tracks pasan por el motor cada día,
             y en qué géneros se mueve la comunidad.
           </p>
         </div>
@@ -357,46 +527,26 @@ function App() {
         </div>
       </header>
 
-      {/* Error */}
       {error && (
         <div className="card p-6 mb-10 text-sm" style={{ color: '#ef4444' }}>
           No se pudieron cargar las métricas: {error}
         </div>
       )}
 
-      {/* Stat cards */}
       <section className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-5 mb-8 md:mb-10">
-        <StatCard
-          label="Análisis hechos"
-          value={data?.totales?.analisis}
-          sub="Diagnósticos generados desde el inicio"
-          loading={loading}
-        />
-        <StatCard
-          label="Productores registrados"
-          value={data?.totales?.usuarios}
-          sub="Cuentas activas con al menos un acceso"
-          loading={loading}
-        />
-        <StatCard
-          label="Proyectos creados"
-          value={data?.totales?.proyectos}
-          sub="Carpetas con versiones del mismo track"
-          loading={loading}
-        />
+        <StatCard label="Análisis hechos" value={data?.totales?.analisis} sub="Diagnósticos generados desde el inicio" loading={loading} />
+        <StatCard label="Productores registrados" value={data?.totales?.usuarios} sub="Cuentas activas con al menos un acceso" loading={loading} />
+        <StatCard label="Proyectos creados" value={data?.totales?.proyectos} sub="Carpetas con versiones del mismo track" loading={loading} />
       </section>
 
-      {/* Growth chart */}
       <section className="mb-8 md:mb-10">
         <GrowthChart serie={data?.serie_30d} loading={loading} />
       </section>
 
-      {/* Genres pie */}
       <section className="mb-12">
         <GenresPie generos={data?.generos_top} loading={loading} />
       </section>
 
-      {/* Footer */}
       <footer className="text-center text-xs space-y-1" style={{ color: 'var(--text-muted)' }}>
         {data?.generated_at && (
           <p>Datos generados el {formatGeneratedAt(data.generated_at)} · Se actualizan cada 6 horas</p>
@@ -411,7 +561,13 @@ function App() {
   );
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+try {
+  const root = ReactDOM.createRoot(document.getElementById('root'));
+  root.render(<App />);
+} catch (e) {
+  document.getElementById('root').innerHTML =
+    '<div style="text-align:center;padding:60px 16px;color:#ef4444;">Error cargando: ' + String(e) + '</div>';
+}
 </script>
 </body>
 </html>
