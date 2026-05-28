@@ -5,9 +5,10 @@
       "date": "2026-05-28",
       "title": "Sesión 1:1 con Alex — primera vía de monetización",
       "changes": [
-        "Nueva página /consultoria con la propuesta de sesión 1:1 por Zoom (200 € / 60 min): Alex abre tu track en su DAW, identifica los problemas y los arregla en directo mientras explica cada decisión. El productor se lleva la grabación de la sesión + resumen de técnicas para aplicar en próximos tracks.",
+        "Nueva página /consultoria con la propuesta de sesión 1:1 por Zoom (250 € / 60 min): Alex abre tu track en su DAW, identifica los problemas y los arregla en directo mientras explica cada decisión. El productor se lleva la grabación de la sesión + resumen de técnicas para aplicar en próximos tracks.",
+        "Formulario de admisión obligatorio antes de la reserva (nombre, email, enlace del track, canción / artistas / sellos de referencia). Si Alex acepta la solicitud, se pasa al calendario de Cal.com con prefill; si la declina, reembolso íntegro. Notificación automática a Alex por email con todos los datos vía Resend.",
         "Card CTA discreta en la pantalla del diagnóstico, justo debajo del widget de feedback, dirigiendo a /consultoria. Punto de máxima conversión: el usuario acaba de ver qué le pasa al track.",
-        "Embed de Cal.com preparado en consultoria.html (oculto detrás de placeholder con email de contacto hasta que se rellene CAL_LINK en una sola línea de JS). Pago previo de 200 € se gestiona desde Cal.com vía Stripe."
+        "Embed de Cal.com preparado en consultoria.html (oculto detrás de placeholder con email de contacto hasta que se rellene CAL_LINK en una sola línea de JS). Pago previo de 250 € se gestiona desde Cal.com vía Stripe."
       ]
     },
     {

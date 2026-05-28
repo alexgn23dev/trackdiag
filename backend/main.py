@@ -474,6 +474,55 @@ async def guardar_feedback_request(request: Request, data: dict):
     return {"ok": True}
 
 
+# Log persistente de solicitudes de sesión 1:1 (consultoría). Apéndice
+# rápido para tener historial sin tocar Postgres todavía. Si vemos volumen
+# real, se migra a tabla con admin dashboard.
+CONSULTORIA_REQUESTS_FILE = Path(__file__).resolve().parent / "data" / "consultoria_requests.jsonl"
+
+
+@app.post("/api/consultoria/solicitud")
+@limiter.limit("5/minute")
+async def solicitud_consultoria(request: Request, data: dict):
+    """Recibe la solicitud del formulario de la sesión 1:1, manda email a
+    Alex con todos los datos y registra la entrada en jsonl local. No
+    requiere auth — la página /consultoria es pública."""
+    nombre = _sanitize(data.get("nombre", ""), 100)
+    email = _sanitize(data.get("email", ""), 150).lower()
+    soundcloud = _sanitize(data.get("soundcloud", ""), 500)
+
+    if len(nombre) < 2:
+        return JSONResponse(status_code=400, content={"error": "Indica tu nombre."})
+    if "@" not in email or "." not in email.split("@")[-1]:
+        return JSONResponse(status_code=400, content={"error": "El correo no parece válido."})
+    if not (soundcloud.startswith("http://") or soundcloud.startswith("https://")):
+        return JSONResponse(status_code=400, content={"error": "El enlace de tu track debe empezar por http:// o https://."})
+
+    entry = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "nombre": nombre,
+        "email": email,
+        "soundcloud": soundcloud,
+        "ref_cancion": _sanitize(data.get("ref_cancion", ""), 300),
+        "ref_artistas": _sanitize(data.get("ref_artistas", ""), 200),
+        "ref_sellos": _sanitize(data.get("ref_sellos", ""), 200),
+        "contexto": _sanitize(data.get("contexto", ""), 800),
+    }
+
+    # Best-effort: guardar la solicitud localmente para historial
+    try:
+        CONSULTORIA_REQUESTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(CONSULTORIA_REQUESTS_FILE, "a") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception as e:
+        print(f"[CONSULTORIA] no se pudo persistir en jsonl: {e}")
+
+    # Email a Alex con los datos. Si falla, igualmente devolvemos OK al
+    # usuario — Alex puede recuperar del jsonl. Pero logueamos.
+    _enviar_email_solicitud_consultoria(entry)
+
+    return {"ok": True}
+
+
 # Caché en memoria de IP → código de país ISO-2. Persiste hasta que el
 # contenedor reinicia. Soporta valores None para no martillear ipapi.co
 # ante IPs que ya fallaron una vez.
@@ -762,6 +811,10 @@ def _verify_password(password: str, hashed: str) -> bool:
 # -------------------------------------------------------------------------
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 RESEND_FROM = os.environ.get("RESEND_FROM", "Mentotrack <noreply@mentotrack.com>")
+# Destinatario interno (Alex) para notificaciones operativas: solicitudes
+# de consultoría, casos edge, etc. Si está vacío, las notificaciones fallan
+# en silencio (se loguean) — no afecta al usuario.
+ADMIN_NOTIFY_EMAIL = os.environ.get("ADMIN_NOTIFY_EMAIL", "alexgn23@gmail.com")
 # Base URL del frontend para construir el link de reset. En local apunta a 8000
 # (donde corre uvicorn), en prod a https://www.mentotrack.com.
 APP_BASE_URL = os.environ.get("APP_BASE_URL", "https://www.mentotrack.com")
@@ -831,6 +884,84 @@ def _enviar_email_reset_password(email: str, token: str) -> bool:
         return True
     except Exception as e:
         print(f"[RESET] Resend falló: {type(e).__name__}: {e}")
+        return False
+
+
+def _enviar_email_solicitud_consultoria(datos: dict) -> bool:
+    """Envía a ADMIN_NOTIFY_EMAIL los datos de la solicitud de sesión 1:1.
+    Lo manda con reply-to al email del usuario para que Alex pueda
+    contestar directamente sin copiar el correo. Si Resend no está
+    disponible, lo logueamos y devolvemos False."""
+    if not _resend_disponible():
+        print("[CONSULTORIA] Resend no disponible — solicitud no enviada por email")
+        return False
+    try:
+        import resend
+        resend.api_key = RESEND_API_KEY
+
+        def _row(label: str, value: str) -> str:
+            if not value:
+                value = "<em style='color:#9ca3af;'>(no indicado)</em>"
+            else:
+                # Escape básico
+                value = (value.replace('&', '&amp;')
+                              .replace('<', '&lt;').replace('>', '&gt;'))
+            return (
+                f"<tr><td style='padding:8px 12px;color:#71717a;font-size:13px;"
+                f"vertical-align:top;width:130px;'>{label}</td>"
+                f"<td style='padding:8px 12px;color:#1f2937;font-size:14px;'>{value}</td></tr>"
+            )
+
+        rows_html = "".join([
+            _row("Nombre", datos.get("nombre", "")),
+            _row("Email", datos.get("email", "")),
+            _row("Track", datos.get("soundcloud", "")),
+            _row("Canción ref.", datos.get("ref_cancion", "")),
+            _row("Artistas ref.", datos.get("ref_artistas", "")),
+            _row("Sellos ref.", datos.get("ref_sellos", "")),
+            _row("Contexto", datos.get("contexto", "")),
+        ])
+
+        html = f"""<!DOCTYPE html>
+<html><body style="font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;background:#f5f1ea;padding:32px 16px;margin:0;">
+  <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;padding:24px;">
+    <p style="color:#9ca3af;font-size:12px;text-transform:uppercase;letter-spacing:0.08em;margin:0 0 8px;">Sesión 1:1 · Solicitud nueva</p>
+    <h1 style="color:#1f2937;font-size:18px;font-weight:600;margin:0 0 18px;">Nueva solicitud de {datos.get("nombre", "(sin nombre)")}</h1>
+    <table style="border-collapse:collapse;width:100%;">
+      <tbody>{rows_html}</tbody>
+    </table>
+    <p style="color:#9ca3af;font-size:12px;margin:18px 0 0;">
+      Responde directamente a este email para contactar con quien lo envió.
+    </p>
+  </div>
+</body></html>"""
+
+        text = (
+            f"Nueva solicitud de sesión 1:1\n\n"
+            f"Nombre: {datos.get('nombre', '')}\n"
+            f"Email: {datos.get('email', '')}\n"
+            f"Track: {datos.get('soundcloud', '')}\n"
+            f"Canción ref.: {datos.get('ref_cancion', '') or '(no indicado)'}\n"
+            f"Artistas ref.: {datos.get('ref_artistas', '') or '(no indicado)'}\n"
+            f"Sellos ref.: {datos.get('ref_sellos', '') or '(no indicado)'}\n\n"
+            f"Contexto:\n{datos.get('contexto', '') or '(no indicado)'}\n"
+        )
+
+        params = {
+            "from": RESEND_FROM,
+            "to": ADMIN_NOTIFY_EMAIL,
+            "subject": f"Sesión 1:1 — Solicitud de {datos.get('nombre', '(sin nombre)')}",
+            "html": html,
+            "text": text,
+        }
+        # Reply-to al email del usuario para que Alex pueda contestar al hilo
+        user_email = (datos.get("email") or "").strip()
+        if user_email:
+            params["reply_to"] = user_email
+        resend.Emails.send(params)
+        return True
+    except Exception as e:
+        print(f"[CONSULTORIA] Resend falló: {type(e).__name__}: {e}")
         return False
 
 

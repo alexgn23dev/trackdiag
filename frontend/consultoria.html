@@ -175,6 +175,54 @@
     padding: 48px 24px;
     text-align: center;
   }
+  /* Form */
+  .field { margin-bottom: 18px; }
+  .field label {
+    display: block;
+    font-size: 13px;
+    color: var(--text-soft);
+    margin-bottom: 6px;
+  }
+  .field .required { color: var(--accent); margin-left: 2px; }
+  .field input, .field textarea {
+    width: 100%;
+    background: var(--bg-card-alt);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    color: var(--text);
+    font-size: 14px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.15s;
+    -webkit-appearance: none;
+  }
+  .field input:focus, .field textarea:focus { border-color: var(--accent); }
+  .field textarea { resize: vertical; min-height: 64px; }
+  .field-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 6px;
+    line-height: 1.45;
+  }
+  .form-error {
+    color: var(--red);
+    font-size: 13px;
+    background: rgba(248,113,113,0.06);
+    border-left: 3px solid var(--red);
+    padding: 10px 12px;
+    border-radius: 6px;
+    margin-bottom: 14px;
+    display: none;
+  }
+  .form-ok {
+    background: rgba(74,222,128,0.06);
+    border: 1px solid rgba(74,222,128,0.25);
+    color: var(--text);
+    padding: 18px;
+    border-radius: 12px;
+    margin-bottom: 16px;
+  }
 </style>
 </head>
 <body>
@@ -190,7 +238,7 @@
 
   <!-- HERO -->
   <header style="margin-bottom:48px;">
-    <span class="price-tag">Sesión 1:1 · <span class="amount">200&nbsp;€</span> · 60&nbsp;min</span>
+    <span class="price-tag">Sesión 1:1 · <span class="amount">250&nbsp;€</span> · 60&nbsp;min</span>
     <h1 class="hero-h1">¿La mejoramos juntos?</h1>
     <p class="hero-sub">
       Envíame tu proyecto, vemos qué le falta y lo arreglo contigo en directo desde Zoom.
@@ -198,7 +246,7 @@
       cada cosa — para que la próxima vez te ahorres pasar por los mismos errores.
     </p>
     <div style="margin-top:24px;display:flex;gap:12px;flex-wrap:wrap;">
-      <a href="#agenda" class="btn-primary">Reservar sesión →</a>
+      <a href="#formulario" class="btn-primary">Empezar solicitud →</a>
       <a href="#como-va" class="btn-ghost" style="padding:14px 12px;">Cómo funciona</a>
     </div>
   </header>
@@ -270,24 +318,92 @@
     </div>
   </section>
 
-  <!-- AGENDA / CAL.COM -->
-  <section id="agenda" style="margin-bottom:48px;">
-    <h2 class="section-h2">Reserva tu sesión</h2>
+  <!-- FORMULARIO DE ADMISIÓN -->
+  <section id="formulario" style="margin-bottom:48px;">
+    <h2 class="section-h2">Solicita tu sesión</h2>
     <p style="color:var(--text-soft);font-size:14px;margin-top:-8px;margin-bottom:20px;">
-      Pago previo de 200&nbsp;€ al reservar (Stripe). Cancelación gratuita con 48&nbsp;h
-      de antelación; tras eso no se reembolsa salvo emergencia.
+      Cuéntame quién eres y qué estás produciendo. Revisaré tu solicitud
+      personalmente. Si veo que puedo ayudarte, pasamos a reservar la cita
+      (pago previo de 250&nbsp;€). Si no, te devuelvo el dinero íntegro.
     </p>
 
-    <div class="cal-embed" id="cal-container">
-      <!-- Cal.com embed se inyecta aquí cuando esté configurado.
-           Mientras tanto, placeholder visible: -->
-      <div class="cal-placeholder">
-        <p style="color:var(--text-soft);font-size:14px;margin:0 0 16px;">
-          Estoy terminando de configurar la agenda. Si quieres reservar ya,
-          escríbeme directamente:
+    <div class="card" style="padding:24px 22px;">
+      <div class="form-error" id="form-error"></div>
+
+      <!-- Vista 1: formulario -->
+      <form id="solicitud-form" autocomplete="on" noValidate>
+        <div class="field">
+          <label for="f-nombre">Nombre <span class="required">*</span></label>
+          <input id="f-nombre" name="nombre" type="text" required maxlength="80" placeholder="Tu nombre o nombre artístico" />
+        </div>
+
+        <div class="field">
+          <label for="f-email">Correo electrónico <span class="required">*</span></label>
+          <input id="f-email" name="email" type="email" required maxlength="120" placeholder="tu@email.com" />
+        </div>
+
+        <div class="field">
+          <label for="f-soundcloud">Enlace de SoundCloud (o Dropbox / Drive con tu track) <span class="required">*</span></label>
+          <input id="f-soundcloud" name="soundcloud" type="url" required maxlength="500" placeholder="https://soundcloud.com/usuario/tu-track" />
+          <p class="field-hint">
+            Si el enlace es privado, ábrelo desde una ventana de incógnito o desde otro
+            navegador para comprobar que se puede oír sin estar logueado en tu cuenta.
+            Si yo no puedo abrirlo, no puedo trabajar tu track.
+          </p>
+        </div>
+
+        <div class="field">
+          <label for="f-ref-cancion">Canción de referencia</label>
+          <input id="f-ref-cancion" name="ref_cancion" type="text" maxlength="300" placeholder="Artista – Título (o enlace a Spotify / YouTube)" />
+          <p class="field-hint">
+            Una canción que te gustaría que se acercase a tu track en sonido, energía o producción.
+          </p>
+        </div>
+
+        <div class="field">
+          <label for="f-ref-artistas">Artistas de referencia</label>
+          <input id="f-ref-artistas" name="ref_artistas" type="text" maxlength="200" placeholder="Ej.: Dennis Cruz, ANOTR, Chris Stussy…" />
+        </div>
+
+        <div class="field">
+          <label for="f-ref-sellos">Sellos de referencia</label>
+          <input id="f-ref-sellos" name="ref_sellos" type="text" maxlength="200" placeholder="Ej.: Solid Grooves, Hot Creations, Cocoon…" />
+        </div>
+
+        <div class="field">
+          <label for="f-contexto">Algo más que deba saber (opcional)</label>
+          <textarea id="f-contexto" name="contexto" maxlength="800" rows="3" placeholder="Qué te bloquea, fase del track, lo que más te preocupa…"></textarea>
+        </div>
+
+        <button type="submit" id="submit-btn" class="btn-primary" style="width:100%;margin-top:8px;">
+          Enviar solicitud y reservar →
+        </button>
+        <p class="field-hint" style="margin-top:10px;text-align:center;">
+          Al enviar pasarás al calendario para escoger fecha y completar el pago.
+          Solo confirmaré la sesión tras revisar tu solicitud.
         </p>
-        <a href="mailto:soporte@producciononline.com?subject=Sesi%C3%B3n%201%3A1%20-%20Reserva"
-           class="btn-primary">soporte@producciononline.com →</a>
+      </form>
+
+      <!-- Vista 2: solicitud enviada, mostrar agenda Cal.com -->
+      <div id="post-submit" style="display:none;">
+        <div class="form-ok">
+          <p style="margin:0 0 6px;font-weight:600;">Solicitud recibida.</p>
+          <p style="margin:0;color:var(--text-soft);font-size:14px;">
+            Te llegará un correo de confirmación. Ahora escoge fecha y completa el pago
+            de 250&nbsp;€ — quedará pendiente de mi aprobación tras revisar tu solicitud.
+          </p>
+        </div>
+
+        <div class="cal-embed" id="cal-container">
+          <div class="cal-placeholder">
+            <p style="color:var(--text-soft);font-size:14px;margin:0 0 16px;">
+              Estoy terminando de configurar la agenda. He recibido tu solicitud
+              correctamente; te escribiré a tu email en breve con el siguiente paso.
+            </p>
+            <a href="mailto:soporte@producciononline.com?subject=Sesi%C3%B3n%201%3A1%20-%20Reserva"
+               class="btn-ghost">soporte@producciononline.com</a>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -374,15 +490,39 @@
 
 <script>
   // ====================================================================
-  // Cal.com embed — inyectar cuando esté configurado
+  // Cal.com — rellenar con tu slug cuando esté configurado
   // ====================================================================
-  // Una vez tengas tu link de cal.com (p.ej. "alexgn23/sesion-1-1"),
-  // cambia la línea CAL_LINK por el slug y el embed sustituye al placeholder.
-  // Si CAL_LINK queda vacío, se muestra el placeholder con el email.
   const CAL_LINK = ""; // ← rellenar con "alexgn23/sesion-1-1" cuando esté listo
 
-  if (CAL_LINK) {
-    // Embed inline de cal.com — script oficial
+  // ====================================================================
+  // Formulario de admisión
+  // ====================================================================
+  const form = document.getElementById('solicitud-form');
+  const errBox = document.getElementById('form-error');
+  const submitBtn = document.getElementById('submit-btn');
+  const postSubmit = document.getElementById('post-submit');
+
+  function showError(msg) {
+    errBox.textContent = msg;
+    errBox.style.display = 'block';
+    errBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  function clearError() {
+    errBox.style.display = 'none';
+    errBox.textContent = '';
+  }
+  function isValidUrl(s) {
+    try { const u = new URL(s); return u.protocol === 'http:' || u.protocol === 'https:'; }
+    catch (_) { return false; }
+  }
+
+  function mountCalcom(prefillName, prefillEmail) {
+    const container = document.getElementById('cal-container');
+    if (!container) return;
+    if (!CAL_LINK) return; // sin link configurado, mantén el placeholder
+
+    container.innerHTML = '';
+
     (function (C, A, L) {
       let p = function (a, ar) { a.q.push(ar); };
       let d = C.document;
@@ -415,6 +555,10 @@
       elementOrSelector: "#cal-container",
       calLink: CAL_LINK,
       layout: "month_view",
+      config: {
+        name: prefillName || '',
+        email: prefillEmail || '',
+      },
     });
     Cal.ns["sesion-1-1"]("ui", {
       theme: "dark",
@@ -426,6 +570,55 @@
       layout: "month_view",
     });
   }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    clearError();
+
+    const data = {
+      nombre: document.getElementById('f-nombre').value.trim(),
+      email: document.getElementById('f-email').value.trim(),
+      soundcloud: document.getElementById('f-soundcloud').value.trim(),
+      ref_cancion: document.getElementById('f-ref-cancion').value.trim(),
+      ref_artistas: document.getElementById('f-ref-artistas').value.trim(),
+      ref_sellos: document.getElementById('f-ref-sellos').value.trim(),
+      contexto: document.getElementById('f-contexto').value.trim(),
+    };
+
+    if (data.nombre.length < 2) return showError('Indica tu nombre.');
+    if (!data.email.includes('@')) return showError('El correo no parece válido.');
+    if (!isValidUrl(data.soundcloud)) {
+      return showError('El enlace de tu track no es una URL válida (debe empezar por https://).');
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Enviando…';
+
+    try {
+      const resp = await fetch('/api/consultoria/solicitud', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        showError(json.error || `Error ${resp.status}. Vuelve a intentarlo o escribe a soporte@producciononline.com.`);
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Enviar solicitud y reservar →';
+        return;
+      }
+
+      // Mostrar bloque post-submit con la agenda
+      form.style.display = 'none';
+      postSubmit.style.display = 'block';
+      mountCalcom(data.nombre, data.email);
+      postSubmit.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (e) {
+      showError('No se pudo enviar. Comprueba tu conexión y vuelve a intentarlo.');
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Enviar solicitud y reservar →';
+    }
+  });
 </script>
 
 </body>
