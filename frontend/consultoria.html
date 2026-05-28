@@ -163,18 +163,6 @@
   .nav a:hover { color: var(--text); }
   .logo { font-weight: 600; color: var(--text); }
   .logo .dot { color: var(--accent); }
-  /* Cal.com embed */
-  .cal-embed {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    overflow: hidden;
-    min-height: 480px;
-  }
-  .cal-placeholder {
-    padding: 48px 24px;
-    text-align: center;
-  }
   /* Form */
   .field { margin-bottom: 18px; }
   .field label {
@@ -323,7 +311,7 @@
     <h2 class="section-h2">Quién soy</h2>
     <div class="card" style="padding:24px;display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start;">
       <img
-        src="/alex.jpg"
+        src="alex.jpg"
         alt="Alex González — fundador de Producción Online"
         loading="lazy"
         style="width:140px;height:140px;border-radius:14px;object-fit:cover;flex-shrink:0;border:1px solid var(--border);"
@@ -413,26 +401,25 @@
         </p>
       </form>
 
-      <!-- Vista 2: solicitud enviada, mostrar agenda Cal.com -->
+      <!-- Vista 2: solicitud enviada → llevar al pago en Stripe -->
       <div id="post-submit" style="display:none;">
         <div class="form-ok">
-          <p style="margin:0 0 6px;font-weight:600;">Solicitud recibida.</p>
+          <p style="margin:0 0 6px;font-weight:600;">Solicitud recibida ✓</p>
           <p style="margin:0;color:var(--text-soft);font-size:14px;">
-            Te llegará un correo de confirmación. Ahora escoge fecha y completa el pago
-            de 250&nbsp;€ — quedará pendiente de mi aprobación tras revisar tu solicitud.
+            Ahora completa el pago de 250&nbsp;€ para confirmar tu plaza. Tu solicitud
+            quedará pendiente de mi revisión. Si veo que no puedo ayudarte, te
+            devuelvo el dinero íntegro.
           </p>
         </div>
-
-        <div class="cal-embed" id="cal-container">
-          <div class="cal-placeholder">
-            <p style="color:var(--text-soft);font-size:14px;margin:0 0 16px;">
-              Estoy terminando de configurar la agenda. He recibido tu solicitud
-              correctamente; te escribiré a tu email en breve con el siguiente paso.
-            </p>
-            <a href="mailto:soporte@producciononline.com?subject=Sesi%C3%B3n%201%3A1%20-%20Reserva"
-               class="btn-ghost">soporte@producciononline.com</a>
-          </div>
-        </div>
+        <a id="stripe-link"
+           href="https://buy.stripe.com/dRm7sKcqhf8p9Pr9rQdAk01"
+           class="btn-primary"
+           style="width:100%;justify-content:center;">
+          Continuar al pago →
+        </a>
+        <p class="field-hint" style="text-align:center;margin-top:10px;">
+          Se abrirá la pasarela segura de Stripe en esta misma ventana.
+        </p>
       </div>
     </div>
   </section>
@@ -519,9 +506,9 @@
 
 <script>
   // ====================================================================
-  // Cal.com — rellenar con tu slug cuando esté configurado
+  // Stripe payment link — pago previo de la sesión 1:1
   // ====================================================================
-  const CAL_LINK = ""; // ← rellenar con "alexgn23/sesion-1-1" cuando esté listo
+  const STRIPE_PAYMENT_LINK = "https://buy.stripe.com/dRm7sKcqhf8p9Pr9rQdAk01";
 
   // ====================================================================
   // Formulario de admisión
@@ -530,6 +517,7 @@
   const errBox = document.getElementById('form-error');
   const submitBtn = document.getElementById('submit-btn');
   const postSubmit = document.getElementById('post-submit');
+  const stripeLink = document.getElementById('stripe-link');
 
   function showError(msg) {
     errBox.textContent = msg;
@@ -543,61 +531,6 @@
   function isValidUrl(s) {
     try { const u = new URL(s); return u.protocol === 'http:' || u.protocol === 'https:'; }
     catch (_) { return false; }
-  }
-
-  function mountCalcom(prefillName, prefillEmail) {
-    const container = document.getElementById('cal-container');
-    if (!container) return;
-    if (!CAL_LINK) return; // sin link configurado, mantén el placeholder
-
-    container.innerHTML = '';
-
-    (function (C, A, L) {
-      let p = function (a, ar) { a.q.push(ar); };
-      let d = C.document;
-      C.Cal = C.Cal || function () {
-        let cal = C.Cal;
-        let ar = arguments;
-        if (!cal.loaded) {
-          cal.ns = {};
-          cal.q = cal.q || [];
-          d.head.appendChild(d.createElement("script")).src = A;
-          cal.loaded = true;
-        }
-        if (ar[0] === L) {
-          const api = function () { p(api, arguments); };
-          const namespace = ar[1];
-          api.q = api.q || [];
-          if (typeof namespace === "string") {
-            cal.ns[namespace] = cal.ns[namespace] || api;
-            p(cal.ns[namespace], ar);
-            p(cal, ["initNamespace", namespace]);
-          } else p(cal, ar);
-          return;
-        }
-        p(cal, ar);
-      };
-    })(window, "https://app.cal.com/embed/embed.js", "init");
-
-    Cal("init", "sesion-1-1", { origin: "https://cal.com" });
-    Cal.ns["sesion-1-1"]("inline", {
-      elementOrSelector: "#cal-container",
-      calLink: CAL_LINK,
-      layout: "month_view",
-      config: {
-        name: prefillName || '',
-        email: prefillEmail || '',
-      },
-    });
-    Cal.ns["sesion-1-1"]("ui", {
-      theme: "dark",
-      cssVarsPerTheme: {
-        light: { "cal-brand": "#8B5CF6" },
-        dark: { "cal-brand": "#8B5CF6" },
-      },
-      hideEventTypeDetails: false,
-      layout: "month_view",
-    });
   }
 
   form.addEventListener('submit', async (e) => {
@@ -637,11 +570,26 @@
         return;
       }
 
-      // Mostrar bloque post-submit con la agenda
+      // Prefill del email en el payment link de Stripe (rellena el campo
+      // del checkout automáticamente). Stripe acepta ?prefilled_email=…
+      try {
+        const url = new URL(STRIPE_PAYMENT_LINK);
+        if (data.email) url.searchParams.set('prefilled_email', data.email);
+        stripeLink.href = url.toString();
+      } catch (_) {
+        // Si la URL no es válida por lo que sea, mantenemos la original.
+      }
+
+      // Mostrar bloque post-submit con el CTA hacia Stripe
       form.style.display = 'none';
       postSubmit.style.display = 'block';
-      mountCalcom(data.nombre, data.email);
       postSubmit.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+      // Redirección automática al pago tras un breve "respira" visual
+      // (1.2 s — suficiente para que el usuario vea la confirmación).
+      setTimeout(() => {
+        window.location.href = stripeLink.href;
+      }, 1200);
     } catch (e) {
       showError('No se pudo enviar. Comprueba tu conexión y vuelve a intentarlo.');
       submitBtn.disabled = false;
