@@ -1436,6 +1436,38 @@
                     )}
                     </div>
 
+                    {/* ===== CTA Sesión 1:1 con Alex (consultoría) ===== */}
+                    <a
+                        href="/consultoria"
+                        target="_blank"
+                        rel="noopener"
+                        onClick={() => trackEvent('cta_consultoria_clicked', { diagnostico: diagId })}
+                        className="block card p-5 mb-6 transition-all"
+                        style={{
+                            background: 'linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(245,158,11,0.05) 100%)',
+                            border: '1px solid rgba(139,92,246,0.25)',
+                            textDecoration: 'none',
+                            cursor: 'pointer',
+                        }}
+                    >
+                        <div className="flex items-start gap-4">
+                            <div className="text-2xl flex-shrink-0" style={{ lineHeight: 1 }}>🎚️</div>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-white text-sm font-semibold mb-1">
+                                    ¿Quieres que lo arreglemos juntos?
+                                </p>
+                                <p className="text-gray-400 text-xs leading-relaxed mb-3">
+                                    Sesión 1:1 conmigo por Zoom · 60&nbsp;min · 200&nbsp;€. Abrimos tu track,
+                                    identificamos qué le falta y lo trabajamos en directo en mi DAW. Te quedas
+                                    con la grabación y un resumen de técnicas para los siguientes.
+                                </p>
+                                <span className="inline-flex items-center gap-1.5 text-purple-400 text-xs font-medium">
+                                    Ver detalles y reservar →
+                                </span>
+                            </div>
+                        </div>
+                    </a>
+
                     {/* Acciones */}
                     <div className="text-center mt-4 mb-4 flex flex-col items-center gap-3">
                         {allTutoriales.length > 0 && (

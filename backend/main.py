@@ -48,7 +48,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.25")
+app = FastAPI(title="Mentotrack API", version="0.5.26")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -199,7 +199,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.25"}
+    return {"status": "ok", "version": "0.5.26"}
 
 
 @app.post("/api/diagnostico")
@@ -2556,6 +2556,18 @@ def serve_metricas():
     if not metricas_path.is_file():
         return JSONResponse(status_code=404, content={"error": "Página no encontrada"})
     return FileResponse(metricas_path, headers={"Cache-Control": "public, max-age=300"})
+
+
+@app.get("/consultoria")
+def serve_consultoria():
+    """Landing de la sesión 1:1 con Alex (200€/60min).
+    Mientras CAL_LINK siga vacío en el HTML, la sección de agenda muestra
+    placeholder con email de contacto. Cambiar 1 línea en consultoria.html
+    para activar el embed cuando Cal.com esté listo."""
+    path = FRONTEND_DIR / "consultoria.html"
+    if not path.is_file():
+        return JSONResponse(status_code=404, content={"error": "Página no encontrada"})
+    return FileResponse(path, headers={"Cache-Control": "no-cache"})
 
 
 # Changelog: HTML lee el JSON y renderiza las entradas en cliente

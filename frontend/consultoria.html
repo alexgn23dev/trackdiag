@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sesión 1:1 con Alex — Mentotrack</title>
+<meta name="description" content="Una hora frente al track. Lo abrimos juntos, identificamos qué le falta y lo arreglamos en directo. Te llevas el track más cerca de listo y el porqué de cada decisión.">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="theme-color" content="#0a0a0b">
+
+<link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+
+<style>
+  :root {
+    --bg: #0a0a0b;
+    --bg-card: #141416;
+    --bg-card-alt: #1a1a1d;
+    --text: #f4f4f5;
+    --text-soft: #a1a1aa;
+    --text-muted: #71717a;
+    --border: rgba(255,255,255,0.08);
+    --accent: #8B5CF6;
+    --accent-warm: #F59E0B;
+    --green: #4ade80;
+    --red: #f87171;
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--text); margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Helvetica Neue', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+    line-height: 1.5;
+  }
+  .container { max-width: 720px; margin: 0 auto; padding: 0 20px; }
+  @media (min-width: 768px) { .container { padding: 0 32px; } }
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+  }
+  .card-alt {
+    background: var(--bg-card-alt);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+  .num { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: var(--accent);
+    color: #fff;
+    text-decoration: none;
+    padding: 14px 24px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 15px;
+    border: none;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.15s;
+  }
+  .btn-primary:hover { background: #7c3aed; transform: translateY(-1px); }
+  .btn-ghost {
+    color: var(--text-soft);
+    text-decoration: none;
+    font-size: 14px;
+    transition: color 0.15s;
+  }
+  .btn-ghost:hover { color: var(--text); }
+  .step {
+    display: flex;
+    gap: 16px;
+    padding: 16px 0;
+  }
+  .step-num {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: rgba(139, 92, 246, 0.12);
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .check-list li, .x-list li {
+    list-style: none;
+    padding-left: 28px;
+    position: relative;
+    margin-bottom: 10px;
+    color: var(--text-soft);
+  }
+  .check-list li::before {
+    content: '✓';
+    position: absolute;
+    left: 0;
+    top: 0;
+    color: var(--green);
+    font-weight: 700;
+  }
+  .x-list li::before {
+    content: '×';
+    position: absolute;
+    left: 4px;
+    top: -2px;
+    color: var(--red);
+    font-weight: 700;
+    font-size: 18px;
+  }
+  details { border-bottom: 1px solid var(--border); padding: 16px 0; }
+  details:last-of-type { border-bottom: none; }
+  summary {
+    cursor: pointer;
+    font-weight: 500;
+    color: var(--text);
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::after {
+    content: '+';
+    color: var(--text-muted);
+    font-size: 20px;
+    font-weight: 300;
+    transition: transform 0.2s;
+  }
+  details[open] summary::after { transform: rotate(45deg); }
+  details > p { color: var(--text-soft); font-size: 14px; margin-top: 8px; padding-right: 24px; }
+  .price-tag {
+    display: inline-block;
+    background: linear-gradient(135deg, rgba(139,92,246,0.12), rgba(245,158,11,0.08));
+    border: 1px solid var(--border);
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    color: var(--text-soft);
+    margin-bottom: 16px;
+  }
+  .price-tag .amount { color: var(--text); font-weight: 600; }
+  .hero-h1 {
+    font-size: 36px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin: 0 0 14px;
+    line-height: 1.15;
+  }
+  @media (min-width: 768px) { .hero-h1 { font-size: 44px; } }
+  .hero-sub { font-size: 17px; color: var(--text-soft); margin: 0; max-width: 580px; }
+  .section-h2 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 20px;
+    color: var(--text);
+  }
+  .nav { padding: 18px 0; }
+  .nav a { color: var(--text-soft); text-decoration: none; font-size: 13px; }
+  .nav a:hover { color: var(--text); }
+  .logo { font-weight: 600; color: var(--text); }
+  .logo .dot { color: var(--accent); }
+  /* Cal.com embed */
+  .cal-embed {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    min-height: 480px;
+  }
+  .cal-placeholder {
+    padding: 48px 24px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="container" style="display:flex;justify-content:space-between;align-items:center;">
+    <a href="/" class="logo">mentotrack<span class="dot">●</span></a>
+    <a href="/">← Volver a la app</a>
+  </div>
+</nav>
+
+<main class="container" style="padding-top:32px;padding-bottom:64px;">
+
+  <!-- HERO -->
+  <header style="margin-bottom:48px;">
+    <span class="price-tag">Sesión 1:1 · <span class="amount">200&nbsp;€</span> · 60&nbsp;min</span>
+    <h1 class="hero-h1">Una hora frente al track.</h1>
+    <p class="hero-sub">
+      Lo abrimos juntos, identificamos qué le falta y lo arreglamos en directo en mi DAW.
+      Te llevas el track más cerca de cerrado y el porqué de cada decisión — para que la
+      próxima vez no necesites a nadie.
+    </p>
+    <div style="margin-top:24px;display:flex;gap:12px;flex-wrap:wrap;">
+      <a href="#agenda" class="btn-primary">Reservar sesión →</a>
+      <a href="#como-va" class="btn-ghost" style="padding:14px 12px;">Cómo va la sesión</a>
+    </div>
+  </header>
+
+  <!-- CÓMO VA LA SESIÓN -->
+  <section id="como-va" style="margin-bottom:48px;">
+    <h2 class="section-h2">Cómo va la sesión</h2>
+
+    <div class="step">
+      <div class="step-num">1</div>
+      <div>
+        <p style="margin:0 0 4px;font-weight:500;">Antes — me mandas el track y el contexto</p>
+        <p style="margin:0;color:var(--text-soft);font-size:14px;">
+          Stems o bounce (o el .als / .flp si quieres que toquemos elementos), género y
+          qué te bloquea. Lo escucho el día anterior para llegar con un plan a la sesión
+          y no perder tiempo el día.
+        </p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div>
+        <p style="margin:0 0 4px;font-weight:500;">Durante — 60 minutos por Zoom, mi DAW, tu track</p>
+        <p style="margin:0;color:var(--text-soft);font-size:14px;">
+          Voy al problema más importante primero, lo resolvemos en directo, te explico
+          cada movimiento (qué EQ, qué frecuencia, por qué este compresor y no otro). Si
+          queda tiempo seguimos con el siguiente bloqueo. No es un monólogo —
+          preguntas todo lo que no veas claro.
+        </p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <div>
+        <p style="margin:0 0 4px;font-weight:500;">Después — te llevas la grabación y un mini-resumen</p>
+        <p style="margin:0;color:var(--text-soft);font-size:14px;">
+          Recibes el vídeo de la sesión grabado para que vuelvas a verlo cuando quieras,
+          y un email con las 3-5 técnicas concretas que vimos (frecuencias específicas,
+          plugins, ajustes) para que las apliques en próximos tracks sin volver a
+          reservar.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- PARA QUIÉN ES / NO ES -->
+  <section style="margin-bottom:48px;display:grid;grid-template-columns:1fr;gap:20px;">
+    <div class="card" style="padding:24px;">
+      <h3 style="margin:0 0 14px;font-size:16px;font-weight:600;">Para ti si...</h3>
+      <ul class="check-list" style="padding:0;margin:0;">
+        <li>Ya has subido un análisis a Mentotrack y sabes qué te dice el motor, pero quieres ese empujón humano para cerrar el track.</li>
+        <li>Produces hace tiempo y sientes que algo no cuadra — pero no consigues poner el dedo en qué.</li>
+        <li>Prefieres aprender viendo a alguien trabajar tu track antes que leer 30 foros y tutoriales.</li>
+        <li>Buscas que el siguiente track te salga mejor solo, no depender de mí cada vez.</li>
+      </ul>
+    </div>
+
+    <div class="card" style="padding:24px;">
+      <h3 style="margin:0 0 14px;font-size:16px;font-weight:600;">No es para ti si...</h3>
+      <ul class="x-list" style="padding:0;margin:0;">
+        <li>Esperas que te entregue un master listo para sello sin más. Esto es trabajo colaborativo, no servicio de mastering.</li>
+        <li>Nunca has producido. Esto presupone que manejas tu DAW — para empezar de cero hace falta curso, no consultoría.</li>
+        <li>Buscas validación. Si tu track tiene problemas reales te los voy a decir sin maquillar.</li>
+        <li>Tu track no es música electrónica de club. Mentotrack está calibrado para house, techno, trance y derivados.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- AGENDA / CAL.COM -->
+  <section id="agenda" style="margin-bottom:48px;">
+    <h2 class="section-h2">Reserva tu sesión</h2>
+    <p style="color:var(--text-soft);font-size:14px;margin-top:-8px;margin-bottom:20px;">
+      Pago previo de 200&nbsp;€ al reservar (Stripe). Cancelación gratuita con 48&nbsp;h
+      de antelación; tras eso no se reembolsa salvo emergencia.
+    </p>
+
+    <div class="cal-embed" id="cal-container">
+      <!-- Cal.com embed se inyecta aquí cuando esté configurado.
+           Mientras tanto, placeholder visible: -->
+      <div class="cal-placeholder">
+        <p style="color:var(--text-soft);font-size:14px;margin:0 0 16px;">
+          Estoy terminando de configurar la agenda. Si quieres reservar ya,
+          escríbeme directamente:
+        </p>
+        <a href="mailto:soporte@producciononline.com?subject=Sesi%C3%B3n%201%3A1%20-%20Reserva"
+           class="btn-primary">soporte@producciononline.com →</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section style="margin-bottom:48px;">
+    <h2 class="section-h2">Preguntas frecuentes</h2>
+
+    <details>
+      <summary>¿Y si mi track es muy malo todavía?</summary>
+      <p>
+        Hay un punto de partida útil en cualquier track. Si veo en los primeros 5 minutos
+        que no hay base sobre la que trabajar (todavía es un boceto muy temprano), te lo
+        digo en directo y reembolso completo. Mejor decir "vuelve en 2 semanas con más
+        material" que cobrarte por no poder ayudarte.
+      </p>
+    </details>
+
+    <details>
+      <summary>¿Qué DAW usas?</summary>
+      <p>
+        Ableton Live y FL Studio (los que más conozco). Si trabajas con Logic, Cubase o
+        Bitwig da igual — el principio es el mismo y tú lo replicas en el tuyo. Los
+        ajustes que hago en mi DAW los traduces a tu plugin equivalente.
+      </p>
+    </details>
+
+    <details>
+      <summary>¿Vamos a tocar mi proyecto o lo abres en el tuyo?</summary>
+      <p>
+        Depende de lo que necesites y de si me pasas el .als / .flp. Si me lo mandas,
+        trabajamos directamente sobre tu proyecto y al final te lo devuelvo modificado.
+        Si solo me pasas el bounce, hago demos en mi DAW para enseñarte la dirección y
+        tú la reproduces en el tuyo.
+      </p>
+    </details>
+
+    <details>
+      <summary>¿Grabamos la sesión?</summary>
+      <p>
+        Sí. Te mando el vídeo en las 24&nbsp;h siguientes para que puedas repasarlo. Es
+        parte del valor: muchas cosas se entienden de verdad la segunda vez que las ves.
+      </p>
+    </details>
+
+    <details>
+      <summary>¿Puedo reservar varias sesiones seguidas?</summary>
+      <p>
+        Puedes, pero no te lo recomiendo. Tras una sesión sales con 3-5 cosas concretas
+        que aplicar — necesitas tiempo para aplicarlas y entender de verdad. Mejor
+        sesión, aplicar 2-3 semanas, y volver con dudas o el siguiente track.
+      </p>
+    </details>
+
+    <details>
+      <summary>¿Hay descuentos por paquete?</summary>
+      <p>
+        Todavía no. Si tras un par de sesiones quieres seguir, hablamos de un pack a
+        precio reducido. Pero quiero ver que funciona para ti primero.
+      </p>
+    </details>
+  </section>
+
+  <!-- CTA FINAL -->
+  <section style="text-align:center;margin-bottom:32px;">
+    <h2 style="font-size:22px;font-weight:600;margin:0 0 12px;">¿Listo?</h2>
+    <p style="color:var(--text-soft);margin:0 0 20px;font-size:14px;">
+      Una hora bien aprovechada puede ahorrarte semanas de tutoriales sueltos.
+    </p>
+    <a href="#agenda" class="btn-primary">Reservar sesión →</a>
+  </section>
+
+  <footer style="text-align:center;font-size:12px;color:var(--text-muted);border-top:1px solid var(--border);padding-top:24px;">
+    <p style="margin:0 0 4px;">Mentotrack · Producción Online — PRODONLINE LLC</p>
+    <p style="margin:0;">
+      <a href="/privacidad" style="color:var(--text-muted);text-decoration:underline;">Privacidad</a> ·
+      <a href="/terminos" style="color:var(--text-muted);text-decoration:underline;">Términos</a> ·
+      <a href="/aviso-legal" style="color:var(--text-muted);text-decoration:underline;">Aviso legal</a>
+    </p>
+  </footer>
+
+</main>
+
+<script>
+  // ====================================================================
+  // Cal.com embed — inyectar cuando esté configurado
+  // ====================================================================
+  // Una vez tengas tu link de cal.com (p.ej. "alexgn23/sesion-1-1"),
+  // cambia la línea CAL_LINK por el slug y el embed sustituye al placeholder.
+  // Si CAL_LINK queda vacío, se muestra el placeholder con el email.
+  const CAL_LINK = ""; // ← rellenar con "alexgn23/sesion-1-1" cuando esté listo
+
+  if (CAL_LINK) {
+    // Embed inline de cal.com — script oficial
+    (function (C, A, L) {
+      let p = function (a, ar) { a.q.push(ar); };
+      let d = C.document;
+      C.Cal = C.Cal || function () {
+        let cal = C.Cal;
+        let ar = arguments;
+        if (!cal.loaded) {
+          cal.ns = {};
+          cal.q = cal.q || [];
+          d.head.appendChild(d.createElement("script")).src = A;
+          cal.loaded = true;
+        }
+        if (ar[0] === L) {
+          const api = function () { p(api, arguments); };
+          const namespace = ar[1];
+          api.q = api.q || [];
+          if (typeof namespace === "string") {
+            cal.ns[namespace] = cal.ns[namespace] || api;
+            p(cal.ns[namespace], ar);
+            p(cal, ["initNamespace", namespace]);
+          } else p(cal, ar);
+          return;
+        }
+        p(cal, ar);
+      };
+    })(window, "https://app.cal.com/embed/embed.js", "init");
+
+    Cal("init", "sesion-1-1", { origin: "https://cal.com" });
+    Cal.ns["sesion-1-1"]("inline", {
+      elementOrSelector: "#cal-container",
+      calLink: CAL_LINK,
+      layout: "month_view",
+    });
+    Cal.ns["sesion-1-1"]("ui", {
+      theme: "dark",
+      cssVarsPerTheme: {
+        light: { "cal-brand": "#8B5CF6" },
+        dark: { "cal-brand": "#8B5CF6" },
+      },
+      hideEventTypeDetails: false,
+      layout: "month_view",
+    });
+  }
+</script>
+
+</body>
+</html>

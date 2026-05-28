@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "version": "0.5.26",
+      "date": "2026-05-28",
+      "title": "Sesión 1:1 con Alex — primera vía de monetización",
+      "changes": [
+        "Nueva página /consultoria con la propuesta de sesión 1:1 por Zoom (200 € / 60 min): Alex abre tu track en su DAW, identifica los problemas y los arregla en directo mientras explica cada decisión. El productor se lleva la grabación de la sesión + resumen de técnicas para aplicar en próximos tracks.",
+        "Card CTA discreta en la pantalla del diagnóstico, justo debajo del widget de feedback, dirigiendo a /consultoria. Punto de máxima conversión: el usuario acaba de ver qué le pasa al track.",
+        "Embed de Cal.com preparado en consultoria.html (oculto detrás de placeholder con email de contacto hasta que se rellene CAL_LINK en una sola línea de JS). Pago previo de 200 € se gestiona desde Cal.com vía Stripe."
+      ]
+    },
+    {
       "version": "0.5.25",
       "date": "2026-05-27",
       "title": "Página pública /metricas con gráficas de crecimiento",
