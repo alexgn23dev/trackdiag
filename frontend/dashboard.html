@@ -42,7 +42,7 @@
     <div id="root"></div>
 
     <script type="text/babel">
-    const { useState, useEffect, useMemo } = React;
+    const { useState, useEffect, useMemo, useRef } = React;
 
     // Dashboard data is fetched via backend proxy (no direct Sheets access)
     const API_URL = window.location.hostname === 'localhost' ? 'http://localhost:8000' : '';
@@ -1629,6 +1629,283 @@
 
 
     // =========================================================================
+    // Tab: Auditorías (solicitudes /consultoria)
+    // =========================================================================
+    const ESTADO_LABELS = {
+        nueva:       { txt: 'Nueva',       color: '#facc15', bg: 'rgba(250,204,21,0.10)', border: '#713f12' },
+        aceptada:    { txt: 'Aceptada',    color: '#4ade80', bg: 'rgba(74,222,128,0.10)', border: '#14532d' },
+        rechazada:   { txt: 'Rechazada',   color: '#f87171', bg: 'rgba(248,113,113,0.10)', border: '#7f1d1d' },
+        completada:  { txt: 'Completada',  color: '#60a5fa', bg: 'rgba(96,165,250,0.10)', border: '#1e3a5f' },
+        reembolsada: { txt: 'Reembolsada', color: '#94a3b8', bg: 'rgba(148,163,184,0.10)', border: '#334155' },
+    };
+
+    function AuditoriasTab() {
+        const [solicitudes, setSolicitudes] = useState(null);
+        const [error, setError] = useState(null);
+        const [loading, setLoading] = useState(true);
+        const [filtroEstado, setFiltroEstado] = useState('todas');
+
+        const cargar = async () => {
+            setLoading(true);
+            setError(null);
+            try {
+                const resp = await fetch(`${API_URL}/api/admin/consultoria/solicitudes`, { credentials: 'same-origin' });
+                if (!resp.ok) {
+                    setError(`HTTP ${resp.status}`);
+                    setLoading(false);
+                    return;
+                }
+                const data = await resp.json();
+                setSolicitudes(data.solicitudes || []);
+            } catch (e) {
+                setError(String(e));
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        useEffect(() => { cargar(); }, []);
+
+        const actualizar = async (id, payload) => {
+            try {
+                const resp = await fetch(`${API_URL}/api/admin/consultoria/solicitudes/${id}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify(payload),
+                });
+                if (resp.ok) {
+                    // Recarga la lista para reflejar el cambio
+                    await cargar();
+                } else {
+                    alert(`No se pudo actualizar (${resp.status})`);
+                }
+            } catch (e) {
+                alert('Error de red al actualizar');
+            }
+        };
+
+        const filtradas = useMemo(() => {
+            if (!solicitudes) return [];
+            if (filtroEstado === 'todas') return solicitudes;
+            return solicitudes.filter(s => s.estado === filtroEstado);
+        }, [solicitudes, filtroEstado]);
+
+        const conteoEstados = useMemo(() => {
+            const c = { todas: solicitudes?.length || 0 };
+            (solicitudes || []).forEach(s => {
+                c[s.estado] = (c[s.estado] || 0) + 1;
+            });
+            return c;
+        }, [solicitudes]);
+
+        const formatFecha = (iso) => {
+            if (!iso) return '—';
+            const d = new Date(iso);
+            return d.toLocaleString('es-ES', {
+                day: '2-digit', month: 'short',
+                hour: '2-digit', minute: '2-digit',
+            });
+        };
+
+        return (
+            <div className="fade-in space-y-4">
+                <div className="card p-5 mb-2">
+                    <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
+                        <div>
+                            <h3 className="text-sm font-semibold text-gray-300">Solicitudes de Auditoría 1:1</h3>
+                            <p className="text-xs text-gray-500 mt-1">
+                                Formularios recibidos desde /consultoria. Cada uno también te llega por email.
+                            </p>
+                        </div>
+                        <button
+                            onClick={cargar}
+                            disabled={loading}
+                            className="text-xs px-3 py-2 rounded-lg"
+                            style={{
+                                background: loading ? '#3f3f46' : '#8b5cf6',
+                                color: '#fff',
+                                cursor: loading ? 'not-allowed' : 'pointer',
+                            }}
+                        >
+                            {loading ? 'Cargando…' : 'Refrescar'}
+                        </button>
+                    </div>
+
+                    {/* Filtros por estado */}
+                    <div className="flex flex-wrap gap-2 text-xs">
+                        {['todas', 'nueva', 'aceptada', 'rechazada', 'completada', 'reembolsada'].map(e => (
+                            <button
+                                key={e}
+                                onClick={() => setFiltroEstado(e)}
+                                className="px-2.5 py-1 rounded-md transition-colors"
+                                style={{
+                                    background: filtroEstado === e ? '#8b5cf6' : 'rgba(255,255,255,0.04)',
+                                    color: filtroEstado === e ? '#fff' : '#a1a1aa',
+                                    border: '1px solid rgba(255,255,255,0.06)',
+                                }}
+                            >
+                                {e === 'todas' ? 'Todas' : (ESTADO_LABELS[e]?.txt || e)}
+                                <span className="ml-1.5 text-[10px] opacity-70">{conteoEstados[e] || 0}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {error && (
+                    <div className="card p-4 text-xs text-red-400">Error: {error}</div>
+                )}
+
+                {!loading && solicitudes && filtradas.length === 0 && (
+                    <div className="card p-8 text-center">
+                        <p className="text-sm text-gray-400">
+                            {filtroEstado === 'todas'
+                                ? 'Aún no hay solicitudes. Cuando llegue una, aparecerá aquí y te llegará por email.'
+                                : `Sin solicitudes en estado "${ESTADO_LABELS[filtroEstado]?.txt || filtroEstado}".`}
+                        </p>
+                    </div>
+                )}
+
+                {filtradas.map(s => {
+                    const est = ESTADO_LABELS[s.estado] || ESTADO_LABELS.nueva;
+                    return (
+                        <div key={s.id} className="card p-5">
+                            {/* Cabecera */}
+                            <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
+                                <div className="min-w-0">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <h4 className="text-white text-sm font-semibold">{s.nombre}</h4>
+                                        <span
+                                            className="text-[10px] px-2 py-0.5 rounded-full flex-shrink-0"
+                                            style={{ color: est.color, background: est.bg, border: `1px solid ${est.border}` }}
+                                        >
+                                            {est.txt}
+                                        </span>
+                                    </div>
+                                    <a href={`mailto:${s.email}`} className="text-xs text-purple-400 hover:text-purple-300">
+                                        {s.email}
+                                    </a>
+                                    <p className="text-[11px] text-gray-500 mt-1">Recibida {formatFecha(s.timestamp)}</p>
+                                </div>
+                                <div className="flex gap-1.5 flex-wrap">
+                                    {['aceptada', 'rechazada', 'completada', 'reembolsada'].map(e => (
+                                        <button
+                                            key={e}
+                                            onClick={() => actualizar(s.id, { estado: e })}
+                                            disabled={s.estado === e}
+                                            className="text-[10px] px-2 py-1 rounded-md"
+                                            style={{
+                                                background: s.estado === e ? ESTADO_LABELS[e].bg : 'rgba(255,255,255,0.04)',
+                                                color: s.estado === e ? ESTADO_LABELS[e].color : '#a1a1aa',
+                                                border: `1px solid ${s.estado === e ? ESTADO_LABELS[e].border : 'rgba(255,255,255,0.06)'}`,
+                                                cursor: s.estado === e ? 'default' : 'pointer',
+                                            }}
+                                        >
+                                            {ESTADO_LABELS[e].txt}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Datos */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                                <div>
+                                    <p className="text-gray-500 text-[10px] uppercase tracking-wide mb-1">Track</p>
+                                    <a href={s.soundcloud} target="_blank" rel="noopener noreferrer"
+                                       className="text-gray-200 break-all hover:text-purple-300">{s.soundcloud}</a>
+                                </div>
+                                {s.ref_cancion && (
+                                    <div>
+                                        <p className="text-gray-500 text-[10px] uppercase tracking-wide mb-1">Canción de referencia</p>
+                                        <p className="text-gray-200">{s.ref_cancion}</p>
+                                    </div>
+                                )}
+                                {s.ref_artistas && (
+                                    <div>
+                                        <p className="text-gray-500 text-[10px] uppercase tracking-wide mb-1">Artistas de referencia</p>
+                                        <p className="text-gray-200">{s.ref_artistas}</p>
+                                    </div>
+                                )}
+                                {s.ref_sellos && (
+                                    <div>
+                                        <p className="text-gray-500 text-[10px] uppercase tracking-wide mb-1">Sellos de referencia</p>
+                                        <p className="text-gray-200">{s.ref_sellos}</p>
+                                    </div>
+                                )}
+                                {s.contexto && (
+                                    <div className="md:col-span-2">
+                                        <p className="text-gray-500 text-[10px] uppercase tracking-wide mb-1">Contexto</p>
+                                        <p className="text-gray-200 whitespace-pre-wrap leading-relaxed">{s.contexto}</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Notas admin */}
+                            <details className="mt-4">
+                                <summary className="cursor-pointer text-xs text-gray-500 hover:text-gray-300">
+                                    Notas privadas {s.notas_admin ? '(con notas)' : ''}
+                                </summary>
+                                <NotasEditor
+                                    initial={s.notas_admin}
+                                    onSave={(notas) => actualizar(s.id, { notas })}
+                                />
+                            </details>
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    }
+
+    function NotasEditor({ initial, onSave }) {
+        const [val, setVal] = useState(initial || '');
+        const [saving, setSaving] = useState(false);
+        const initialRef = useRef(initial || '');
+
+        const dirty = val !== initialRef.current;
+
+        const guardar = async () => {
+            setSaving(true);
+            await onSave(val);
+            initialRef.current = val;
+            setSaving(false);
+        };
+
+        return (
+            <div className="mt-2">
+                <textarea
+                    value={val}
+                    onChange={(e) => setVal(e.target.value)}
+                    rows={3}
+                    placeholder="Notas privadas (solo tú las ves) — feedback que has dado, fecha de la sesión, observaciones…"
+                    className="w-full text-xs p-2 rounded-md"
+                    style={{
+                        background: 'rgba(255,255,255,0.04)',
+                        border: '1px solid rgba(255,255,255,0.06)',
+                        color: '#e4e4e7',
+                        resize: 'vertical',
+                    }}
+                />
+                {dirty && (
+                    <button
+                        onClick={guardar}
+                        disabled={saving}
+                        className="text-xs px-3 py-1.5 rounded-md mt-2"
+                        style={{
+                            background: saving ? '#3f3f46' : '#8b5cf6',
+                            color: '#fff',
+                            cursor: saving ? 'not-allowed' : 'pointer',
+                        }}
+                    >
+                        {saving ? 'Guardando…' : 'Guardar notas'}
+                    </button>
+                )}
+            </div>
+        );
+    }
+
+
+    // =========================================================================
     // Dashboard principal
     // =========================================================================
 
@@ -1898,7 +2175,7 @@
 
                 {/* Tabs */}
                 <div className="flex gap-1 mb-6 bg-gray-800/50 rounded-lg p-1 w-fit flex-wrap">
-                    {[['overview', 'Resumen'], ['analisis', 'Análisis'], ['users', 'Usuarios'], ['feedback', 'Feedback'], ['motor', 'Motor']].map(([id, label]) => (
+                    {[['overview', 'Resumen'], ['analisis', 'Análisis'], ['users', 'Usuarios'], ['feedback', 'Feedback'], ['motor', 'Motor'], ['auditorias', 'Auditorías']].map(([id, label]) => (
                         <button
                             key={id}
                             onClick={() => setTab(id)}
@@ -2422,6 +2699,11 @@
                 {/* ============ TAB: MOTOR (telemetría) ============ */}
                 {tab === 'motor' && (
                     <MotorTab entries={entries} diagLabels={DIAG_LABELS} />
+                )}
+
+                {/* ============ TAB: AUDITORÍAS (solicitudes consultoría) ============ */}
+                {tab === 'auditorias' && (
+                    <AuditoriasTab />
                 )}
 
                 {/* Detail Modal */}

@@ -48,7 +48,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.26")
+app = FastAPI(title="Mentotrack API", version="0.5.27")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -199,7 +199,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.26"}
+    return {"status": "ok", "version": "0.5.27"}
 
 
 @app.post("/api/diagnostico")
@@ -508,7 +508,29 @@ async def solicitud_consultoria(request: Request, data: dict):
         "contexto": _sanitize(data.get("contexto", ""), 800),
     }
 
-    # Best-effort: guardar la solicitud localmente para historial
+    # Persistencia primary: Postgres. Best-effort — si falla, igualmente
+    # respondemos OK al usuario (el email a Alex y el jsonl de backup
+    # garantizan que no se pierde la solicitud).
+    if _pg_available():
+        try:
+            from db import get_pool
+            import repositories as repo
+            pool = get_pool()
+            await repo.create_consultoria_solicitud(
+                pool,
+                nombre=entry["nombre"],
+                email=entry["email"],
+                soundcloud=entry["soundcloud"],
+                ref_cancion=entry["ref_cancion"],
+                ref_artistas=entry["ref_artistas"],
+                ref_sellos=entry["ref_sellos"],
+                contexto=entry["contexto"],
+            )
+        except Exception as e:
+            print(f"[CONSULTORIA] Postgres falló: {type(e).__name__}: {e}")
+
+    # Backup local en jsonl (filesystem efímero en Railway pero útil
+    # para entornos donde sí persista — y por si Postgres está caído).
     try:
         CONSULTORIA_REQUESTS_FILE.parent.mkdir(parents=True, exist_ok=True)
         with open(CONSULTORIA_REQUESTS_FILE, "a") as f:
@@ -517,7 +539,7 @@ async def solicitud_consultoria(request: Request, data: dict):
         print(f"[CONSULTORIA] no se pudo persistir en jsonl: {e}")
 
     # Email a Alex con los datos. Si falla, igualmente devolvemos OK al
-    # usuario — Alex puede recuperar del jsonl. Pero logueamos.
+    # usuario — Alex puede recuperar de Postgres / jsonl. Pero logueamos.
     _enviar_email_solicitud_consultoria(entry)
 
     return {"ok": True}
@@ -2431,6 +2453,80 @@ def _replay_motor_sobre_analisis(row: dict) -> dict | None:
         "genero_label": (row.get("formulario") or {}).get("genero", "") or "",
         "genero_slug": contexto.get("genero", "") or "",
     }
+
+
+# =========================================================================
+# Admin: solicitudes de Consultoría (sesión 1:1)
+# =========================================================================
+@app.get("/api/admin/consultoria/solicitudes")
+@limiter.limit("60/minute")
+async def admin_consultoria_solicitudes(request: Request):
+    """Lista todas las solicitudes recibidas vía /consultoria, más recientes
+    primero. Solo accesible con cookie admin."""
+    if not _admin_email_from_cookie(request):
+        return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Postgres no disponible"})
+    try:
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+        rows = await repo.list_consultoria_solicitudes(pool, limit=500)
+    except Exception as e:
+        print(f"[CONSULTORIA-ADMIN] error listando: {e}")
+        return JSONResponse(status_code=503, content={"error": "Error consultando DB"})
+
+    out = []
+    for r in rows:
+        out.append({
+            "id": str(r["id"]),
+            "timestamp": r["timestamp"].isoformat() if r["timestamp"] else None,
+            "nombre": r["nombre"],
+            "email": r["email"],
+            "soundcloud": r["soundcloud"],
+            "ref_cancion": r["ref_cancion"] or "",
+            "ref_artistas": r["ref_artistas"] or "",
+            "ref_sellos": r["ref_sellos"] or "",
+            "contexto": r["contexto"] or "",
+            "estado": r["estado"],
+            "notas_admin": r["notas_admin"] or "",
+            "actualizada_en": r["actualizada_en"].isoformat() if r["actualizada_en"] else None,
+        })
+    return {"ok": True, "solicitudes": out}
+
+
+@app.post("/api/admin/consultoria/solicitudes/{solicitud_id}")
+@limiter.limit("60/minute")
+async def admin_consultoria_actualizar(request: Request, solicitud_id: str, data: dict):
+    """Actualiza estado y/o notas de una solicitud. Estados válidos:
+    nueva, aceptada, rechazada, completada, reembolsada."""
+    if not _admin_email_from_cookie(request):
+        return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
+    estado = (data.get("estado") or "").strip().lower() or None
+    notas_raw = data.get("notas")
+    notas = notas_raw.strip() if isinstance(notas_raw, str) else None
+    # Si notas viene como cadena vacía explícita, persistimos cadena vacía.
+    # Si viene como None / no se manda, no se toca el campo.
+    estados_validos = ("nueva", "aceptada", "rechazada", "completada", "reembolsada")
+    if estado is not None and estado not in estados_validos:
+        return JSONResponse(status_code=400, content={"error": "Estado inválido"})
+    if estado is None and notas is None:
+        return JSONResponse(status_code=400, content={"error": "Nada que actualizar"})
+    try:
+        sid = uuid.UUID(solicitud_id)
+    except (TypeError, ValueError):
+        return JSONResponse(status_code=400, content={"error": "ID inválido"})
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Postgres no disponible"})
+    try:
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+        ok = await repo.update_consultoria_solicitud_estado(pool, sid, estado, notas)
+    except Exception as e:
+        print(f"[CONSULTORIA-ADMIN] error update: {e}")
+        return JSONResponse(status_code=503, content={"error": "Error actualizando"})
+    return {"ok": ok}
 
 
 @app.get("/api/admin/cutover-b")

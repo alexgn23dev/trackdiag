@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "version": "0.5.27",
+      "date": "2026-05-28",
+      "title": "Solicitudes de auditoría 1:1 persistidas + panel admin",
+      "changes": [
+        "Las solicitudes recibidas vía /consultoria ahora se guardan en una tabla nueva de Postgres (`consultoria_solicitudes`) además de mandarse por email. Migración Alembic se aplica sola al arrancar.",
+        "Nuevo tab 'Auditorías' en el dashboard admin: lista de solicitudes ordenadas por más recientes, filtros por estado (nueva / aceptada / rechazada / completada / reembolsada), botones para cambiar de estado con un click, y campo de notas privadas por solicitud (solo Alex las ve).",
+        "Cada solicitud sigue disparando un email automático a alexgn23@gmail.com vía Resend con reply-to al email del usuario. Adicional: backup en jsonl local por si Postgres está caído al recibir."
+      ]
+    },
+    {
       "version": "0.5.26",
       "date": "2026-05-28",
       "title": "Sesión 1:1 con Alex — primera vía de monetización",
