@@ -48,7 +48,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.27")
+app = FastAPI(title="Mentotrack API", version="0.5.28")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -199,7 +199,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.27"}
+    return {"status": "ok", "version": "0.5.28"}
 
 
 @app.post("/api/diagnostico")
@@ -480,6 +480,44 @@ async def guardar_feedback_request(request: Request, data: dict):
 CONSULTORIA_REQUESTS_FILE = Path(__file__).resolve().parent / "data" / "consultoria_requests.jsonl"
 
 
+# Embudo CTA — endpoint público para registrar eventos del usuario
+# (impresión del CTA, clicks, visitas a /consultoria, form started/submit).
+# No persiste IPs ni datos personales más allá del email opcional y un
+# session_id anónimo generado por el cliente en localStorage.
+@app.post("/api/cta-event")
+@limiter.limit("60/minute")
+async def cta_event(request: Request, data: dict):
+    """Registra un evento del embudo. Acepta JSON con:
+      evento (obligatorio), session_id, diagnostico_id, email."""
+    evento = (data.get("evento") or "").strip()
+    if not evento:
+        return JSONResponse(status_code=400, content={"error": "Falta 'evento'"})
+    session_id = _sanitize(data.get("session_id", ""), 64)
+    diagnostico_id = _sanitize(data.get("diagnostico_id", ""), 50)
+    email = _sanitize(data.get("email", ""), 180).lower()
+    ua = (request.headers.get("user-agent") or "")[:500]
+
+    if not _pg_available():
+        # No bloqueamos al usuario por un fallo de tracking — solo logueamos.
+        return {"ok": True, "stored": False}
+    try:
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+        row = await repo.create_cta_evento(
+            pool,
+            evento=evento,
+            session_id=session_id or None,
+            diagnostico_id=diagnostico_id or None,
+            email=email or None,
+            user_agent=ua or None,
+        )
+    except Exception as e:
+        print(f"[CTA-EVENT] error: {type(e).__name__}: {e}")
+        return {"ok": True, "stored": False}
+    return {"ok": True, "stored": bool(row)}
+
+
 @app.post("/api/consultoria/solicitud")
 @limiter.limit("5/minute")
 async def solicitud_consultoria(request: Request, data: dict):
@@ -541,6 +579,21 @@ async def solicitud_consultoria(request: Request, data: dict):
     # Email a Alex con los datos. Si falla, igualmente devolvemos OK al
     # usuario — Alex puede recuperar de Postgres / jsonl. Pero logueamos.
     _enviar_email_solicitud_consultoria(entry)
+
+    # Marcar el último paso del embudo (form_submit) automáticamente desde
+    # backend — el frontend no necesita disparar el evento explícitamente.
+    if _pg_available():
+        try:
+            from db import get_pool
+            import repositories as repo
+            await repo.create_cta_evento(
+                get_pool(),
+                evento="consultoria_form_submit",
+                session_id=_sanitize(data.get("session_id", ""), 64) or None,
+                email=entry["email"],
+            )
+        except Exception as e:
+            print(f"[CTA-EVENT] form_submit no se pudo registrar: {e}")
 
     return {"ok": True}
 
@@ -2453,6 +2506,34 @@ def _replay_motor_sobre_analisis(row: dict) -> dict | None:
         "genero_label": (row.get("formulario") or {}).get("genero", "") or "",
         "genero_slug": contexto.get("genero", "") or "",
     }
+
+
+# =========================================================================
+# Admin: embudo CTA (impresiones / clicks / visitas / form / submit)
+# =========================================================================
+@app.get("/api/admin/embudo")
+@limiter.limit("60/minute")
+async def admin_embudo(request: Request):
+    """Agregados del embudo CTA para el tab Embudo del dashboard."""
+    if not _admin_email_from_cookie(request):
+        return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Postgres no disponible"})
+    dias = 30
+    try:
+        dias_param = request.query_params.get("dias")
+        if dias_param:
+            dias = max(1, min(365, int(dias_param)))
+    except (TypeError, ValueError):
+        pass
+    try:
+        from db import get_pool
+        import repositories as repo
+        stats = await repo.stats_embudo_cta(get_pool(), dias=dias)
+    except Exception as e:
+        print(f"[EMBUDO-ADMIN] error: {type(e).__name__}: {e}")
+        return JSONResponse(status_code=503, content={"error": "Error consultando DB"})
+    return {"ok": True, **stats}
 
 
 # =========================================================================

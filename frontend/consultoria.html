@@ -327,7 +327,7 @@
           a mejorar su sonido y sus flujos de trabajo en el estudio.
         </p>
         <p style="margin:0;color:var(--text-soft);font-size:14px;line-height:1.6;">
-          Puedes verme producir en
+          Puedes verme producir (y explicar) en
           <a href="https://www.youtube.com/@Prodonline" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(139,92,246,0.4);">más de 500&nbsp;vídeos en YouTube</a>
           — para que sepas cómo trabajo antes de reservar.
         </p>
@@ -337,11 +337,10 @@
 
   <!-- FORMULARIO DE ADMISIÓN -->
   <section id="formulario" style="margin-bottom:48px;">
-    <h2 class="section-h2">Solicita tu sesión</h2>
+    <h2 class="section-h2">Háblame sobre tu proyecto y tus objetivos</h2>
     <p style="color:var(--text-soft);font-size:14px;margin-top:-8px;margin-bottom:20px;">
-      Cuéntame quién eres y qué estás produciendo. Revisaré tu solicitud
-      personalmente. Si veo que puedo ayudarte, pasamos a reservar la cita
-      (pago previo de 250&nbsp;€). Si no, te devuelvo el dinero íntegro.
+      Si veo que puedo ayudarte te escribiré para los siguientes pasos.
+      De lo contrario, te devolveré el importe íntegro de la auditoría.
     </p>
 
     <div class="card" style="padding:24px 22px;">
@@ -489,7 +488,7 @@
     <p style="color:var(--text-soft);margin:0 0 20px;font-size:14px;">
       Una hora bien aprovechada dedicada a tu caso puede ahorrarte meses dando palos de ciego.
     </p>
-    <a href="#agenda" class="btn-primary">Reservar sesión →</a>
+    <a href="#formulario" class="btn-primary">Reservar sesión →</a>
   </section>
 
   <footer style="text-align:center;font-size:12px;color:var(--text-muted);border-top:1px solid var(--border);padding-top:24px;">
@@ -510,6 +509,34 @@
   const STRIPE_PAYMENT_LINK = "https://buy.stripe.com/dRm7sKcqhf8p9Pr9rQdAk01";
 
   // ====================================================================
+  // Embudo — session_id compartido con el SPA (localStorage)
+  // ====================================================================
+  function mtSessionId() {
+    try {
+      let sid = localStorage.getItem('mt_session_id');
+      if (!sid) {
+        sid = Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
+        localStorage.setItem('mt_session_id', sid);
+      }
+      return sid;
+    } catch (_) { return ''; }
+  }
+  function mtCtaEvent(evento, extra) {
+    try {
+      const body = Object.assign({ evento, session_id: mtSessionId() }, extra || {});
+      fetch('/api/cta-event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        keepalive: true,
+      }).catch(() => {});
+    } catch (_) {}
+  }
+
+  // 1er evento: visit a /consultoria. Se dispara al cargar.
+  mtCtaEvent('consultoria_visit');
+
+  // ====================================================================
   // Formulario de admisión
   // ====================================================================
   const form = document.getElementById('solicitud-form');
@@ -517,6 +544,14 @@
   const submitBtn = document.getElementById('submit-btn');
   const postSubmit = document.getElementById('post-submit');
   const stripeLink = document.getElementById('stripe-link');
+
+  // 2º evento: form_started al primer focus en cualquier campo del form.
+  let formStartedSent = false;
+  form.addEventListener('focusin', () => {
+    if (formStartedSent) return;
+    formStartedSent = true;
+    mtCtaEvent('consultoria_form_started');
+  }, { once: false });
 
   function showError(msg) {
     errBox.textContent = msg;
@@ -544,6 +579,7 @@
       ref_artistas: document.getElementById('f-ref-artistas').value.trim(),
       ref_sellos: document.getElementById('f-ref-sellos').value.trim(),
       contexto: document.getElementById('f-contexto').value.trim(),
+      session_id: mtSessionId(),  // para enlazar con eventos del embudo
     };
 
     if (data.nombre.length < 2) return showError('Indica tu nombre.');
