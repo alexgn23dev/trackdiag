@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "version": "0.5.27",
+      "date": "2026-05-29",
+      "title": "Página pública /consultoria — sesión 1:1 con Alex (250 € / 60 min)",
+      "changes": [
+        "Nueva página `/consultoria` accesible por URL directa con la propuesta de auditoría 1:1: hero, cómo funciona en 3 pasos (admisión previa, envío de proyecto, sesión Zoom 60 min), sección 'Para ti si / no es para ti', bio de Alex con foto y enlaces a Producción Online y al canal de YouTube, formulario de admisión con campos obligatorios (nombre, email, enlace del track, refs de canción / artistas / sellos), FAQ y CTA final.",
+        "Tras envío del formulario, el usuario es redirigido automáticamente al Stripe payment link (250 €) con su email pre-rellenado. La solicitud se guarda en Postgres y llega por email al admin con reply-to al usuario. El admin gestiona estados desde el tab Auditorías del dashboard.",
+        "La página NO se enlaza todavía desde la pantalla del diagnóstico ni desde el footer general — sólo accesible por URL directa. El CTA al usuario se activará en una versión posterior."
+      ]
+    },
+    {
       "version": "0.5.26",
       "date": "2026-05-29",
       "title": "Panel admin para gestionar solicitudes de auditoría 1:1",

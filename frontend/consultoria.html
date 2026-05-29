@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sesión 1:1 con Alex — Mentotrack</title>
+<meta name="description" content="Una hora frente al track. Lo abrimos juntos, identificamos qué le falta y lo arreglamos en directo. Te llevas el track más cerca de listo y el porqué de cada decisión.">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="theme-color" content="#0a0a0b">
+
+<link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+
+<style>
+  :root {
+    --bg: #0a0a0b;
+    --bg-card: #141416;
+    --bg-card-alt: #1a1a1d;
+    --text: #f4f4f5;
+    --text-soft: #a1a1aa;
+    --text-muted: #71717a;
+    --border: rgba(255,255,255,0.08);
+    --accent: #8B5CF6;
+    --accent-warm: #F59E0B;
+    --green: #4ade80;
+    --red: #f87171;
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--text); margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Helvetica Neue', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+    line-height: 1.5;
+  }
+  .container { max-width: 720px; margin: 0 auto; padding: 0 20px; }
+  @media (min-width: 768px) { .container { padding: 0 32px; } }
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+  }
+  .card-alt {
+    background: var(--bg-card-alt);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+  .num { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: var(--accent);
+    color: #fff;
+    text-decoration: none;
+    padding: 14px 24px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 15px;
+    border: none;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.15s;
+  }
+  .btn-primary:hover { background: #7c3aed; transform: translateY(-1px); }
+  .btn-ghost {
+    color: var(--text-soft);
+    text-decoration: none;
+    font-size: 14px;
+    transition: color 0.15s;
+  }
+  .btn-ghost:hover { color: var(--text); }
+  .step {
+    display: flex;
+    gap: 16px;
+    padding: 16px 0;
+  }
+  .step-num {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: rgba(139, 92, 246, 0.12);
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .check-list li, .x-list li {
+    list-style: none;
+    padding-left: 28px;
+    position: relative;
+    margin-bottom: 10px;
+    color: var(--text-soft);
+  }
+  .check-list li::before {
+    content: '✓';
+    position: absolute;
+    left: 0;
+    top: 0;
+    color: var(--green);
+    font-weight: 700;
+  }
+  .x-list li::before {
+    content: '×';
+    position: absolute;
+    left: 4px;
+    top: -2px;
+    color: var(--red);
+    font-weight: 700;
+    font-size: 18px;
+  }
+  details { border-bottom: 1px solid var(--border); padding: 16px 0; }
+  details:last-of-type { border-bottom: none; }
+  summary {
+    cursor: pointer;
+    font-weight: 500;
+    color: var(--text);
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::after {
+    content: '+';
+    color: var(--text-muted);
+    font-size: 20px;
+    font-weight: 300;
+    transition: transform 0.2s;
+  }
+  details[open] summary::after { transform: rotate(45deg); }
+  details > p { color: var(--text-soft); font-size: 14px; margin-top: 8px; padding-right: 24px; }
+  .price-tag {
+    display: inline-block;
+    background: linear-gradient(135deg, rgba(139,92,246,0.12), rgba(245,158,11,0.08));
+    border: 1px solid var(--border);
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    color: var(--text-soft);
+    margin-bottom: 16px;
+  }
+  .price-tag .amount { color: var(--text); font-weight: 600; }
+  .hero-h1 {
+    font-size: 36px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin: 0 0 14px;
+    line-height: 1.15;
+  }
+  @media (min-width: 768px) { .hero-h1 { font-size: 44px; } }
+  .hero-sub { font-size: 17px; color: var(--text-soft); margin: 0; max-width: 580px; }
+  .section-h2 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 20px;
+    color: var(--text);
+  }
+  .nav { padding: 18px 0; }
+  .nav a { color: var(--text-soft); text-decoration: none; font-size: 13px; }
+  .nav a:hover { color: var(--text); }
+  .logo { font-weight: 600; color: var(--text); }
+  .logo .dot { color: var(--accent); }
+  /* Form */
+  .field { margin-bottom: 18px; }
+  .field label {
+    display: block;
+    font-size: 13px;
+    color: var(--text-soft);
+    margin-bottom: 6px;
+  }
+  .field .required { color: var(--accent); margin-left: 2px; }
+  .field input, .field textarea {
+    width: 100%;
+    background: var(--bg-card-alt);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    color: var(--text);
+    font-size: 14px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.15s;
+    -webkit-appearance: none;
+  }
+  .field input:focus, .field textarea:focus { border-color: var(--accent); }
+  .field textarea { resize: vertical; min-height: 64px; }
+  .field-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 6px;
+    line-height: 1.45;
+  }
+  .form-error {
+    color: var(--red);
+    font-size: 13px;
+    background: rgba(248,113,113,0.06);
+    border-left: 3px solid var(--red);
+    padding: 10px 12px;
+    border-radius: 6px;
+    margin-bottom: 14px;
+    display: none;
+  }
+  .form-ok {
+    background: rgba(74,222,128,0.06);
+    border: 1px solid rgba(74,222,128,0.25);
+    color: var(--text);
+    padding: 18px;
+    border-radius: 12px;
+    margin-bottom: 16px;
+  }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="container" style="display:flex;justify-content:space-between;align-items:center;">
+    <a href="/" class="logo">mentotrack<span class="dot">●</span></a>
+    <a href="/">← Volver a la app</a>
+  </div>
+</nav>
+
+<main class="container" style="padding-top:32px;padding-bottom:64px;">
+
+  <!-- HERO -->
+  <header style="margin-bottom:48px;">
+    <span class="price-tag">Sesión 1:1 · <span class="amount">250&nbsp;€</span> · Auditoría</span>
+    <h1 class="hero-h1">¿La mejoramos juntos?</h1>
+    <p class="hero-sub">
+      Envíame tu proyecto, vemos qué le falta y lo arreglo contigo en directo desde Zoom.
+      Te llevarás tu track al siguiente nivel y te enseñaré cómo lo hago y el por qué de
+      cada cosa — para que la próxima vez te ahorres pasar por los mismos errores.
+    </p>
+    <div style="margin-top:24px;display:flex;gap:12px;flex-wrap:wrap;">
+      <a href="#formulario" class="btn-primary">Empezar solicitud →</a>
+      <a href="#como-va" class="btn-ghost" style="padding:14px 12px;">Cómo funciona</a>
+    </div>
+  </header>
+
+  <!-- CÓMO FUNCIONA LA SESIÓN -->
+  <section id="como-va" style="margin-bottom:48px;">
+    <h2 class="section-h2">Cómo funciona la sesión</h2>
+
+    <div class="step">
+      <div class="step-num">1</div>
+      <div>
+        <p style="margin:0 0 4px;font-weight:500;">Antes de nada — me envías tu canción y contexto</p>
+        <p style="margin:0;color:var(--text-soft);font-size:14px;">
+          Rellenas el formulario de admisión para que pueda valorar tu situación. SOLO si
+          creo que realmente te puedo ayudar, aceptaré la solicitud y pasaremos al
+          punto&nbsp;2. De lo contrario, declinaré la petición y te devolveré el dinero
+          íntegramente.
+        </p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div>
+        <p style="margin:0 0 4px;font-weight:500;">Confirmación, envío de proyecto y cita</p>
+        <p style="margin:0;color:var(--text-soft);font-size:14px;">
+          Si la petición es favorable te pediré que me envíes tu proyecto (te explicaré
+          cómo) para que lo pueda analizar a fondo y trabajarlo contigo durante la sesión
+          1-1. Reservarás la fecha del encuentro y listos.
+        </p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <div>
+        <p style="margin:0 0 4px;font-weight:500;">Sesión — tu proyecto, tú y yo durante 60 minutos</p>
+        <p style="margin:0;color:var(--text-soft);font-size:14px;">
+          Nos reuniremos en Zoom donde te daré el análisis detallado de lo que está
+          ocurriendo en tu proyecto y te mostraré cómo solucionarlo para llevar tu track
+          al siguiente nivel. Durante la sesión me podrás preguntar todo lo que
+          necesites y, al acabar, te enviaré el proyecto de vuelta con los cambios junto
+          a la sesión grabada. Son 100% para ti.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- PARA QUIÉN ES / NO ES -->
+  <section style="margin-bottom:48px;display:grid;grid-template-columns:1fr;gap:20px;">
+    <div class="card" style="padding:24px;">
+      <h3 style="margin:0 0 14px;font-size:16px;font-weight:600;">Para ti si...</h3>
+      <ul class="check-list" style="padding:0;margin:0;">
+        <li>Ya has subido un análisis a Mentotrack y sabes qué te dice el motor, pero quieres ese empujón humano para cerrar el track.</li>
+        <li>Produces hace tiempo y sientes que algo no cuadra — pero no consigues poner el dedo en qué.</li>
+        <li>Prefieres aprender viendo a alguien trabajar tu track antes que ver 60 tutoriales y consejos en redes.</li>
+        <li>Buscas no repetir los mismos errores que te han mantenido bloqueando durante tanto tiempo.</li>
+      </ul>
+    </div>
+
+    <div class="card" style="padding:24px;">
+      <h3 style="margin:0 0 14px;font-size:16px;font-weight:600;">No es para ti si...</h3>
+      <ul class="x-list" style="padding:0;margin:0;">
+        <li>Esperas que te entregue un master listo para sello sin más. Esto es trabajo colaborativo, no una ghost producción.</li>
+        <li>Nunca has producido. Esto presupone que manejas tu DAW — para empezar de cero hace falta empezar por las bases, no consultoría.</li>
+        <li>Buscas que te regale el oído. Si tu track tiene problemas reales te los voy a decir sin maquillar.</li>
+        <li>Tu track no es música electrónica de club. Mentotrack y mi experiencia se basan en tech house, house, techno, melodic, trance y derivados.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- QUIÉN SOY -->
+  <section id="quien-soy" style="margin-bottom:48px;">
+    <h2 class="section-h2">Quién soy</h2>
+    <div class="card" style="padding:24px;display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start;">
+      <img
+        src="alex.jpg"
+        alt="Alex González — fundador de Producción Online"
+        loading="lazy"
+        style="width:140px;height:140px;border-radius:14px;object-fit:cover;flex-shrink:0;border:1px solid var(--border);"
+      />
+      <div style="flex:1;min-width:240px;">
+        <p style="margin:0 0 4px;font-weight:600;font-size:16px;">Alex González</p>
+        <p style="margin:0 0 14px;color:var(--text-soft);font-size:13px;">Productor musical · fundador de Producción Online</p>
+        <p style="margin:0 0 12px;color:var(--text-soft);font-size:14px;line-height:1.6;">
+          Soy productor musical y fundador de
+          <a href="https://www.producciononline.com" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(139,92,246,0.4);">Producción&nbsp;Online</a>
+          desde hace más de 10&nbsp;años. Por el camino hemos ayudado a más de
+          <strong style="color:var(--text);font-weight:600;">6.000 productores</strong>
+          a mejorar su sonido y sus flujos de trabajo en el estudio.
+        </p>
+        <p style="margin:0;color:var(--text-soft);font-size:14px;line-height:1.6;">
+          Puedes verme producir en
+          <a href="https://www.youtube.com/@Prodonline" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(139,92,246,0.4);">más de 500&nbsp;vídeos en YouTube</a>
+          — para que sepas cómo trabajo antes de reservar.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- FORMULARIO DE ADMISIÓN -->
+  <section id="formulario" style="margin-bottom:48px;">
+    <h2 class="section-h2">Solicita tu sesión</h2>
+    <p style="color:var(--text-soft);font-size:14px;margin-top:-8px;margin-bottom:20px;">
+      Cuéntame quién eres y qué estás produciendo. Revisaré tu solicitud
+      personalmente. Si veo que puedo ayudarte, pasamos a reservar la cita
+      (pago previo de 250&nbsp;€). Si no, te devuelvo el dinero íntegro.
+    </p>
+
+    <div class="card" style="padding:24px 22px;">
+      <div class="form-error" id="form-error"></div>
+
+      <!-- Vista 1: formulario -->
+      <form id="solicitud-form" autocomplete="on" noValidate>
+        <div class="field">
+          <label for="f-nombre">Nombre <span class="required">*</span></label>
+          <input id="f-nombre" name="nombre" type="text" required maxlength="80" placeholder="Tu nombre o nombre artístico" />
+        </div>
+
+        <div class="field">
+          <label for="f-email">Correo electrónico <span class="required">*</span></label>
+          <input id="f-email" name="email" type="email" required maxlength="120" placeholder="tu@email.com" />
+        </div>
+
+        <div class="field">
+          <label for="f-soundcloud">Enlace de SoundCloud (o Dropbox / Drive con tu track) <span class="required">*</span></label>
+          <input id="f-soundcloud" name="soundcloud" type="url" required maxlength="500" placeholder="https://soundcloud.com/usuario/tu-track" />
+          <p class="field-hint">
+            Si el enlace es privado, ábrelo desde una ventana de incógnito o desde otro
+            navegador para comprobar que se puede oír sin estar logueado en tu cuenta.
+            Si yo no puedo abrirlo, no puedo trabajar tu track.
+          </p>
+        </div>
+
+        <div class="field">
+          <label for="f-ref-cancion">Canción de referencia</label>
+          <input id="f-ref-cancion" name="ref_cancion" type="text" maxlength="300" placeholder="Artista – Título (o enlace a Spotify / YouTube)" />
+          <p class="field-hint">
+            Una canción que te gustaría que se acercase a tu track en sonido, energía o producción.
+          </p>
+        </div>
+
+        <div class="field">
+          <label for="f-ref-artistas">Artistas de referencia</label>
+          <input id="f-ref-artistas" name="ref_artistas" type="text" maxlength="200" placeholder="Ej.: Dennis Cruz, ANOTR, Chris Stussy…" />
+        </div>
+
+        <div class="field">
+          <label for="f-ref-sellos">Sellos de referencia</label>
+          <input id="f-ref-sellos" name="ref_sellos" type="text" maxlength="200" placeholder="Ej.: Solid Grooves, Hot Creations, Cocoon…" />
+        </div>
+
+        <div class="field">
+          <label for="f-contexto">Algo más que deba saber (opcional)</label>
+          <textarea id="f-contexto" name="contexto" maxlength="800" rows="3" placeholder="Qué te bloquea, fase del track, lo que más te preocupa…"></textarea>
+        </div>
+
+        <button type="submit" id="submit-btn" class="btn-primary" style="width:100%;margin-top:8px;">
+          Enviar solicitud y reservar →
+        </button>
+        <p class="field-hint" style="margin-top:10px;text-align:center;">
+          Recibirás respuesta en las próximas 24&nbsp;h tras hacer la reserva.
+        </p>
+      </form>
+
+      <!-- Vista 2: solicitud enviada → llevar al pago en Stripe -->
+      <div id="post-submit" style="display:none;">
+        <div class="form-ok">
+          <p style="margin:0 0 6px;font-weight:600;">Solicitud recibida ✓</p>
+          <p style="margin:0;color:var(--text-soft);font-size:14px;">
+            Ahora completa el pago de 250&nbsp;€ para confirmar tu plaza. Tu solicitud
+            quedará pendiente de mi revisión. Si veo que no puedo ayudarte, te
+            devuelvo el dinero íntegro.
+          </p>
+        </div>
+        <a id="stripe-link"
+           href="https://buy.stripe.com/dRm7sKcqhf8p9Pr9rQdAk01"
+           class="btn-primary"
+           style="width:100%;justify-content:center;">
+          Continuar al pago →
+        </a>
+        <p class="field-hint" style="text-align:center;margin-top:10px;">
+          Se abrirá la pasarela segura de Stripe en esta misma ventana.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section style="margin-bottom:48px;">
+    <h2 class="section-h2">Preguntas frecuentes</h2>
+
+    <details>
+      <summary>¿Y si mi track es muy malo todavía?</summary>
+      <p>
+        Hay un punto de partida útil en cualquier track. Si durante la petición veo que
+        no hay base sobre la que trabajar (o estás en una fase muy temprana), te lo digo
+        claro y reembolso directo. Mejor decir "vuelve en un tiempo con más material"
+        que cobrarte por no poder ayudarte.
+      </p>
+    </details>
+
+    <details>
+      <summary>¿Qué DAW usas?</summary>
+      <p>
+        Trabajo con Ableton Live. Si tú usas otro podemos trabajar juntos también. La
+        única diferencia es que tendrás que aplicar por ti mismo los cambios sugeridos
+        en la sesión y te servirá para asentar mejor los conocimientos. Pero no te
+        preocupes, podrás seguir la sesión grabada paso a paso.
+      </p>
+    </details>
+
+    <details>
+      <summary>¿Vamos a tocar mi proyecto o lo abres en el tuyo?</summary>
+      <p>
+        Depende de lo que necesites y de si me pasas el .als / .flp. Si me lo mandas,
+        trabajamos directamente sobre tu proyecto y al final te lo devuelvo modificado.
+        Si solo me pasas el bounce, hago demos en mi DAW para enseñarte la dirección y
+        tú la reproduces en el tuyo.
+      </p>
+    </details>
+
+    <details>
+      <summary>¿Grabamos la sesión?</summary>
+      <p>
+        Sí. Te mando el vídeo en las 24&nbsp;h siguientes para que puedas repasarlo. Es
+        parte del valor: muchas cosas se entienden de verdad la segunda vez que las ves.
+      </p>
+    </details>
+
+    <details>
+      <summary>¿Puedo reservar varias sesiones seguidas?</summary>
+      <p>
+        No te lo recomiendo. Tras una sesión sales con 3-5 cosas concretas que aplicar
+        — necesitas tiempo para practicarlas y entender de verdad. Mejor sesión, aplicar
+        2-3 semanas, y volver con dudas o el siguiente track.
+      </p>
+    </details>
+
+    <details>
+      <summary>¿Hay descuentos por paquete?</summary>
+      <p>
+        No, pero en caso de que necesites un acompañamiento de más duración, te
+        recomiendo mirarte La Mentoría de Producción Online.
+      </p>
+    </details>
+  </section>
+
+  <!-- CTA FINAL -->
+  <section style="text-align:center;margin-bottom:32px;">
+    <h2 style="font-size:22px;font-weight:600;margin:0 0 12px;">¿Listo?</h2>
+    <p style="color:var(--text-soft);margin:0 0 20px;font-size:14px;">
+      Una hora bien aprovechada dedicada a tu caso puede ahorrarte meses dando palos de ciego.
+    </p>
+    <a href="#agenda" class="btn-primary">Reservar sesión →</a>
+  </section>
+
+  <footer style="text-align:center;font-size:12px;color:var(--text-muted);border-top:1px solid var(--border);padding-top:24px;">
+    <p style="margin:0 0 4px;">Mentotrack · Producción Online — PRODONLINE LLC</p>
+    <p style="margin:0;">
+      <a href="/privacidad" style="color:var(--text-muted);text-decoration:underline;">Privacidad</a> ·
+      <a href="/terminos" style="color:var(--text-muted);text-decoration:underline;">Términos</a> ·
+      <a href="/aviso-legal" style="color:var(--text-muted);text-decoration:underline;">Aviso legal</a>
+    </p>
+  </footer>
+
+</main>
+
+<script>
+  // ====================================================================
+  // Stripe payment link — pago previo de la sesión 1:1
+  // ====================================================================
+  const STRIPE_PAYMENT_LINK = "https://buy.stripe.com/dRm7sKcqhf8p9Pr9rQdAk01";
+
+  // ====================================================================
+  // Formulario de admisión
+  // ====================================================================
+  const form = document.getElementById('solicitud-form');
+  const errBox = document.getElementById('form-error');
+  const submitBtn = document.getElementById('submit-btn');
+  const postSubmit = document.getElementById('post-submit');
+  const stripeLink = document.getElementById('stripe-link');
+
+  function showError(msg) {
+    errBox.textContent = msg;
+    errBox.style.display = 'block';
+    errBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  function clearError() {
+    errBox.style.display = 'none';
+    errBox.textContent = '';
+  }
+  function isValidUrl(s) {
+    try { const u = new URL(s); return u.protocol === 'http:' || u.protocol === 'https:'; }
+    catch (_) { return false; }
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    clearError();
+
+    const data = {
+      nombre: document.getElementById('f-nombre').value.trim(),
+      email: document.getElementById('f-email').value.trim(),
+      soundcloud: document.getElementById('f-soundcloud').value.trim(),
+      ref_cancion: document.getElementById('f-ref-cancion').value.trim(),
+      ref_artistas: document.getElementById('f-ref-artistas').value.trim(),
+      ref_sellos: document.getElementById('f-ref-sellos').value.trim(),
+      contexto: document.getElementById('f-contexto').value.trim(),
+    };
+
+    if (data.nombre.length < 2) return showError('Indica tu nombre.');
+    if (!data.email.includes('@')) return showError('El correo no parece válido.');
+    if (!isValidUrl(data.soundcloud)) {
+      return showError('El enlace de tu track no es una URL válida (debe empezar por https://).');
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Enviando…';
+
+    try {
+      const resp = await fetch('/api/consultoria/solicitud', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        showError(json.error || `Error ${resp.status}. Vuelve a intentarlo o escribe a soporte@producciononline.com.`);
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Enviar solicitud y reservar →';
+        return;
+      }
+
+      // Prefill del email en el payment link de Stripe (rellena el campo
+      // del checkout automáticamente). Stripe acepta ?prefilled_email=…
+      try {
+        const url = new URL(STRIPE_PAYMENT_LINK);
+        if (data.email) url.searchParams.set('prefilled_email', data.email);
+        stripeLink.href = url.toString();
+      } catch (_) {
+        // Si la URL no es válida por lo que sea, mantenemos la original.
+      }
+
+      // Mostrar bloque post-submit con el CTA hacia Stripe
+      form.style.display = 'none';
+      postSubmit.style.display = 'block';
+      postSubmit.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+      // Redirección automática al pago tras un breve "respira" visual
+      // (1.2 s — suficiente para que el usuario vea la confirmación).
+      setTimeout(() => {
+        window.location.href = stripeLink.href;
+      }, 1200);
+    } catch (e) {
+      showError('No se pudo enviar. Comprueba tu conexión y vuelve a intentarlo.');
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Enviar solicitud y reservar →';
+    }
+  });
+</script>
+
+</body>
+</html>
