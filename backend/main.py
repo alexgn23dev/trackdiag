@@ -48,7 +48,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.25")
+app = FastAPI(title="Mentotrack API", version="0.5.26")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -199,7 +199,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.25"}
+    return {"status": "ok", "version": "0.5.26"}
 
 
 @app.post("/api/diagnostico")
@@ -471,6 +471,77 @@ async def guardar_feedback_request(request: Request, data: dict):
     }
     with open(FEEDBACK_REQUESTS_FILE, "a") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    return {"ok": True}
+
+
+# Log persistente de solicitudes de sesión 1:1 (consultoría). Apéndice
+# rápido para tener historial sin tocar Postgres todavía. Si vemos volumen
+# real, se migra a tabla con admin dashboard.
+CONSULTORIA_REQUESTS_FILE = Path(__file__).resolve().parent / "data" / "consultoria_requests.jsonl"
+
+
+@app.post("/api/consultoria/solicitud")
+@limiter.limit("5/minute")
+async def solicitud_consultoria(request: Request, data: dict):
+    """Recibe la solicitud del formulario de la sesión 1:1, manda email a
+    Alex con todos los datos y registra la entrada en jsonl local. No
+    requiere auth — la página /consultoria es pública."""
+    nombre = _sanitize(data.get("nombre", ""), 100)
+    email = _sanitize(data.get("email", ""), 150).lower()
+    soundcloud = _sanitize(data.get("soundcloud", ""), 500)
+
+    if len(nombre) < 2:
+        return JSONResponse(status_code=400, content={"error": "Indica tu nombre."})
+    if "@" not in email or "." not in email.split("@")[-1]:
+        return JSONResponse(status_code=400, content={"error": "El correo no parece válido."})
+    if not (soundcloud.startswith("http://") or soundcloud.startswith("https://")):
+        return JSONResponse(status_code=400, content={"error": "El enlace de tu track debe empezar por http:// o https://."})
+
+    entry = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "nombre": nombre,
+        "email": email,
+        "soundcloud": soundcloud,
+        "ref_cancion": _sanitize(data.get("ref_cancion", ""), 300),
+        "ref_artistas": _sanitize(data.get("ref_artistas", ""), 200),
+        "ref_sellos": _sanitize(data.get("ref_sellos", ""), 200),
+        "contexto": _sanitize(data.get("contexto", ""), 800),
+    }
+
+    # Persistencia primary: Postgres. Best-effort — si falla, igualmente
+    # respondemos OK al usuario (el email a Alex y el jsonl de backup
+    # garantizan que no se pierde la solicitud).
+    if _pg_available():
+        try:
+            from db import get_pool
+            import repositories as repo
+            pool = get_pool()
+            await repo.create_consultoria_solicitud(
+                pool,
+                nombre=entry["nombre"],
+                email=entry["email"],
+                soundcloud=entry["soundcloud"],
+                ref_cancion=entry["ref_cancion"],
+                ref_artistas=entry["ref_artistas"],
+                ref_sellos=entry["ref_sellos"],
+                contexto=entry["contexto"],
+            )
+        except Exception as e:
+            print(f"[CONSULTORIA] Postgres falló: {type(e).__name__}: {e}")
+
+    # Backup local en jsonl (filesystem efímero en Railway pero útil
+    # para entornos donde sí persista — y por si Postgres está caído).
+    try:
+        CONSULTORIA_REQUESTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(CONSULTORIA_REQUESTS_FILE, "a") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception as e:
+        print(f"[CONSULTORIA] no se pudo persistir en jsonl: {e}")
+
+    # Email a Alex con los datos. Si falla, igualmente devolvemos OK al
+    # usuario — Alex puede recuperar de Postgres / jsonl. Pero logueamos.
+    _enviar_email_solicitud_consultoria(entry)
+
     return {"ok": True}
 
 
@@ -762,6 +833,10 @@ def _verify_password(password: str, hashed: str) -> bool:
 # -------------------------------------------------------------------------
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 RESEND_FROM = os.environ.get("RESEND_FROM", "Mentotrack <noreply@mentotrack.com>")
+# Destinatario interno (Alex) para notificaciones operativas: solicitudes
+# de consultoría, casos edge, etc. Si está vacío, las notificaciones fallan
+# en silencio (se loguean) — no afecta al usuario.
+ADMIN_NOTIFY_EMAIL = os.environ.get("ADMIN_NOTIFY_EMAIL", "alexgn23@gmail.com")
 # Base URL del frontend para construir el link de reset. En local apunta a 8000
 # (donde corre uvicorn), en prod a https://www.mentotrack.com.
 APP_BASE_URL = os.environ.get("APP_BASE_URL", "https://www.mentotrack.com")
@@ -831,6 +906,84 @@ def _enviar_email_reset_password(email: str, token: str) -> bool:
         return True
     except Exception as e:
         print(f"[RESET] Resend falló: {type(e).__name__}: {e}")
+        return False
+
+
+def _enviar_email_solicitud_consultoria(datos: dict) -> bool:
+    """Envía a ADMIN_NOTIFY_EMAIL los datos de la solicitud de sesión 1:1.
+    Lo manda con reply-to al email del usuario para que Alex pueda
+    contestar directamente sin copiar el correo. Si Resend no está
+    disponible, lo logueamos y devolvemos False."""
+    if not _resend_disponible():
+        print("[CONSULTORIA] Resend no disponible — solicitud no enviada por email")
+        return False
+    try:
+        import resend
+        resend.api_key = RESEND_API_KEY
+
+        def _row(label: str, value: str) -> str:
+            if not value:
+                value = "<em style='color:#9ca3af;'>(no indicado)</em>"
+            else:
+                # Escape básico
+                value = (value.replace('&', '&amp;')
+                              .replace('<', '&lt;').replace('>', '&gt;'))
+            return (
+                f"<tr><td style='padding:8px 12px;color:#71717a;font-size:13px;"
+                f"vertical-align:top;width:130px;'>{label}</td>"
+                f"<td style='padding:8px 12px;color:#1f2937;font-size:14px;'>{value}</td></tr>"
+            )
+
+        rows_html = "".join([
+            _row("Nombre", datos.get("nombre", "")),
+            _row("Email", datos.get("email", "")),
+            _row("Track", datos.get("soundcloud", "")),
+            _row("Canción ref.", datos.get("ref_cancion", "")),
+            _row("Artistas ref.", datos.get("ref_artistas", "")),
+            _row("Sellos ref.", datos.get("ref_sellos", "")),
+            _row("Contexto", datos.get("contexto", "")),
+        ])
+
+        html = f"""<!DOCTYPE html>
+<html><body style="font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;background:#f5f1ea;padding:32px 16px;margin:0;">
+  <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;padding:24px;">
+    <p style="color:#9ca3af;font-size:12px;text-transform:uppercase;letter-spacing:0.08em;margin:0 0 8px;">Sesión 1:1 · Solicitud nueva</p>
+    <h1 style="color:#1f2937;font-size:18px;font-weight:600;margin:0 0 18px;">Nueva solicitud de {datos.get("nombre", "(sin nombre)")}</h1>
+    <table style="border-collapse:collapse;width:100%;">
+      <tbody>{rows_html}</tbody>
+    </table>
+    <p style="color:#9ca3af;font-size:12px;margin:18px 0 0;">
+      Responde directamente a este email para contactar con quien lo envió.
+    </p>
+  </div>
+</body></html>"""
+
+        text = (
+            f"Nueva solicitud de sesión 1:1\n\n"
+            f"Nombre: {datos.get('nombre', '')}\n"
+            f"Email: {datos.get('email', '')}\n"
+            f"Track: {datos.get('soundcloud', '')}\n"
+            f"Canción ref.: {datos.get('ref_cancion', '') or '(no indicado)'}\n"
+            f"Artistas ref.: {datos.get('ref_artistas', '') or '(no indicado)'}\n"
+            f"Sellos ref.: {datos.get('ref_sellos', '') or '(no indicado)'}\n\n"
+            f"Contexto:\n{datos.get('contexto', '') or '(no indicado)'}\n"
+        )
+
+        params = {
+            "from": RESEND_FROM,
+            "to": ADMIN_NOTIFY_EMAIL,
+            "subject": f"Sesión 1:1 — Solicitud de {datos.get('nombre', '(sin nombre)')}",
+            "html": html,
+            "text": text,
+        }
+        # Reply-to al email del usuario para que Alex pueda contestar al hilo
+        user_email = (datos.get("email") or "").strip()
+        if user_email:
+            params["reply_to"] = user_email
+        resend.Emails.send(params)
+        return True
+    except Exception as e:
+        print(f"[CONSULTORIA] Resend falló: {type(e).__name__}: {e}")
         return False
 
 
@@ -2302,6 +2455,80 @@ def _replay_motor_sobre_analisis(row: dict) -> dict | None:
     }
 
 
+# =========================================================================
+# Admin: solicitudes de Consultoría (sesión 1:1)
+# =========================================================================
+@app.get("/api/admin/consultoria/solicitudes")
+@limiter.limit("60/minute")
+async def admin_consultoria_solicitudes(request: Request):
+    """Lista todas las solicitudes recibidas vía /consultoria, más recientes
+    primero. Solo accesible con cookie admin."""
+    if not _admin_email_from_cookie(request):
+        return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Postgres no disponible"})
+    try:
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+        rows = await repo.list_consultoria_solicitudes(pool, limit=500)
+    except Exception as e:
+        print(f"[CONSULTORIA-ADMIN] error listando: {e}")
+        return JSONResponse(status_code=503, content={"error": "Error consultando DB"})
+
+    out = []
+    for r in rows:
+        out.append({
+            "id": str(r["id"]),
+            "timestamp": r["timestamp"].isoformat() if r["timestamp"] else None,
+            "nombre": r["nombre"],
+            "email": r["email"],
+            "soundcloud": r["soundcloud"],
+            "ref_cancion": r["ref_cancion"] or "",
+            "ref_artistas": r["ref_artistas"] or "",
+            "ref_sellos": r["ref_sellos"] or "",
+            "contexto": r["contexto"] or "",
+            "estado": r["estado"],
+            "notas_admin": r["notas_admin"] or "",
+            "actualizada_en": r["actualizada_en"].isoformat() if r["actualizada_en"] else None,
+        })
+    return {"ok": True, "solicitudes": out}
+
+
+@app.post("/api/admin/consultoria/solicitudes/{solicitud_id}")
+@limiter.limit("60/minute")
+async def admin_consultoria_actualizar(request: Request, solicitud_id: str, data: dict):
+    """Actualiza estado y/o notas de una solicitud. Estados válidos:
+    nueva, aceptada, rechazada, completada, reembolsada."""
+    if not _admin_email_from_cookie(request):
+        return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
+    estado = (data.get("estado") or "").strip().lower() or None
+    notas_raw = data.get("notas")
+    notas = notas_raw.strip() if isinstance(notas_raw, str) else None
+    # Si notas viene como cadena vacía explícita, persistimos cadena vacía.
+    # Si viene como None / no se manda, no se toca el campo.
+    estados_validos = ("nueva", "aceptada", "rechazada", "completada", "reembolsada")
+    if estado is not None and estado not in estados_validos:
+        return JSONResponse(status_code=400, content={"error": "Estado inválido"})
+    if estado is None and notas is None:
+        return JSONResponse(status_code=400, content={"error": "Nada que actualizar"})
+    try:
+        sid = uuid.UUID(solicitud_id)
+    except (TypeError, ValueError):
+        return JSONResponse(status_code=400, content={"error": "ID inválido"})
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Postgres no disponible"})
+    try:
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+        ok = await repo.update_consultoria_solicitud_estado(pool, sid, estado, notas)
+    except Exception as e:
+        print(f"[CONSULTORIA-ADMIN] error update: {e}")
+        return JSONResponse(status_code=503, content={"error": "Error actualizando"})
+    return {"ok": ok}
+
+
 @app.get("/api/admin/cutover-b")
 @limiter.limit("30/minute")
 async def admin_cutover_b(request: Request):
@@ -2556,6 +2783,18 @@ def serve_metricas():
     if not metricas_path.is_file():
         return JSONResponse(status_code=404, content={"error": "Página no encontrada"})
     return FileResponse(metricas_path, headers={"Cache-Control": "public, max-age=300"})
+
+
+@app.get("/consultoria")
+def serve_consultoria():
+    """Landing de la sesión 1:1 con Alex (200€/60min).
+    Mientras CAL_LINK siga vacío en el HTML, la sección de agenda muestra
+    placeholder con email de contacto. Cambiar 1 línea en consultoria.html
+    para activar el embed cuando Cal.com esté listo."""
+    path = FRONTEND_DIR / "consultoria.html"
+    if not path.is_file():
+        return JSONResponse(status_code=404, content={"error": "Página no encontrada"})
+    return FileResponse(path, headers={"Cache-Control": "no-cache"})
 
 
 # Changelog: HTML lee el JSON y renderiza las entradas en cliente

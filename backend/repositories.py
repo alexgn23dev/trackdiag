@@ -307,6 +307,85 @@ async def get_public_metrics(pool: asyncpg.Pool) -> dict:
 
 
 # =============================================================================
+# CONSULTORÍA — solicitudes de la sesión 1:1 (formulario público)
+# =============================================================================
+
+_ESTADOS_CONSULTORIA = ("nueva", "aceptada", "rechazada", "completada", "reembolsada")
+
+
+@with_retry()
+async def create_consultoria_solicitud(
+    pool: asyncpg.Pool,
+    *,
+    nombre: str,
+    email: str,
+    soundcloud: str,
+    ref_cancion: str = "",
+    ref_artistas: str = "",
+    ref_sellos: str = "",
+    contexto: str = "",
+) -> dict:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """INSERT INTO consultoria_solicitudes
+                   (nombre, email, soundcloud, ref_cancion, ref_artistas, ref_sellos, contexto)
+               VALUES ($1, $2, $3, $4, $5, $6, $7)
+               RETURNING id, timestamp, nombre, email, soundcloud,
+                         ref_cancion, ref_artistas, ref_sellos, contexto,
+                         estado, notas_admin, actualizada_en""",
+            nombre, email, soundcloud,
+            ref_cancion or None, ref_artistas or None,
+            ref_sellos or None, contexto or None,
+        )
+    return dict(row)
+
+
+@with_retry()
+async def list_consultoria_solicitudes(
+    pool: asyncpg.Pool, limit: int = 500
+) -> list[dict]:
+    """Lista solicitudes ordenadas por más recientes primero. Para uso admin."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """SELECT id, timestamp, nombre, email, soundcloud,
+                      ref_cancion, ref_artistas, ref_sellos, contexto,
+                      estado, notas_admin, actualizada_en
+               FROM consultoria_solicitudes
+               ORDER BY timestamp DESC
+               LIMIT $1""",
+            limit,
+        )
+    return [dict(r) for r in rows]
+
+
+@with_retry()
+async def update_consultoria_solicitud_estado(
+    pool: asyncpg.Pool, solicitud_id: UUID,
+    estado: Optional[str] = None,
+    notas: Optional[str] = None,
+) -> bool:
+    """Actualiza estado y/o notas. Si estado se pasa, debe ser uno de
+    _ESTADOS_CONSULTORIA. Si solo cambia notas, estado se queda igual."""
+    if estado is not None and estado not in _ESTADOS_CONSULTORIA:
+        return False
+    sets, values = [], []
+    if estado is not None:
+        sets.append(f"estado = ${len(values) + 1}")
+        values.append(estado)
+    if notas is not None:
+        sets.append(f"notas_admin = ${len(values) + 1}")
+        values.append(notas)
+    if not sets:
+        return False
+    sets.append("actualizada_en = now()")
+    values.append(solicitud_id)
+    sql = f"UPDATE consultoria_solicitudes SET {', '.join(sets)} WHERE id = ${len(values)}"
+    async with pool.acquire() as conn:
+        result = await conn.execute(sql, *values)
+    return result.endswith(" 1")
+
+
+# =============================================================================
 # PASSWORD RESET TOKENS — reset de contraseña vía email transaccional
 # =============================================================================
 

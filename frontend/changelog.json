@@ -1,6 +1,17 @@
 {
   "entries": [
     {
+      "version": "0.5.26",
+      "date": "2026-05-29",
+      "title": "Panel admin para gestionar solicitudes de auditoría 1:1",
+      "changes": [
+        "Infraestructura interna para gestionar solicitudes de sesión 1:1 (la oferta pública para usuarios se desplegará en una versión posterior).",
+        "Nueva tabla `consultoria_solicitudes` en Postgres (migración Alembic auto-aplicada al arrancar). Cada solicitud se persiste con datos del productor, refs aportadas, estado y notas privadas del admin.",
+        "Nuevo tab 'Auditorías' en el dashboard admin: lista de solicitudes ordenadas por más recientes primero, filtros por estado con conteo (nueva / aceptada / rechazada / completada / reembolsada), cambio de estado con un click y editor de notas privadas por solicitud.",
+        "Endpoint POST `/api/consultoria/solicitud` listo para recibir y persistir solicitudes en tres capas (Postgres + jsonl local de backup + email a admin vía Resend con reply-to al usuario). Cuando se conecte el formulario público, todo el plumbing está ya operativo."
+      ]
+    },
+    {
       "version": "0.5.25",
       "date": "2026-05-27",
       "title": "Página pública /metricas con gráficas de crecimiento",
