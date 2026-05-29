@@ -307,6 +307,98 @@ async def get_public_metrics(pool: asyncpg.Pool) -> dict:
 
 
 # =============================================================================
+# CTA EVENTOS — embudo de conversión de la auditoría 1:1
+# =============================================================================
+
+_CTA_EVENTOS_VALIDOS = (
+    "cta_visto",
+    "cta_clicked",
+    "consultoria_visit",
+    "consultoria_form_started",
+    "consultoria_form_submit",
+)
+
+
+@with_retry()
+async def create_cta_evento(
+    pool: asyncpg.Pool,
+    *,
+    evento: str,
+    session_id: Optional[str] = None,
+    diagnostico_id: Optional[str] = None,
+    email: Optional[str] = None,
+    user_agent: Optional[str] = None,
+) -> Optional[dict]:
+    """Inserta un evento del embudo. Devuelve None si el evento no es válido."""
+    if evento not in _CTA_EVENTOS_VALIDOS:
+        return None
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """INSERT INTO cta_eventos
+                   (evento, session_id, diagnostico_id, email, user_agent)
+               VALUES ($1, $2, $3, $4, $5)
+               RETURNING id, timestamp, evento""",
+            evento,
+            (session_id or None),
+            (diagnostico_id or None),
+            (email or None),
+            (user_agent or None),
+        )
+    return dict(row)
+
+
+@with_retry()
+async def stats_embudo_cta(pool: asyncpg.Pool, dias: int = 30) -> dict:
+    """Agregados del embudo de los últimos N días + totales globales."""
+    async with pool.acquire() as conn:
+        totales = await conn.fetch(
+            """SELECT evento, COUNT(*) AS n,
+                      COUNT(DISTINCT session_id) AS sesiones
+               FROM cta_eventos
+               GROUP BY evento"""
+        )
+        recientes = await conn.fetch(
+            """SELECT evento, COUNT(*) AS n,
+                      COUNT(DISTINCT session_id) AS sesiones
+               FROM cta_eventos
+               WHERE timestamp > now() - ($1 || ' days')::INTERVAL
+               GROUP BY evento""",
+            str(dias),
+        )
+        serie_rows = await conn.fetch(
+            """SELECT date_trunc('day', timestamp) AS d, evento, COUNT(*) AS n
+               FROM cta_eventos
+               WHERE timestamp > now() - ($1 || ' days')::INTERVAL
+               GROUP BY 1, 2
+               ORDER BY 1""",
+            str(dias),
+        )
+        top_dx = await conn.fetch(
+            """SELECT diagnostico_id, COUNT(*) AS n
+               FROM cta_eventos
+               WHERE evento = 'cta_visto' AND diagnostico_id IS NOT NULL
+               GROUP BY diagnostico_id
+               ORDER BY n DESC
+               LIMIT 10"""
+        )
+
+    def _to_map(rows):
+        return {r["evento"]: {"n": int(r["n"]), "sesiones": int(r["sesiones"])} for r in rows}
+
+    serie = [
+        {"date": r["d"].date().isoformat(), "evento": r["evento"], "n": int(r["n"])}
+        for r in serie_rows
+    ]
+    return {
+        "totales_global": _to_map(totales),
+        "totales_recientes": _to_map(recientes),
+        "dias_recientes": dias,
+        "serie": serie,
+        "top_dx": [{"dx": r["diagnostico_id"], "n": int(r["n"])} for r in top_dx],
+    }
+
+
+# =============================================================================
 # CONSULTORÍA — solicitudes de la sesión 1:1 (formulario público)
 # =============================================================================
 

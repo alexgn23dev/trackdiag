@@ -1,6 +1,18 @@
 {
   "entries": [
     {
+      "version": "0.5.28",
+      "date": "2026-05-29",
+      "title": "CTA de auditoría 1:1 en el diagnóstico + embudo de conversión",
+      "changes": [
+        "Nueva card debajo del widget de feedback al final de cada diagnóstico que dirige a la página /consultoria. Regla MVP: aparece SIEMPRE excepto cuando el motor diagnostica `sin_diagnostico` o `track_verde` — esos dos casos no justifican la oferta y se ofrecerían como venta forzada.",
+        "Embudo de conversión completo: nueva tabla `cta_eventos` en Postgres que registra los 5 pasos del embudo (cta_visto → cta_clicked → consultoria_visit → consultoria_form_started → consultoria_form_submit) por sesión anónima (id en localStorage compartido entre el SPA y /consultoria).",
+        "Nuevo tab 'Embudo' en el dashboard admin: visualización de los 5 pasos con sesiones únicas, % de conversión paso a paso y conversión global (CTA visto → solicitud enviada), filtro de periodo (7/30/90 días) y desglose de qué diagnósticos disparan más impresiones del CTA.",
+        "Copy de /consultoria actualizado: sección 'Solicita tu sesión' reescrita como 'Háblame sobre tu proyecto y tus objetivos' (menos transaccional), línea de bio modificada a 'puedes verme producir (y explicar)', y botón final 'Reservar sesión' ahora hace scroll al formulario en vez de quedarse colgado.",
+        "Nuevo endpoint público `/api/cta-event` (rate-limited) para que el frontend pueda registrar eventos sin auth. Endpoint admin `/api/admin/embudo` con agregados para alimentar el tab."
+      ]
+    },
+    {
       "version": "0.5.27",
       "date": "2026-05-28",
       "title": "Solicitudes de auditoría 1:1 persistidas + panel admin",
