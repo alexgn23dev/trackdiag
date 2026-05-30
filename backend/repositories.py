@@ -1153,3 +1153,153 @@ async def get_stats_calibracion_raw(
         "etiquetas": [dict(r) for r in rows],
         "total_disponibles": int(total or 0),
     }
+
+
+# =============================================================================
+# REPORTE MENSUAL — MÉTRICAS GENERALES DE MENTOTRACK
+# =============================================================================
+
+@with_retry()
+async def stats_reporte_mensual(pool: asyncpg.Pool, year: int, month: int) -> dict:
+    """Calcula todas las métricas para el reporte mensual:
+    - Análisis ese mes (desglosado por semana)
+    - Análisis totales desde inicio
+    - Usuarios totales
+    - Usuarios nuevos ese mes (desglosado por semana)
+    - Análisis por persona (promedio, mediana) — toda la historia + solo ese mes
+    - Stats del embudo CTA (desde stats_embudo_cta)
+    """
+    async with pool.acquire() as conn:
+        start_date = datetime(year, month, 1, tzinfo=timezone.utc)
+        if month == 12:
+            end_date = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+        else:
+            end_date = datetime(year, month + 1, 1, tzinfo=timezone.utc)
+
+        # Análisis en el mes, desglosado por semana ISO
+        analisis_por_semana = await conn.fetch(
+            """SELECT
+                 to_char(timestamp, 'WW') as semana_num,
+                 to_char(timestamp, 'YYYY-MM-DD') as fecha_inicio_semana,
+                 COUNT(*) as analisis
+               FROM analisis
+               WHERE timestamp >= $1 AND timestamp < $2
+               GROUP BY semana_num, fecha_inicio_semana
+               ORDER BY semana_num ASC""",
+            start_date, end_date,
+        )
+
+        # Total de análisis ese mes
+        total_mes = await conn.fetchval(
+            """SELECT COUNT(*) FROM analisis
+               WHERE timestamp >= $1 AND timestamp < $2""",
+            start_date, end_date,
+        )
+
+        # Total de análisis desde el inicio
+        total_all_time = await conn.fetchval(
+            """SELECT COUNT(*) FROM analisis"""
+        )
+
+        # Total de usuarios
+        total_usuarios = await conn.fetchval(
+            """SELECT COUNT(*) FROM usuarios"""
+        )
+
+        # Usuarios nuevos ese mes, desglosado por semana ISO
+        usuarios_nuevos_por_semana = await conn.fetch(
+            """SELECT
+                 to_char(fecha_registro, 'WW') as semana_num,
+                 to_char(fecha_registro, 'YYYY-MM-DD') as fecha_inicio_semana,
+                 COUNT(*) as usuarios_nuevos
+               FROM usuarios
+               WHERE fecha_registro >= $1 AND fecha_registro < $2
+               GROUP BY semana_num, fecha_inicio_semana
+               ORDER BY semana_num ASC""",
+            start_date, end_date,
+        )
+
+        # Usuarios nuevos en el mes
+        usuarios_nuevos_mes = await conn.fetchval(
+            """SELECT COUNT(*) FROM usuarios
+               WHERE fecha_registro >= $1 AND fecha_registro < $2""",
+            start_date, end_date,
+        )
+
+        # Análisis por persona — TODA la historia
+        stats_all_time = await conn.fetchrow(
+            """SELECT
+                 COUNT(DISTINCT usuario_id) as usuarios_con_analisis,
+                 AVG(analisis_count) as promedio,
+                 PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY analisis_count) as mediana,
+                 MAX(analisis_count) as maximo,
+                 MIN(analisis_count) as minimo
+               FROM (
+                 SELECT usuario_id, COUNT(*) as analisis_count
+                 FROM analisis
+                 WHERE usuario_id IS NOT NULL
+                 GROUP BY usuario_id
+               ) user_counts"""
+        )
+
+        # Análisis por persona — SOLO ese mes
+        stats_mes = await conn.fetchrow(
+            """SELECT
+                 COUNT(DISTINCT usuario_id) as usuarios_con_analisis,
+                 AVG(analisis_count) as promedio,
+                 PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY analisis_count) as mediana,
+                 MAX(analisis_count) as maximo,
+                 MIN(analisis_count) as minimo
+               FROM (
+                 SELECT usuario_id, COUNT(*) as analisis_count
+                 FROM analisis
+                 WHERE usuario_id IS NOT NULL
+                   AND timestamp >= $1 AND timestamp < $2
+                 GROUP BY usuario_id
+               ) user_counts""",
+            start_date, end_date,
+        )
+
+    return {
+        "mes": f"{year}-{month:02d}",
+        "analisis": {
+            "total_mes": int(total_mes or 0),
+            "total_all_time": int(total_all_time or 0),
+            "por_semana": [
+                {
+                    "semana": row["semana_num"],
+                    "fecha_inicio": row["fecha_inicio_semana"],
+                    "count": row["analisis"],
+                }
+                for row in analisis_por_semana
+            ],
+        },
+        "usuarios": {
+            "total": int(total_usuarios or 0),
+            "nuevos_mes": int(usuarios_nuevos_mes or 0),
+            "nuevos_por_semana": [
+                {
+                    "semana": row["semana_num"],
+                    "fecha_inicio": row["fecha_inicio_semana"],
+                    "count": row["usuarios_nuevos"],
+                }
+                for row in usuarios_nuevos_por_semana
+            ],
+        },
+        "analisis_por_persona": {
+            "all_time": {
+                "usuarios_con_analisis": int(stats_all_time["usuarios_con_analisis"] or 0),
+                "promedio": float(stats_all_time["promedio"] or 0),
+                "mediana": float(stats_all_time["mediana"] or 0),
+                "maximo": int(stats_all_time["maximo"] or 0),
+                "minimo": int(stats_all_time["minimo"] or 0),
+            },
+            "mes": {
+                "usuarios_con_analisis": int(stats_mes["usuarios_con_analisis"] or 0),
+                "promedio": float(stats_mes["promedio"] or 0),
+                "mediana": float(stats_mes["mediana"] or 0),
+                "maximo": int(stats_mes["maximo"] or 0),
+                "minimo": int(stats_mes["minimo"] or 0),
+            },
+        },
+    }

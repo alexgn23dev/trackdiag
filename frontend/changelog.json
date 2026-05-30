@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "version": "0.5.29",
+      "date": "2026-05-30",
+      "title": "Reporte mensual automático de métricas generales",
+      "changes": [
+        "Tarea cron que se ejecuta automáticamente el día 1 de cada mes a las 09:00 UTC. Calcula métricas del mes anterior: total de análisis realizados (desglosados por semana ISO), usuarios totales, usuarios nuevos ese mes (por semana), análisis promedio por usuario (histórico y solo ese mes), y embudo de conversión del CTA.",
+        "Email HTML bonito generado automáticamente vía Resend, enviado a la dirección en la variable `ADMIN_EMAIL` (default: alexgn23@gmail.com). Email incluye tablas, KPIs con colores, desglose semanal y métricas de conversión del embudo CTA.",
+        "Endpoint manual `/api/admin/reporte-mensual?year=2026&month=5` (requiere cookie admin) para generar reportes bajo demanda sin esperar al día 1. Útil para auditar períodos históricos o para cuando el cron no se ejecutó."
+      ]
+    },
+    {
       "version": "0.5.28",
       "date": "2026-05-29",
       "title": "CTA de auditoría 1:1 en el diagnóstico + embudo de conversión",
