@@ -2024,7 +2024,7 @@ def serve_ideas():
 
 # Email canónico del único admin actual. Si el día de mañana hay multi-admin
 # se reemplaza por un mapping cookie → email.
-_ADMIN_EMAIL_CANONICO = "alexgn23@gmail.com"
+_ADMIN_EMAIL_CANONICO = "alex@producciononline.com"
 
 
 def _admin_email_from_cookie(request: Request):
@@ -3338,6 +3338,48 @@ async def admin_reporte_mensual(request: Request):
     except Exception as e:
         print(f"[REPORTE] error: {type(e).__name__}: {e}")
         return JSONResponse(status_code=503, content={"error": "Error generando reporte"})
+
+
+@app.post("/api/admin/enviar-reporte-email")
+@limiter.limit("3/minute")
+async def admin_enviar_reporte_email(request: Request, data: dict):
+    """Genera y envía el reporte por email. Parámetros: year, month, email (opcional)."""
+    if not _admin_email_from_cookie(request):
+        return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Postgres no disponible"})
+
+    try:
+        today = datetime.now(timezone.utc)
+        year = data.get("year")
+        month = data.get("month")
+        email_dest = data.get("email", _ADMIN_EMAIL_CANONICO)
+
+        if year and month:
+            year, month = int(year), int(month)
+        else:
+            if today.month == 1:
+                year, month = today.year - 1, 12
+            else:
+                year, month = today.year, today.month - 1
+
+        mes_str = f"{year}-{month:02d}"
+
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+
+        stats_gen = await repo.stats_reporte_mensual(pool, year, month)
+        stats_emb = await repo.stats_embudo_cta(pool, dias=30)
+        html = _generate_reporte_html(stats_gen, stats_emb, mes_str)
+
+        # Enviar email
+        await _send_reporte_email(html, mes_str, email_dest)
+
+        return JSONResponse(content={"ok": True, "mensaje": f"Reporte enviado a {email_dest}"})
+    except Exception as e:
+        print(f"[ENVIAR-EMAIL] error: {type(e).__name__}: {e}")
+        return JSONResponse(status_code=503, content={"error": f"Error enviando email: {str(e)}"})
 
 
 async def _task_monthly_reporte():
