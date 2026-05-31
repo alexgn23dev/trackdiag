@@ -48,9 +48,12 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.28")
+app = FastAPI(title="Mentotrack API", version="0.5.29")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Tarea de cron para reporte mensual
+_reporte_task_handle = None
 
 
 def _run_alembic_upgrade() -> None:
@@ -79,16 +82,27 @@ async def _startup_db():
     tablas nuevas existan al recibir la primera petición.
     En local sin DATABASE_URL, la app sigue arrancando (el motor de análisis
     no depende de la BD; los endpoints que sí dependan fallarán explícitos).
+    Lanza también la tarea de cron del reporte mensual.
     """
+    global _reporte_task_handle
     if os.environ.get("DATABASE_URL"):
         # Migraciones primero (sync, rápido si no hay nada que aplicar).
         await asyncio.to_thread(_run_alembic_upgrade)
         from db import init_pool
         await init_pool()
+        # Lanza la tarea de reporte mensual (no await, es long-running)
+        _reporte_task_handle = asyncio.create_task(_task_monthly_reporte())
 
 
 @app.on_event("shutdown")
 async def _shutdown_db():
+    global _reporte_task_handle
+    if _reporte_task_handle:
+        _reporte_task_handle.cancel()
+        try:
+            await _reporte_task_handle
+        except asyncio.CancelledError:
+            pass
     if os.environ.get("DATABASE_URL"):
         from db import close_pool
         await close_pool()
@@ -3110,6 +3124,263 @@ def serve_pwa_icon_192():
 @app.get("/pwa-admin-512.png")
 def serve_pwa_icon_512():
     return FileResponse(FRONTEND_DIR / "pwa-admin-512.png", headers={"Cache-Control": "public, max-age=604800, immutable"})
+
+
+# =========================================================================
+# Admin: Reporte Mensual
+# =========================================================================
+
+def _generate_reporte_html(stats_generales: dict, stats_embudo: dict, mes_str: str) -> str:
+    """Genera HTML bonito del reporte mensual."""
+    mes_display = f"{mes_str.split('-')[0]}-{mes_str.split('-')[1]}"
+    mes_nombre = {
+        "01": "Enero", "02": "Febrero", "03": "Marzo", "04": "Abril",
+        "05": "Mayo", "06": "Junio", "07": "Julio", "08": "Agosto",
+        "09": "Septiembre", "10": "Octubre", "11": "Noviembre", "12": "Diciembre",
+    }[mes_str.split('-')[1]]
+
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.6; color: #333; }}
+        .container {{ max-width: 800px; margin: 0 auto; padding: 20px; }}
+        h1 {{ color: #1f2937; border-bottom: 2px solid #0ea5e9; padding-bottom: 10px; }}
+        h2 {{ color: #374151; margin-top: 30px; }}
+        .kpi {{ display: inline-block; width: 32%; margin: 1%; text-align: center; padding: 15px; background: #f3f4f6; border-radius: 8px; }}
+        .kpi-value {{ font-size: 24px; font-weight: bold; color: #0ea5e9; }}
+        .kpi-label {{ font-size: 12px; color: #6b7280; margin-top: 5px; }}
+        table {{ width: 100%; border-collapse: collapse; margin: 15px 0; }}
+        th, td {{ padding: 10px; text-align: left; border-bottom: 1px solid #e5e7eb; }}
+        th {{ background: #f9fafb; font-weight: 600; }}
+        .funnel-row {{ display: flex; gap: 10px; margin: 10px 0; }}
+        .funnel-bar {{ height: 30px; background: #0ea5e9; border-radius: 4px; display: flex; align-items: center; padding: 0 8px; color: white; font-size: 12px; }}
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>📊 Reporte Mensual — {mes_nombre} {mes_str.split('-')[0]}</h1>
+
+    <h2>Análisis</h2>
+    <div class="kpi">
+        <div class="kpi-value">{stats_generales['analisis']['total_mes']}</div>
+        <div class="kpi-label">Este mes</div>
+    </div>
+    <div class="kpi">
+        <div class="kpi-value">{stats_generales['analisis']['total_all_time']}</div>
+        <div class="kpi-label">Total histórico</div>
+    </div>
+
+    <h3>Desglose por semana</h3>
+    <table>
+        <tr><th>Semana</th><th>Análisis</th></tr>
+"""
+    for semana in stats_generales['analisis']['por_semana']:
+        html += f"<tr><td>Semana {semana['semana']}</td><td>{semana['count']}</td></tr>\n"
+
+    html += f"""
+    </table>
+
+    <h2>Usuarios</h2>
+    <div class="kpi">
+        <div class="kpi-value">{stats_generales['usuarios']['total']}</div>
+        <div class="kpi-label">Total usuarios</div>
+    </div>
+    <div class="kpi">
+        <div class="kpi-value">{stats_generales['usuarios']['nuevos_mes']}</div>
+        <div class="kpi-label">Nuevos este mes</div>
+    </div>
+
+    <h3>Usuarios nuevos por semana</h3>
+    <table>
+        <tr><th>Semana</th><th>Nuevos</th></tr>
+"""
+    for semana in stats_generales['usuarios']['nuevos_por_semana']:
+        html += f"<tr><td>Semana {semana['semana']}</td><td>{semana['count']}</td></tr>\n"
+
+    html += f"""
+    </table>
+
+    <h2>Análisis por Persona</h2>
+    <h3>Histórico (desde el inicio)</h3>
+    <table>
+        <tr><th>Métrica</th><th>Valor</th></tr>
+        <tr><td>Usuarios con análisis</td><td>{stats_generales['analisis_por_persona']['all_time']['usuarios_con_analisis']}</td></tr>
+        <tr><td>Promedio análisis/usuario</td><td>{stats_generales['analisis_por_persona']['all_time']['promedio']:.1f}</td></tr>
+        <tr><td>Mediana</td><td>{stats_generales['analisis_por_persona']['all_time']['mediana']:.1f}</td></tr>
+        <tr><td>Máximo</td><td>{stats_generales['analisis_por_persona']['all_time']['maximo']}</td></tr>
+    </table>
+
+    <h3>Este mes</h3>
+    <table>
+        <tr><th>Métrica</th><th>Valor</th></tr>
+        <tr><td>Usuarios con análisis</td><td>{stats_generales['analisis_por_persona']['mes']['usuarios_con_analisis']}</td></tr>
+        <tr><td>Promedio análisis/usuario</td><td>{stats_generales['analisis_por_persona']['mes']['promedio']:.1f}</td></tr>
+        <tr><td>Mediana</td><td>{stats_generales['analisis_por_persona']['mes']['mediana']:.1f}</td></tr>
+        <tr><td>Máximo</td><td>{stats_generales['analisis_por_persona']['mes']['maximo']}</td></tr>
+    </table>
+
+    <h2>Embudo CTA — Auditorías 1:1</h2>
+    <table>
+        <tr><th>Evento</th><th>Sesiones únicas</th><th>% vs paso anterior</th></tr>
+"""
+
+    embudo_steps = [
+        ("CTA Visto", "cta_visto"),
+        ("CTA Clickado", "cta_clicked"),
+        ("Visita /consultoria", "consultoria_visit"),
+        ("Form iniciado", "consultoria_form_started"),
+        ("Form enviado", "consultoria_form_submit"),
+    ]
+
+    totales = stats_embudo.get('totales_recientes', {})
+    prev_count = None
+    for label, event_key in embudo_steps:
+        data = totales.get(event_key)
+        if data:
+            count = data.get('sesiones', 0)
+            pct = ""
+            if prev_count and prev_count > 0:
+                pct = f"{(count / prev_count * 100):.1f}%"
+            html += f"<tr><td>{label}</td><td>{count}</td><td>{pct}</td></tr>\n"
+            prev_count = count
+
+    html += """
+    </table>
+
+    <p style="margin-top: 40px; font-size: 12px; color: #9ca3af;">
+        Reporte generado automáticamente por Mentotrack.<br>
+        <a href="https://www.mentotrack.com/dashboard">Ver dashboard completo</a>
+    </p>
+</div>
+</body>
+</html>"""
+    return html
+
+
+async def _send_reporte_email(html_content: str, mes_str: str, email_dest: str) -> bool:
+    """Envía el reporte via Resend. Retorna True si tuvo éxito."""
+    resend_key = os.environ.get("RESEND_API_KEY")
+    if not resend_key:
+        print("[REPORTE] RESEND_API_KEY no configurada")
+        return False
+
+    mes_nombre = {
+        "01": "Enero", "02": "Febrero", "03": "Marzo", "04": "Abril",
+        "05": "Mayo", "06": "Junio", "07": "Julio", "08": "Agosto",
+        "09": "Septiembre", "10": "Octubre", "11": "Noviembre", "12": "Diciembre",
+    }[mes_str.split('-')[1]]
+    ano = mes_str.split('-')[0]
+
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "https://api.resend.com/emails",
+                headers={"Authorization": f"Bearer {resend_key}"},
+                json={
+                    "from": "Mentotrack <noreply@mentotrack.com>",
+                    "to": email_dest,
+                    "subject": f"📊 Reporte Mentotrack — {mes_nombre} {ano}",
+                    "html": html_content,
+                    "reply_to": "hola@mentotrack.com",
+                }
+            )
+            if resp.status_code == 200:
+                print(f"[REPORTE] Email enviado a {email_dest}")
+                return True
+            else:
+                print(f"[REPORTE] Fallo enviando email: {resp.status_code} {resp.text}")
+                return False
+    except Exception as e:
+        print(f"[REPORTE] Error al enviar: {e}")
+        return False
+
+
+@app.get("/api/admin/reporte-mensual")
+@limiter.limit("10/minute")
+async def admin_reporte_mensual(request: Request):
+    """Genera y envía (o retorna) el reporte mensual.
+    Parámetros opcionativos: year=2026&month=5
+    Si no se especifican, usa el mes anterior al actual.
+    Solo accesible con cookie admin."""
+    if not _admin_email_from_cookie(request):
+        return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Postgres no disponible"})
+
+    try:
+        today = datetime.now(timezone.utc)
+        year = request.query_params.get("year")
+        month = request.query_params.get("month")
+
+        if year and month:
+            year, month = int(year), int(month)
+        else:
+            # Mes anterior al actual
+            if today.month == 1:
+                year, month = today.year - 1, 12
+            else:
+                year, month = today.year, today.month - 1
+
+        mes_str = f"{year}-{month:02d}"
+
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+
+        stats_gen = await repo.stats_reporte_mensual(pool, year, month)
+        stats_emb = await repo.stats_embudo_cta(pool, dias=30)
+
+        html = _generate_reporte_html(stats_gen, stats_emb, mes_str)
+
+        return HTMLResponse(content=html)
+    except Exception as e:
+        print(f"[REPORTE] error: {type(e).__name__}: {e}")
+        return JSONResponse(status_code=503, content={"error": "Error generando reporte"})
+
+
+async def _task_monthly_reporte():
+    """Tarea de cron que se ejecuta cada hora y chequea si es el día 1 del mes a las 09:00.
+    Si es, calcula el reporte del mes anterior y lo envía por email."""
+    try:
+        while True:
+            await asyncio.sleep(3600)  # Chequea cada hora
+            now = datetime.now(timezone.utc)
+
+            # Ejecuta si es día 1, hora 09:00 (ventana de 1 minuto)
+            if now.day == 1 and now.hour == 9 and now.minute < 1:
+                if not _pg_available():
+                    print("[REPORTE-CRON] Postgres no disponible")
+                    continue
+
+                try:
+                    from db import get_pool
+                    import repositories as repo
+
+                    # Calcula reporte del mes anterior
+                    if now.month == 1:
+                        year, month = now.year - 1, 12
+                    else:
+                        year, month = now.year, now.month - 1
+
+                    mes_str = f"{year}-{month:02d}"
+                    pool = get_pool()
+
+                    stats_gen = await repo.stats_reporte_mensual(pool, year, month)
+                    stats_emb = await repo.stats_embudo_cta(pool, dias=30)
+
+                    html = _generate_reporte_html(stats_gen, stats_emb, mes_str)
+
+                    # Envía email
+                    email_dest = os.environ.get("ADMIN_EMAIL", "alexgn23@gmail.com")
+                    await _send_reporte_email(html, mes_str, email_dest)
+
+                    print(f"[REPORTE-CRON] Reporte {mes_str} enviado exitosamente")
+                except Exception as e:
+                    print(f"[REPORTE-CRON] error generando reporte: {e}")
+    except asyncio.CancelledError:
+        pass
 
 
 # =========================================================================

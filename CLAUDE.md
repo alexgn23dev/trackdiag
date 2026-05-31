@@ -27,10 +27,11 @@ Documento de referencia para trabajar en este repo. Para la visión completa del
 - **PWA admin:** dashboard instalable en móvil (`manifest-admin.json`, `sw-admin.js`).
 - **Páginas legales:** `/aviso-legal`, `/privacidad`, `/cookies`, `/terminos`, `/changelog`.
 - **Seguridad extra:** bloqueo de `.git` y `dashboard.html` en el catch-all, límite de upload 100 MB validado en cliente y servidor.
+- **Reporte mensual automático (v0.5.29):** tarea cron que se ejecuta el día 1 de cada mes a las 09:00 UTC. Calcula métricas del mes anterior (análisis totales, usuarios nuevos, análisis por persona, embudo CTA) y envía email vía Resend a `ADMIN_EMAIL` (default: alexgn23@gmail.com). Endpoint manual `/api/admin/reporte-mensual?year=2026&month=5` para generar reportes bajo demanda (requiere cookie admin).
 
 ### Tamaños actuales
-- `backend/main.py` — ~1900 líneas
-- `backend/repositories.py` — ~550 líneas (capa SQL)
+- `backend/main.py` — ~3500 líneas
+- `backend/repositories.py` — ~1350 líneas (capa SQL)
 - `backend/db.py` — ~90 líneas (pool asyncpg)
 - `frontend/index.html` — ~3300 líneas / ~210 KB
 - `frontend/dashboard.html` — ~1480 líneas / ~90 KB
