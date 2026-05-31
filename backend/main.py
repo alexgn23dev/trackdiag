@@ -3234,11 +3234,12 @@ def _generate_reporte_html(stats_generales: dict, stats_embudo: dict, mes_str: s
         ("Form enviado", "consultoria_form_submit"),
     ]
 
+    totales = stats_embudo.get('totales_recientes', {})
     prev_count = None
     for label, event_key in embudo_steps:
-        data = next((e for e in stats_embudo.get('serie', []) if e.get('evento') == event_key), None)
+        data = totales.get(event_key)
         if data:
-            count = data['sesiones_unicas']
+            count = data.get('sesiones', 0)
             pct = ""
             if prev_count and prev_count > 0:
                 pct = f"{(count / prev_count * 100):.1f}%"
