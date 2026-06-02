@@ -2850,14 +2850,21 @@ async def metricas_embudo_cta():
     try:
         from db import get_pool
         import repositories as repo
+        import json
         pool = get_pool()
 
         stats_emb = await repo.stats_embudo_cta(pool, dias=30)
 
-        return JSONResponse(content=stats_emb)
+        # Serializar a JSON y deserializar para asegurar que todo es JSON-safe
+        json_str = json.dumps(stats_emb, default=str)
+        data = json.loads(json_str)
+
+        return JSONResponse(content=data)
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f"[EMBUDO-CTA] error: {type(e).__name__}: {e}")
-        return JSONResponse(status_code=503, content={"error": "Error obteniendo datos"})
+        return JSONResponse(status_code=503, content={"error": f"Error obteniendo datos: {str(e)}"})
 
 
 @app.get("/api/metricas/public")
