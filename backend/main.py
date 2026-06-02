@@ -2844,27 +2844,20 @@ _PUBLIC_METRICS_TTL = timedelta(hours=6)
 @limiter.limit("30/minute")
 async def metricas_embudo_cta():
     """Devuelve datos del embudo CTA actual (últimos 30 días y acumulado)."""
-    if not _pg_available():
-        return JSONResponse(status_code=503, content={"error": "Postgres no disponible"})
-
     try:
+        if not _pg_available():
+            return JSONResponse(status_code=503, content={"error": "Postgres no disponible"})
+
         from db import get_pool
         import repositories as repo
-        import json
         pool = get_pool()
-
         stats_emb = await repo.stats_embudo_cta(pool, dias=30)
-
-        # Serializar a JSON y deserializar para asegurar que todo es JSON-safe
-        json_str = json.dumps(stats_emb, default=str)
-        data = json.loads(json_str)
-
-        return JSONResponse(content=data)
+        return JSONResponse(content=stats_emb, default=str)
     except Exception as e:
+        print(f"[EMBUDO-CTA] error: {type(e).__name__}: {e}")
         import traceback
         traceback.print_exc()
-        print(f"[EMBUDO-CTA] error: {type(e).__name__}: {e}")
-        return JSONResponse(status_code=503, content={"error": f"Error obteniendo datos: {str(e)}"})
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 
 @app.get("/api/metricas/public")
