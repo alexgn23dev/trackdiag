@@ -2840,6 +2840,26 @@ _PUBLIC_METRICS_CACHE: dict = {"data": None, "fetched_at": None}
 _PUBLIC_METRICS_TTL = timedelta(hours=6)
 
 
+@app.get("/api/metricas/embudo-cta-hoy")
+@limiter.limit("30/minute")
+async def metricas_embudo_cta():
+    """Devuelve datos del embudo CTA actual (últimos 30 días y acumulado)."""
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Postgres no disponible"})
+
+    try:
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+
+        stats_emb = await repo.stats_embudo_cta(pool, dias=30)
+
+        return JSONResponse(content=stats_emb)
+    except Exception as e:
+        print(f"[EMBUDO-CTA] error: {type(e).__name__}: {e}")
+        return JSONResponse(status_code=503, content={"error": "Error obteniendo datos"})
+
+
 @app.get("/api/metricas/public")
 @limiter.limit("30/minute")
 async def public_metrics(request: Request):
