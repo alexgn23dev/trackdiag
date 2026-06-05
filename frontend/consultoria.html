@@ -248,10 +248,10 @@
       <div>
         <p style="margin:0 0 4px;font-weight:500;">Antes de nada — me envías tu canción y contexto</p>
         <p style="margin:0;color:var(--text-soft);font-size:14px;">
-          Rellenas el formulario de admisión para que pueda valorar tu situación. SOLO si
-          creo que realmente te puedo ayudar, aceptaré la solicitud y pasaremos al
-          punto&nbsp;2. De lo contrario, declinaré la petición y te devolveré el dinero
-          íntegramente.
+          Rellenas el formulario de admisión (es gratis) para que pueda valorar tu
+          situación. SOLO si creo que realmente te puedo ayudar, aceptaré la solicitud y
+          te enviaré el enlace de pago. De lo contrario, declinaré la petición sin coste
+          alguno.
         </p>
       </div>
     </div>
@@ -259,11 +259,11 @@
     <div class="step">
       <div class="step-num">2</div>
       <div>
-        <p style="margin:0 0 4px;font-weight:500;">Confirmación, envío de proyecto y cita</p>
+        <p style="margin:0 0 4px;font-weight:500;">Confirmación, pago y envío de proyecto</p>
         <p style="margin:0;color:var(--text-soft);font-size:14px;">
-          Si la petición es favorable te pediré que me envíes tu proyecto (te explicaré
-          cómo) para que lo pueda analizar a fondo y trabajarlo contigo durante la sesión
-          1-1. Reservarás la fecha del encuentro y listos.
+          Si la petición es favorable te enviaré el enlace de pago para confirmar tu
+          plaza. Una vez reservada, te pediré tu proyecto (te explicaré cómo) para
+          analizarlo a fondo y trabajarlo contigo durante la sesión 1-1.
         </p>
       </div>
     </div>
@@ -339,8 +339,8 @@
   <section id="formulario" style="margin-bottom:48px;">
     <h2 class="section-h2">Háblame sobre tu proyecto y tus objetivos</h2>
     <p style="color:var(--text-soft);font-size:14px;margin-top:-8px;margin-bottom:20px;">
-      Si veo que puedo ayudarte te escribiré para los siguientes pasos.
-      De lo contrario, te devolveré el importe íntegro de la auditoría.
+      Solicitar es gratis. Si veo que puedo ayudarte, te escribiré con los siguientes
+      pasos y el enlace de pago. De lo contrario, declinaré la solicitud sin coste alguno.
     </p>
 
     <div class="card" style="padding:24px 22px;">
@@ -392,32 +392,26 @@
         </div>
 
         <button type="submit" id="submit-btn" class="btn-primary" style="width:100%;margin-top:8px;">
-          Enviar solicitud y reservar →
+          Solicitar plaza (gratis) →
         </button>
         <p class="field-hint" style="margin-top:10px;text-align:center;">
-          Recibirás respuesta en las próximas 24&nbsp;h tras hacer la reserva.
+          Solicitar es gratis. No pagas nada hasta que confirme que encajas.
+          Respuesta en 24&nbsp;h.
         </p>
       </form>
 
-      <!-- Vista 2: solicitud enviada → llevar al pago en Stripe -->
+      <!-- Vista 2: solicitud enviada → confirmación (sin pago; Alex revisa y luego envía el link) -->
       <div id="post-submit" style="display:none;">
         <div class="form-ok">
           <p style="margin:0 0 6px;font-weight:600;">Solicitud recibida ✓</p>
           <p style="margin:0;color:var(--text-soft);font-size:14px;">
-            Ahora completa el pago de 250&nbsp;€ para confirmar tu plaza. Tu solicitud
-            quedará pendiente de mi revisión. Si veo que no puedo ayudarte, te
-            devuelvo el dinero íntegro.
+            Voy a revisar tu track y tu situación. Si veo que puedo ayudarte, te
+            escribiré por email en las próximas 24-48&nbsp;h con los siguientes pasos y
+            el enlace de pago para confirmar tu plaza. Si ahora mismo no encajas, te lo
+            diré claro — y no habrás pagado nada.
           </p>
         </div>
-        <a id="stripe-link"
-           href="https://buy.stripe.com/dRm7sKcqhf8p9Pr9rQdAk01"
-           class="btn-primary"
-           style="width:100%;justify-content:center;">
-          Continuar al pago →
-        </a>
-        <p class="field-hint" style="text-align:center;margin-top:10px;">
-          Se abrirá la pasarela segura de Stripe en esta misma ventana.
-        </p>
+        <a href="/" class="btn-ghost" style="display:inline-block;margin-top:4px;">← Volver a Mentotrack</a>
       </div>
     </div>
   </section>
@@ -504,11 +498,6 @@
 
 <script>
   // ====================================================================
-  // Stripe payment link — pago previo de la sesión 1:1
-  // ====================================================================
-  const STRIPE_PAYMENT_LINK = "https://buy.stripe.com/dRm7sKcqhf8p9Pr9rQdAk01";
-
-  // ====================================================================
   // Embudo — session_id compartido con el SPA (localStorage)
   // ====================================================================
   function mtSessionId() {
@@ -543,7 +532,6 @@
   const errBox = document.getElementById('form-error');
   const submitBtn = document.getElementById('submit-btn');
   const postSubmit = document.getElementById('post-submit');
-  const stripeLink = document.getElementById('stripe-link');
 
   // 2º evento: form_started al primer focus en cualquier campo del form.
   let formStartedSent = false;
@@ -601,34 +589,22 @@
       if (!resp.ok) {
         showError(json.error || `Error ${resp.status}. Vuelve a intentarlo o escribe a soporte@producciononline.com.`);
         submitBtn.disabled = false;
-        submitBtn.textContent = 'Enviar solicitud y reservar →';
+        submitBtn.textContent = 'Solicitar plaza (gratis) →';
         return;
       }
 
-      // Prefill del email en el payment link de Stripe (rellena el campo
-      // del checkout automáticamente). Stripe acepta ?prefilled_email=…
-      try {
-        const url = new URL(STRIPE_PAYMENT_LINK);
-        if (data.email) url.searchParams.set('prefilled_email', data.email);
-        stripeLink.href = url.toString();
-      } catch (_) {
-        // Si la URL no es válida por lo que sea, mantenemos la original.
-      }
+      // Evento de embudo: solicitud enviada. El pago ya NO ocurre aquí —
+      // Alex revisa y, si acepta, envía el enlace de pago por email.
+      mtCtaEvent('consultoria_form_submit');
 
-      // Mostrar bloque post-submit con el CTA hacia Stripe
+      // Mostrar confirmación de solicitud recibida (sin checkout).
       form.style.display = 'none';
       postSubmit.style.display = 'block';
       postSubmit.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-      // Redirección automática al pago tras un breve "respira" visual
-      // (1.2 s — suficiente para que el usuario vea la confirmación).
-      setTimeout(() => {
-        window.location.href = stripeLink.href;
-      }, 1200);
     } catch (e) {
       showError('No se pudo enviar. Comprueba tu conexión y vuelve a intentarlo.');
       submitBtn.disabled = false;
-      submitBtn.textContent = 'Enviar solicitud y reservar →';
+      submitBtn.textContent = 'Solicitar plaza (gratis) →';
     }
   });
 </script>
