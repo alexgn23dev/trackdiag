@@ -314,8 +314,9 @@ _CTA_EVENTOS_VALIDOS = (
     "cta_visto",
     "cta_clicked",
     "consultoria_visit",
-    "consultoria_form_started",
-    "consultoria_form_submit",
+    "consultoria_calendly_click",   # clic en "Reserva tu llamada gratis" → Calendly
+    "consultoria_form_started",     # legacy: form retirado (flujo llamada-primero)
+    "consultoria_form_submit",      # legacy: form retirado (flujo llamada-primero)
 )
 
 
