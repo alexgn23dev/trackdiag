@@ -1047,6 +1047,16 @@
                         </div>
                     )}
 
+                    {/* Alcance del análisis — qué evalúa y qué no (siempre visible) */}
+                    {r.alcance_analisis && (
+                        <div className="card p-4 mb-4" style={{borderLeft: '3px solid #3f3f46'}}>
+                            <p className="text-gray-500 text-xs leading-relaxed">
+                                <span className="text-gray-400">Qué evalúa este análisis · </span>
+                                {r.alcance_analisis}
+                            </p>
+                        </div>
+                    )}
+
                     {/* Mezcla */}
                     <details className="card p-5 mb-4" open>
                         <summary className="text-xs text-gray-400 font-medium uppercase tracking-wider cursor-pointer">
@@ -2580,6 +2590,8 @@
                 if (dx.referencia_temporal) informe += `REFERENCIA TEMPORAL: ${dx.referencia_temporal}\n`;
                 // Disclaimer
                 if (dx.disclaimer) informe += `DISCLAIMER: ${dx.disclaimer}\n`;
+                // Alcance del análisis
+                if (dx.alcance_analisis) informe += `QUÉ EVALÚA: ${dx.alcance_analisis}\n`;
                 // Datos de mezcla
                 informe += `--- MEZCLA ---\n`;
                 informe += `BPM: ${da.bpm || '?'} | Duración: ${da.duracion || '?'}\n`;

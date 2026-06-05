@@ -173,6 +173,14 @@ def generar_diagnostico(senales: dict, contexto: dict) -> dict:
         "nota_motivacional": feedback_ctx.get("nota_motivacional", ""),
         "disclaimer": feedback_ctx.get("disclaimer", ""),
         "aviso_genero": feedback_ctx.get("aviso_genero", ""),
+        # Alcance del análisis — siempre presente. Gestiona la expectativa más
+        # repetida en el feedback: usuarios que esperan juicio de notas/acordes/
+        # melodía (afinación, disonancia), que el análisis de señal no puede dar.
+        "alcance_analisis": (
+            "Este análisis evalúa mezcla, balance espectral, estructura, dinámica y loudness. "
+            "No juzga si las notas, los acordes o la melodía están bien afinados o son acertados "
+            "— eso queda a tu oído y tu intención artística."
+        ),
     }
 
     if secundario_id:

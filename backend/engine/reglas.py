@@ -570,7 +570,22 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
         genero = contexto.get("genero", "")
         generos_melodicos = ["trance", "progressive_house", "melodic_techno", "deep_house"]
         generos_percusivos = ["techno", "techno_acido", "minimal", "tech_house"]
-        if genero in generos_melodicos and armonia.get("contenido_tonal", 0) < 0.35:
+        # El usuario puede señalar (en el bloqueo o en el género libre) un sub-estilo
+        # intencionalmente poco melódico — deep/hypnotic progressive, rolling, etc.
+        # El catálogo solo ofrece "Progressive House", así que el matiz hipnótico
+        # llega por texto libre. En ese caso NO penalizamos la falta de melodía.
+        # Fuga detectada en feedback 2026-06 (n17/n69/n74: progressive hipnótico).
+        _texto_usuario = f"{bloqueo} {(contexto.get('genero_custom') or '').lower()}"
+        _es_hipnotico = any(k in _texto_usuario for k in
+                            ["hypnotic", "hipnotic", "hipnót", "hipnotico", "deep prog", "rolling", "hipno"])
+        if _es_hipnotico:
+            if score > 0:
+                score = 0
+            razones.append(
+                "(−) Indicas un perfil deep/hipnótico — la melodía mínima es lenguaje del "
+                "estilo, no se diagnostica como pobreza armónica"
+            )
+        elif genero in generos_melodicos and armonia.get("contenido_tonal", 0) < 0.35:
             score += 2; razones.append(
                 f"En {genero}, el contenido melódico es parte esencial del género — "
                 f"un track predominantemente percusivo pierde identidad"
