@@ -250,6 +250,15 @@ def contextualizar_feedback(diagnostico_id: str, contexto: dict, senales: dict) 
         resultado["tips_genero"] = _generar_tips_genero(diagnostico_id, info_genero, genero, senales)
 
     # --- Tip según objetivo ---
+    # ¿Track en fase temprana? Si lo es, no empujamos lenguaje de "máster/sello"
+    # aunque el objetivo sea enviar a sellos: primero hay que cerrar el track.
+    # Feedback 2026-06 (n43/n47/n100): tracks tempranos recibían el enfoque de
+    # "envía masterizado a A&Rs", descontextualizado.
+    _madurez = senales.get("madurez_estimada", "")
+    _track_temprano = (
+        diagnostico_id in ("track_verde", "problema_arreglo", "poco_contraste")
+        or _madurez == "verde"
+    )
     info_objetivo = TIPS_OBJETIVO.get(objetivo)
     if info_objetivo:
         if objetivo == "pinchar":
@@ -270,12 +279,21 @@ def contextualizar_feedback(diagnostico_id: str, contexto: dict, senales: dict) 
             else:
                 resultado["tip_objetivo"] = info_objetivo["enfoque_ok"]
                 resultado["prioridades_extra"].append(info_objetivo["prioridad_extra_ok"])
+        elif objetivo == "sellos" and _track_temprano:
+            resultado["tip_objetivo"] = (
+                "Tu objetivo es enviar a sellos, pero este track todavía está en una fase "
+                "temprana. Antes de pensar en máster o en A&Rs, céntrate en cerrar la "
+                "estructura y la mezcla — un sello descarta en los primeros segundos un track "
+                "sin terminar. Cuando esté cerrado, volvemos al enfoque de sello."
+            )
         else:
             resultado["tip_objetivo"] = info_objetivo["enfoque"]
             resultado["prioridades_extra"].append(info_objetivo["prioridad_extra"])
 
-        # Para sellos: añadir prioridad de mezcla si hay problemas de mezcla
-        if objetivo == "sellos" and info_objetivo.get("prioridad_extra_mezcla"):
+        # Para sellos: prioridad de mezcla solo cuando el track NO es temprano
+        # (si lo es, el foco es cerrar el track, no comparar máster con el sello).
+        if (objetivo == "sellos" and not _track_temprano
+                and info_objetivo.get("prioridad_extra_mezcla")):
             dx_mezcla = [
                 "exceso_lowend", "carencia_espectral", "exceso_densidad",
                 "harshness_mezcla",
@@ -865,13 +883,25 @@ def _generar_nota_contextual(
                 "Asegúrate de que las transiciones sean limpias y predecibles para el DJ."
             )
     elif objetivo == "sellos" and diagnostico_id not in ("sin_diagnostico",):
-        partes.append(
-            "Para enviar a sellos, este problema debería estar completamente resuelto. "
-            "Un A&R lo detectaría en los primeros 30 segundos de escucha. "
-            "Recuerda: envía siempre tu mejor versión masterizada, pero asegúrate de que "
-            "la mezcla suene bien por sí sola sin la cadena de mastering — si te firman, "
-            "probablemente te pidan la versión sin masterizar."
+        _temprano_s = (
+            diagnostico_id in ("track_verde", "problema_arreglo", "poco_contraste")
+            or senales.get("madurez_estimada") == "verde"
         )
+        if _temprano_s:
+            partes.append(
+                "Sé que el objetivo es enviarlo a sellos, pero este track aún no está en ese "
+                "punto. Cierra primero lo que marca el diagnóstico — el enfoque de sello "
+                "(máster competitivo, comparar con releases del sello) llega cuando el track "
+                "esté terminado, no antes."
+            )
+        else:
+            partes.append(
+                "Para enviar a sellos, este problema debería estar completamente resuelto. "
+                "Un A&R lo detectaría en los primeros 30 segundos de escucha. "
+                "Recuerda: envía siempre tu mejor versión masterizada, pero asegúrate de que "
+                "la mezcla suene bien por sí sola sin la cadena de mastering — si te firman, "
+                "probablemente te pidan la versión sin masterizar."
+            )
 
     # --- Dato contextual temporal ---
     bpm = senales.get("bpm", 0)
