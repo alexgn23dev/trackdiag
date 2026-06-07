@@ -1,6 +1,17 @@
 {
   "entries": [
     {
+      "version": "0.5.30",
+      "date": "2026-06-07",
+      "title": "Mejoras del motor a partir del feedback de usuarios",
+      "changes": [
+        "Diagnósticos de armonía desactivados: el motor ya no afirma si hay 'pobreza armónica' o 'conflicto armónico'. Que una melodía o armonía sea acertada depende de factores artísticos y de contexto que el análisis de señal no percibe de forma fiable. Cada diagnóstico incluye ahora una nota de alcance que aclara qué evalúa (mezcla, balance, estructura, dinámica, loudness) y qué no (notas, acordes, melodía, afinación).",
+        "Localización temporal en problemas de estructura: cuando hay un break o sección de baja energía desproporcionada, el diagnóstico indica el tramo aproximado en minutos (p. ej. 'entre 2:06 y 4:30') en lugar de hablar en general.",
+        "Localización fina en la mezcla: el análisis de medios-altos (harshness) muestra la frecuencia exacta del pico (kHz) además de la zona; la correlación L/R aclara que ~100% significa señal casi mono (y que no es un fallo en sí); el aviso de true peak recuerda que un mp3 puede inflar el pico y conviene analizar el WAV.",
+        "El feedback se adapta a la fase del track: en tracks en fase temprana ya no se empuja lenguaje de 'máster' o 'envío a sellos' — primero se prioriza cerrar estructura y mezcla."
+      ]
+    },
+    {
       "version": "0.5.29",
       "date": "2026-05-30",
       "title": "Reporte mensual automático de métricas generales",

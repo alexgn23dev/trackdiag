@@ -54,6 +54,20 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     dificultad = contexto.get("dificultad_habitual", "")
     dist = senales["distribucion"]
 
+    # Localización temporal del break más largo, para dar razones con timecode
+    # ("el break entre 2:10 y 3:00"). Feedback 2026-06 (n8/n34/n140): el usuario
+    # pedía referencias de sección concretas, no lenguaje general.
+    def _fmt_t(seg: float) -> str:
+        seg = int(seg)
+        return f"{seg // 60}:{seg % 60:02d}"
+    _nb = senales.get("n_bloques", 0) or 0
+    _spb = (senales.get("duracion_seg", 0) / _nb) if _nb else 0
+    _b_ini = dist.get("break_bloque_inicio", -1)
+    _b_fin = dist.get("break_bloque_fin", -1)
+    _tc_break = ""
+    if _b_ini >= 0 and _b_fin > _b_ini and _spb > 0:
+        _tc_break = f" (aprox. entre {_fmt_t(_b_ini * _spb)} y {_fmt_t(_b_fin * _spb)})"
+
     # --- 1: Problema de arreglo / estructura ---
     score, razones = 0, []
     if not senales["tiene_desarrollo"]:
@@ -71,7 +85,7 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     if senales["n_bloques"] <= 2:
         score += 2; razones.append(f"Solo se detectan {senales['n_bloques']} bloques de energía")
     if dist["break_desproporcionado"]:
-        score += 3; razones.append(f"Hay una sección de baja energía desproporcionadamente larga ({dist['max_seccion_baja']} bloques de {senales['n_bloques']})")
+        score += 3; razones.append(f"Hay una sección de baja energía desproporcionadamente larga ({dist['max_seccion_baja']} bloques de {senales['n_bloques']}){_tc_break}")
     if dist["drop_corto"]:
         score += 2; razones.append(f"La sección de alta energía más larga es muy corta ({dist['max_seccion_alta']} bloques)")
     if dist["inicio_abrupto"]:
@@ -375,7 +389,7 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
         ratio = dist.get("ratio_payoff", 1.0)
         score += 3
         razones.append(
-            f"El break más largo no recupera energía al volver: tras el break la energía es "
+            f"El break más largo{_tc_break} no recupera energía al volver: tras el break la energía es "
             f"{ratio:.2f}× la de antes — el drop posterior se siente como continuación, no como liberación"
         )
         # Cruce: si encima el break es desproporcionado, doble problema
@@ -541,7 +555,12 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
         # Cruce: conflicto armónico + graves excesivos = el low-end enmascara y confunde el análisis tonal
         if armonia.get("consistencia_armonica", 1) < 0.5 and senales["balance_grave"] == "excesivo":
             score -= 1; razones.append("(−) El exceso de graves puede estar enmascarando la información tonal — resolver graves primero")
-    scores["conflicto_armonico"] = score
+    # DESACTIVADO (decisión 2026-06): igual que pobreza_armonica, el motor NO emite
+    # diagnóstico de "conflicto armónico". Si hay elementos en tonalidades que chocan
+    # depende del oído y la intención; el análisis de chroma no lo percibe de forma
+    # fiable. Se conserva el cálculo por si se reactivara, pero el score publicado es
+    # 0 para que nunca se muestre. Coherente con el disclaimer 'alcance_analisis'.
+    scores["conflicto_armonico"] = 0
     detalles["conflicto_armonico"] = razones
 
     # --- 9: Pobreza armónica / melódica ---

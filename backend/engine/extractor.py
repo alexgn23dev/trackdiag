@@ -630,6 +630,10 @@ def _analizar_distribucion(bloques_rms: list) -> dict:
         # energía después, "no paga" la anticipación que generó.
         "break_sin_payoff": False,
         "ratio_payoff": 1.0,  # energía después / energía antes del break (alto = ok)
+        # Posición (en bloques) de la sección de baja energía más larga — para
+        # convertir a timecode en el diagnóstico y decir "el break entre X:XX y Y:YY".
+        "break_bloque_inicio": -1,
+        "break_bloque_fin": -1,
     }
 
     if len(bloques_rms) < 4:
@@ -690,6 +694,8 @@ def _analizar_distribucion(bloques_rms: list) -> dict:
             key=lambda i: secciones[i][1] if secciones[i][0] == "bajo" else -1
         )
         len_break, start_break = secciones[idx_max_break][1], secciones[idx_max_break][2]
+        distribucion["break_bloque_inicio"] = start_break
+        distribucion["break_bloque_fin"] = start_break + len_break
         if len_break >= 2:
             # Sección alta anterior
             antes = next(

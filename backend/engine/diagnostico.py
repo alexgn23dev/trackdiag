@@ -65,6 +65,10 @@ def generar_diagnostico(senales: dict, contexto: dict) -> dict:
 
     # Explicación
     razones = [r for r in detalles.get(principal_id, []) if not r.startswith("(−)")]
+    # Priorizar razones con localización temporal (timecode "aprox. entre X:XX y
+    # Y:YY") — son las más accionables. Feedback 2026-06 (n8/n34/n140): usuarios
+    # pedían referencias de sección concretas. sort estable conserva el orden del resto.
+    razones.sort(key=lambda r: 0 if "aprox. entre" in r else 1)
     explicacion = "\n".join(f"• {r}" for r in razones[:3]) or "No hay señales específicas que reportar."
 
     # Feedback contextualizado (v0.3)
