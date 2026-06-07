@@ -1172,6 +1172,7 @@
                                                     {d.loudness.nivel_true_peak === 'clipping' ? '⚠ True peak: clipping digital' : 'True peak por encima del ceiling de streaming'}
                                                 </p>
                                                 <p className="text-gray-300 text-xs mt-1">{d.loudness.aviso_true_peak}</p>
+                                                <p className="text-gray-500 text-xs mt-1">Si subiste un mp3, parte del pico puede venir del propio códec (genera picos entre muestras al recodificar). Para el dato exacto, analiza el WAV.</p>
                                             </div>
                                         )}
                                         {loudnessTip && (
@@ -1221,7 +1222,10 @@
                                         <div>
                                             <span className="text-gray-500 text-xs">Correlación L/R</span>
                                             <p className="text-gray-300 text-sm">{(d.mono_compat.correlacion_lr * 100).toFixed(0)}%</p>
-                                            <p className="text-gray-600 text-xs">Similitud entre canales. 100% = idénticos.</p>
+                                            <p className="text-gray-600 text-xs">Similitud entre canales. 100% = ambos canales idénticos (señal mono).</p>
+                                            {d.mono_compat.correlacion_lr >= 0.98 && (
+                                                <p className="text-gray-500 text-xs mt-1">Tu track es prácticamente mono — no hay anchura estéreo. No es un fallo en sí; solo revísalo si buscabas un sonido más ancho o espacioso.</p>
+                                            )}
                                         </div>
                                         <div>
                                             <span className="text-gray-500 text-xs">Pérdida en mono</span>
@@ -1308,6 +1312,7 @@
                                                 {d.harshness.zona_problema === 'presencia' && ' Zona afectada: presencia (2-6kHz) — sintes, voces o percusiones.'}
                                                 {d.harshness.zona_problema === 'brillos' && ' Zona afectada: brillos (6-8kHz) — hi-hats, crashes o efectos.'}
                                                 {d.harshness.zona_problema === 'ambas' && ' Todo el rango de medios-altos está elevado.'}
+                                                {d.harshness.peak_freq_hz > 0 && ` El pico se concentra en torno a ${(d.harshness.peak_freq_hz / 1000).toFixed(1)} kHz — barre con un EQ por ahí para localizar el elemento exacto.`}
                                             </p>
                                             {d.harshness.nivel === 'notable' && (
                                                 <p className="text-yellow-400/70 text-xs mt-1">Prueba un EQ dinámico (como TDR Nova, gratis) en el bus master, atenuando 2-3dB en la zona de 3-5kHz solo cuando supere un umbral. Así no pierdes brillo general.</p>
