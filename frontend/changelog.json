@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "version": "0.5.31",
+      "date": "2026-06-08",
+      "title": "Sugerencias de estructura concretas y localizadas",
+      "changes": [
+        "Cuando el cuello de botella del track es estructural, el diagnóstico propone ahora 2-3 acciones concretas y con timecode: dónde está el break (p. ej. 'entre 1:00 y 3:40'), dónde meter un build, si falta intro u outro para que un DJ pueda mezclar, si el drop es corto, etc. — adaptadas a las convenciones del género.",
+        "Las sugerencias respetan el estilo: no aplican estructura de club a géneros estáticos (minimal, dub techno…), distinguen una intro larga de un break problemático, y se limitan a las 3 más relevantes para no abrumar."
+      ]
+    },
+    {
       "version": "0.5.30",
       "date": "2026-06-07",
       "title": "Mejoras del motor a partir del feedback de usuarios",
