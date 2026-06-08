@@ -6,7 +6,7 @@ v0.3: feedback contextualizado por experiencia, género, objetivo y fase.
 
 from .reglas import evaluar_diagnosticos, aplicar_jerarquia, UMBRAL_MINIMO_CONFIANZA
 from .templates import TEMPLATES
-from .contextualizador import contextualizar_feedback
+from .contextualizador import contextualizar_feedback, generar_sugerencias_estructura
 
 # Umbrales por dx para contar "puntos pendientes" en el estado.
 # Coincide con aplicar_jerarquia en reglas.py: armónicos exigen más evidencia.
@@ -74,6 +74,18 @@ def generar_diagnostico(senales: dict, contexto: dict) -> dict:
     # Feedback contextualizado (v0.3)
     feedback_ctx = contextualizar_feedback(principal_id, contexto, senales)
 
+    # Sugerencias de estructura concretas y localizadas — solo cuando el cuello
+    # de botella es estructural (o hay error de foco hacia estructura).
+    _dx_estructurales = {
+        "problema_arreglo", "poco_contraste", "break_sin_payoff",
+        "arreglo_repetitivo", "track_verde", "falta_impacto",
+    }
+    sugerencias_estructura = (
+        generar_sugerencias_estructura(principal_id, contexto, senales)
+        if (principal_id in _dx_estructurales or error_foco)
+        else []
+    )
+
     # Prioridades: base + extras contextuales
     prioridades = list(template["prioridades"])
     for extra in feedback_ctx.get("prioridades_extra", []):
@@ -89,6 +101,7 @@ def generar_diagnostico(senales: dict, contexto: dict) -> dict:
         },
         "diagnostico_secundario": None,
         "prioridades": prioridades,
+        "sugerencias_estructura": sugerencias_estructura,
         "no_tocar_aun": template["no_tocar"],
         "siguiente_sesion": template["siguiente_sesion"],
         "estado_track": estado,

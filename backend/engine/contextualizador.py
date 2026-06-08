@@ -916,6 +916,106 @@ def _generar_nota_contextual(
     return " ".join(partes) if partes else ""
 
 
+def _reconstruir_secciones(bloques_rms: list) -> list:
+    """Reconstruye las secciones alto/bajo desde bloques_rms (misma lógica que
+    _analizar_distribucion del extractor). Devuelve [(tipo, longitud, inicio), …]."""
+    if not bloques_rms or len(bloques_rms) < 4:
+        return []
+    media = sum(bloques_rms) / len(bloques_rms)
+    clasif = ["alto" if b > media else "bajo" for b in bloques_rms]
+    secciones = []
+    t, l, s = clasif[0], 1, 0
+    for i in range(1, len(clasif)):
+        if clasif[i] == t:
+            l += 1
+        else:
+            secciones.append((t, l, s))
+            t, l, s = clasif[i], 1, i
+    secciones.append((t, l, s))
+    return secciones
+
+
+def generar_sugerencias_estructura(diagnostico_id: str, contexto: dict, senales: dict) -> list:
+    """Sugerencias de estructura CONCRETAS y LOCALIZADAS (con timecode) a partir
+    del mapa de energía que ya calcula el motor + la plantilla del género. No es
+    análisis nuevo: cruza la distribución real de secciones contra cómo debería
+    ser el género y emite 2-5 acciones puntuales. Feedback 2026-06 (5 votos)."""
+    sugerencias = []
+    bloques = senales.get("bloques_rms") or []
+    n_bloques = senales.get("n_bloques", len(bloques)) or len(bloques)
+    dur = senales.get("duracion_seg", 0)
+    genero = contexto.get("genero", "")
+    dist = senales.get("distribucion", {}) or {}
+
+    if not bloques or n_bloques < 4 or dur <= 0:
+        return sugerencias
+
+    spb = dur / n_bloques  # segundos por bloque
+
+    def t(b):
+        s = int(max(0, b) * spb)
+        return f"{s // 60}:{s % 60:02d}"
+
+    info = ESTRUCTURA_GENERO.get(genero)
+    dur_ref = DURACIONES_GENERO.get(genero)
+    label_g = _label_genero(genero)
+    bi, bf = dist.get("break_bloque_inicio", -1), dist.get("break_bloque_fin", -1)
+
+    # 1. Intro abrupta
+    if dist.get("inicio_abrupto"):
+        sugerencias.append(
+            "Intro: el track arranca con energía alta desde 0:00. Añade ~16-32 compases "
+            "de intro (kick + percusión + 1 elemento) para que un DJ pueda mezclar la entrada."
+        )
+    # 2. Sin outro
+    if dist.get("sin_outro"):
+        sugerencias.append(
+            f"Outro: el track termina con energía alta (sobre {t(n_bloques - 1)}) sin bajar. "
+            "Añade ~16-32 compases de salida quitando elementos para una transición limpia."
+        )
+    # 3/4. Break (con o sin payoff)
+    if dist.get("break_sin_payoff") and bi >= 0:
+        sugerencias.append(
+            f"Break sin payoff: el break entre {t(bi)} y {t(bf)} no genera subida al volver. "
+            f"Justo antes de {t(bf)} mete un build (riser + filtro abriendo ~8 compases) y "
+            "diferencia el drop posterior con una capa nueva (percusión, sub o vocal) para que "
+            "se sienta liberación."
+        )
+    elif dist.get("break_desproporcionado") and bi >= 0:
+        breaks_desc = info["breaks"].lower() if info else "moderados"
+        sugerencias.append(
+            f"Break largo: la sección de baja energía entre {t(bi)} y {t(bf)} es desproporcionada. "
+            f"En {label_g} los breaks suelen ser {breaks_desc} — acórtala o mete variación dentro "
+            "(percusión, textura, un giro) para que no se desinfle."
+        )
+    # 5. Drop corto
+    if dist.get("drop_corto"):
+        sugerencias.append(
+            f"Drop corto: tu sección de más energía dura poco. En {label_g} los drops principales "
+            "suelen ser de 32-64 compases — dale más recorrido antes de cambiar de sección."
+        )
+    # 6. Duración corta para el género
+    if dur_ref and dur < dur_ref["min"]:
+        sugerencias.append(
+            f"Duración: tu track dura {senales.get('duracion_fmt', '?')}; en {label_g} lo habitual "
+            f"es {dur_ref['label']}. Si es para pista, extiende intro/outro y añade una segunda "
+            "variación del drop."
+        )
+    # 7. Sin desarrollo / contraste bajo
+    if not senales.get("tiene_desarrollo") and senales.get("contraste_energetico") == "bajo":
+        sugerencias.append(
+            "Desarrollo: apenas hay cambios de energía entre secciones. Diseña al menos un break "
+            "claro (quita el kick + filtra) y un build de subida — el contraste es lo que hace "
+            "que el track 'respire'."
+        )
+
+    # Cierre con la nota del género (solo si hay alguna sugerencia)
+    if info and info.get("nota") and sugerencias:
+        sugerencias.append(f"Para {label_g}: {info['nota']}")
+
+    return sugerencias[:5]
+
+
 def _label_genero(genero: str) -> str:
     """Convierte el ID del género a su label legible."""
     labels = {
