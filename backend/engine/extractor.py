@@ -9,7 +9,8 @@ import pyloudnorm as pyln
 import soundfile as sf
 
 
-def extraer_senales(audio_path: str, bpm_manual: int | None = None) -> dict:
+def extraer_senales(audio_path: str, bpm_manual: int | None = None,
+                    omitir_armonia: bool = False) -> dict:
     # Carga única: stereo a 22050 Hz (sin límite de duración para no perder estructura)
     y_stereo, sr = librosa.load(audio_path, sr=22050, mono=False)
     es_stereo = y_stereo.ndim == 2 and y_stereo.shape[0] == 2
@@ -176,7 +177,17 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None) -> dict:
         }
 
     # === Análisis armónico / tonal ===
-    armonia = _analizar_armonia(y, sr, hop_length, bloques_rms, frames_por_bloque)
+    # HPSS + chroma_cqt es la parte más cara del extractor. En la comparación
+    # contra referencia no se usa la armonía, así que se puede saltar.
+    if omitir_armonia:
+        armonia = {
+            "key": "", "key_confidence": 0.0, "modo": "", "contenido_tonal": 0.0,
+            "consistencia_armonica": 0.0, "notas_dominantes": [], "n_notas_activas": 0,
+            "complejidad_armonica": "", "posible_conflicto_tonal": False,
+            "ratio_tonal_percusivo": 0.0, "variacion_tonal_por_bloque": [],
+        }
+    else:
+        armonia = _analizar_armonia(y, sr, hop_length, bloques_rms, frames_por_bloque)
 
     # === Distribución de secciones ===
     distribucion = _analizar_distribucion(bloques_rms)
