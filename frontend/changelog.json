@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "version": "0.5.32",
+      "date": "2026-06-10",
+      "title": "Compara tu track con una referencia",
+      "changes": [
+        "Ahora puedes añadir un track de referencia (opcional) al subir el tuyo: un track profesional del estilo que persigues. El análisis lo compara contra el tuyo y te dice las diferencias que más importan (máximo 3), en lenguaje de escucha: balance por zonas (sub, graves, graves-medios, medios, presencia, aire), dinámica/compresión, variación entre secciones, anchura estéreo y densidad.",
+        "La comparación es justa aunque la referencia esté masterizada y tu track no: comparamos la forma del balance, no el volumen. Si tu track aún está en mezcla, te lo decimos para que no persigas el loudness antes de tiempo.",
+        "También te decimos en qué vas a la par con la referencia, y avisamos si los dos tracks no son comparables del todo (tempos o duraciones muy distintas)."
+      ]
+    },
+    {
       "version": "0.5.31",
       "date": "2026-06-08",
       "title": "Sugerencias de estructura concretas y localizadas",

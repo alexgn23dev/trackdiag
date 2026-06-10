@@ -506,7 +506,22 @@
         proyectoSeleccionadoId, onProyectoSeleccionadoChange,
         versionEtiqueta, onVersionEtiquetaChange,
         prefilledFromProyecto,
+        fileRef, onFileRefSelected, onFileRefClear,
     }) {
+        const refInputRef = useRef(null);
+        const [refError, setRefError] = useState('');
+        const handleRefChange = (e) => {
+            const f = e.target.files[0];
+            e.target.value = ''; // permite re-seleccionar el mismo archivo
+            if (!f) return;
+            const sizeMB = f.size / 1024 / 1024;
+            if (sizeMB > 150) {
+                setRefError(`El track de referencia pesa ${Math.round(sizeMB)} MB, el máximo es 150 MB. Convierte a MP3 para reducir el tamaño.`);
+                return;
+            }
+            setRefError('');
+            onFileRefSelected(f);
+        };
         const tieneProyectos = (proyectosPrevios || []).length > 0;
         const proyectoSeleccionado = tieneProyectos && proyectoMode === 'select'
             ? proyectosPrevios.find(p => p.id === proyectoSeleccionadoId)
@@ -687,6 +702,53 @@
                         name="dificultad_habitual"
                     />
 
+                    {/* === Track de referencia (opcional) === */}
+                    <div className="mb-5 mt-6">
+                        <label className="block text-sm font-medium mb-2" style={{color: 'var(--po-light)'}}>
+                            Track de referencia <span className="text-xs font-normal" style={{color: 'var(--po-medium)'}}>(opcional · novedad)</span>
+                        </label>
+                        <input
+                            ref={refInputRef}
+                            type="file"
+                            accept=".mp3,.wav,.flac,.aiff,.aif,.ogg"
+                            onChange={handleRefChange}
+                            className="hidden"
+                        />
+                        {fileRef ? (
+                            <div
+                                className="w-full px-4 py-3 rounded-lg text-sm flex items-center justify-between gap-3"
+                                style={{border: '1px solid rgba(34,211,238,0.35)', background: 'rgba(34,211,238,0.06)'}}
+                            >
+                                <span className="truncate" style={{color: 'var(--po-white)'}}>
+                                    {fileRef.name} <span style={{color: 'var(--po-light)'}}>({(fileRef.size / 1024 / 1024).toFixed(1)} MB)</span>
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={() => { setRefError(''); onFileRefClear(); }}
+                                    className="text-xs flex-shrink-0 px-2 py-1 rounded transition-colors"
+                                    style={{color: 'var(--po-light)', border: '1px solid #333'}}
+                                >
+                                    Quitar
+                                </button>
+                            </div>
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={() => refInputRef.current?.click()}
+                                className="w-full px-4 py-3 rounded-lg text-sm text-left transition-colors"
+                                style={{border: '1px dashed #3f3f46', color: 'var(--po-light)', background: 'transparent'}}
+                            >
+                                + Añadir un track profesional que te sirva de referencia
+                            </button>
+                        )}
+                        {refError && (
+                            <p className="text-xs text-red-400 mt-1.5">{refError}</p>
+                        )}
+                        <p className="text-xs mt-1.5" style={{color: 'var(--po-light)', opacity: 0.65}}>
+                            Si lo añades, compararemos tu track contra él: balance por zonas, dinámica, anchura estéreo y densidad. Usa un track del estilo que persigues.
+                        </p>
+                    </div>
+
                     <button
                         onClick={onSubmit}
                         disabled={!isValid}
@@ -700,12 +762,13 @@
         );
     }
 
-    function ProcessingScreen({ datos }) {
+    function ProcessingScreen({ datos, conReferencia }) {
         const steps = [
             "Cargando audio...",
             `${datos?.bpm ? datos.bpm + ' BPM detectados' : 'Detectando tempo...'}`,
             "Analizando distribución de energía...",
             "Evaluando balance espectral...",
+            ...(conReferencia ? ["Analizando tu track de referencia...", "Comparando balance, dinámica y estéreo..."] : []),
             "Cruzando con tu contexto...",
             "Generando diagnóstico..."
         ];
@@ -1014,6 +1077,71 @@
                                     </div>
                                 ))}
                             </div>
+                        </div>
+                    )}
+
+                    {/* Comparación con track de referencia */}
+                    {r.comparacion_referencia && (
+                        <div className="card p-6 mb-4" style={{borderLeft: '3px solid #22d3ee'}}>
+                            <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{color: '#22d3ee'}}>
+                                Comparación con tu referencia
+                            </p>
+                            {r.comparacion_referencia.error ? (
+                                <p className="text-gray-400 text-sm leading-relaxed mt-2">{r.comparacion_referencia.error}</p>
+                            ) : (
+                                <div>
+                                    {r.comparacion_referencia.ref_filename && (
+                                        <p className="text-xs text-gray-500 mb-3 truncate">{r.comparacion_referencia.ref_filename}</p>
+                                    )}
+                                    {(r.comparacion_referencia.avisos || []).map((a, i) => (
+                                        <p key={i} className="text-xs text-yellow-500 leading-relaxed mb-2">⚠ {a}</p>
+                                    ))}
+                                    {(r.comparacion_referencia.diferencias || []).length > 0 ? (
+                                        <div className="space-y-3 mt-2">
+                                            {r.comparacion_referencia.diferencias.map((d, i) => {
+                                                // Titular cualitativo: el dB es balance relativo, no un movimiento
+                                                // de EQ — el descriptor (algo/bastante/mucho) es lo robusto.
+                                                const mag = d.magnitud || '';
+                                                const esNumerica = /dB|LU/.test(mag);
+                                                const titular = esNumerica
+                                                    ? `${d.severidad || 'algo'} por ${mag.trim().startsWith('+') ? 'encima' : 'debajo'}`
+                                                    : mag;
+                                                const label = d.label || '';
+                                                return (
+                                                    <div key={i} className="flex gap-3">
+                                                        <span className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold" style={{background: 'rgba(34,211,238,0.15)', color: '#22d3ee'}}>{i + 1}</span>
+                                                        <div className="min-w-0">
+                                                            <p className="text-sm font-medium text-gray-200">
+                                                                {label.charAt(0).toUpperCase() + label.slice(1)}
+                                                                <span className="text-xs ml-2" style={{color: '#22d3ee'}}>{titular}</span>
+                                                                {esNumerica && <span className="text-xs ml-1.5 text-gray-600">({mag})</span>}
+                                                            </p>
+                                                            <p className="text-gray-300 text-sm leading-relaxed mt-0.5">{d.texto}</p>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    ) : (
+                                        <p className="text-gray-300 text-sm leading-relaxed mt-2">
+                                            En lo que medimos, tu track va muy en línea con la referencia. Las diferencias que queden están por debajo de lo que consideramos relevante.
+                                        </p>
+                                    )}
+                                    {r.comparacion_referencia.n_diferencias_extra > 0 && (
+                                        <p className="text-xs text-gray-500 mt-3">
+                                            Hay {r.comparacion_referencia.n_diferencias_extra} diferencia{r.comparacion_referencia.n_diferencias_extra > 1 ? 's' : ''} menor{r.comparacion_referencia.n_diferencias_extra > 1 ? 'es' : ''} más; te mostramos solo lo que más importa.
+                                        </p>
+                                    )}
+                                    {(r.comparacion_referencia.coincidencias || []).length > 0 && (
+                                        <p className="text-xs text-gray-400 mt-3 leading-relaxed">
+                                            <span style={{color: 'var(--po-green)'}}>Vas a la par con tu referencia en:</span> {r.comparacion_referencia.coincidencias.join(', ')}.
+                                        </p>
+                                    )}
+                                    {r.comparacion_referencia.loudness_contexto && r.comparacion_referencia.loudness_contexto.nota && (
+                                        <p className="text-xs text-gray-500 mt-3 leading-relaxed">{r.comparacion_referencia.loudness_contexto.nota}</p>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -1880,6 +2008,7 @@
             bloqueo_percibido: '', experiencia: '',
             dificultad_habitual: '',
         });
+        const [fileRef, setFileRef] = useState(null); // track de referencia (opcional)
         const [resultado, setResultado] = useState(null);
         const [error, setError] = useState(null);
         const [historialCount, setHistorialCount] = useState(obtenerHistorial().length);
@@ -1940,6 +2069,13 @@
         }, []);
 
         const MAX_FILE_MB = 150;
+        const handleFileRefSelected = (f) => {
+            setFileRef(f);
+            trackEvent('funnel_reference_added', {
+                file_type: f.name.split('.').pop().toLowerCase(),
+                file_size_mb: Math.round(f.size / 1024 / 1024),
+            });
+        };
         const handleFileSelected = (f) => {
             const sizeMB = f.size / 1024 / 1024;
             if (sizeMB > MAX_FILE_MB) {
@@ -2524,6 +2660,7 @@
 
             const formData = new FormData();
             formData.append('audio', file);
+            if (fileRef) formData.append('audio_ref', fileRef);
             Object.entries(contexto).forEach(([k, v]) => formData.append(k, v));
 
             try {
@@ -2592,6 +2729,16 @@
                 // Sugerencias de estructura
                 if (dx.sugerencias_estructura && dx.sugerencias_estructura.length > 0) {
                     informe += `ESTRUCTURA (qué tocar y dónde): ${dx.sugerencias_estructura.map((s, i) => `${i+1}. ${s}`).join(' | ')}\n`;
+                }
+                // Comparación con track de referencia
+                if (dx.comparacion_referencia && !dx.comparacion_referencia.error) {
+                    const cr = dx.comparacion_referencia;
+                    const difs = (cr.diferencias || []).map((d, i) => `${i+1}. ${d.label} (${d.severidad ? d.severidad + ' — ' : ''}${d.magnitud}): ${d.texto}`).join(' | ');
+                    informe += `COMPARACIÓN CON REFERENCIA${cr.ref_filename ? ` (${cr.ref_filename})` : ''}: ${difs || 'sin diferencias relevantes'}`;
+                    if (cr.coincidencias && cr.coincidencias.length > 0) informe += ` | A la par en: ${cr.coincidencias.join(', ')}`;
+                    if (cr.loudness_contexto && cr.loudness_contexto.nota) informe += ` | Loudness: ${cr.loudness_contexto.nota}`;
+                    if (cr.avisos && cr.avisos.length > 0) informe += ` | Avisos: ${cr.avisos.join(' / ')}`;
+                    informe += '\n';
                 }
                 // Nota contextual
                 if (dx.nota_contextual) informe += `NOTA CONTEXTUAL: ${dx.nota_contextual}\n`;
@@ -2753,6 +2900,7 @@
 
         const handleReset = () => {
             setFile(null);
+            setFileRef(null);
             setUserEmail('');
             setUserPassword('');
             setEmailError('');
@@ -2912,6 +3060,7 @@
             clearAuth();
             setPanelAuth(null); setPanelUsername(''); setPanelHistorial([]);
             setPanelSelectedEntry(null); resetAuthFields();
+            setFileRef(null); // que la referencia de la sesión anterior no se cuele en el siguiente análisis
             setScreen('landing');
         };
 
@@ -3004,10 +3153,13 @@
                         versionEtiqueta={versionEtiqueta}
                         onVersionEtiquetaChange={setVersionEtiqueta}
                         prefilledFromProyecto={prefilledFromProyecto}
+                        fileRef={fileRef}
+                        onFileRefSelected={handleFileRefSelected}
+                        onFileRefClear={() => setFileRef(null)}
                     />
                 )}
                 {/* (screen 'email' eliminada — la auth ahora pasa por el AuthModal) */}
-                {screen === 'processing' && <ProcessingScreen datos={resultado?.datos_audio} />}
+                {screen === 'processing' && <ProcessingScreen datos={resultado?.datos_audio} conReferencia={!!fileRef} />}
                 {screen === 'diagnostico' && resultado && (
                     <DiagnosticoScreen resultado={resultado} onReset={handleReset} contexto={contexto} userEmail={userEmail} />
                 )}

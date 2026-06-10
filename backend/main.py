@@ -35,20 +35,23 @@ from slowapi.errors import RateLimitExceeded
 # Esto reduce el cold-start de ~8-12s a ~2-3s.
 _extraer_senales = None
 _generar_diagnostico = None
+_comparar_senales = None
 
 
 def _load_engine():
     """Carga los módulos pesados de análisis de audio bajo demanda."""
-    global _extraer_senales, _generar_diagnostico
+    global _extraer_senales, _generar_diagnostico, _comparar_senales
     if _extraer_senales is None:
         from engine.extractor import extraer_senales
         from engine.diagnostico import generar_diagnostico
+        from engine.comparador import comparar_senales
         _extraer_senales = extraer_senales
         _generar_diagnostico = generar_diagnostico
+        _comparar_senales = comparar_senales
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.31")
+app = FastAPI(title="Mentotrack API", version="0.5.32")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -213,7 +216,47 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.31"}
+    return {"status": "ok", "version": "0.5.32"}
+
+
+# Validación compartida de uploads de audio (track principal y referencia)
+_AUDIO_EXTENSIONES = {".mp3", ".wav", ".flac", ".aiff", ".aif", ".ogg"}
+_AUDIO_SIGNATURES = {
+    b"RIFF": "wav",       # WAV (RIFF header)
+    b"fLaC": "flac",      # FLAC
+    b"FORM": "aiff",      # AIFF
+    b"OggS": "ogg",       # OGG Vorbis
+    b"\xff\xfb": "mp3",   # MP3 (MPEG frame sync)
+    b"\xff\xf3": "mp3",   # MP3 (MPEG 2.5)
+    b"\xff\xf2": "mp3",   # MP3 (MPEG 2)
+    b"ID3": "mp3",        # MP3 con ID3 tag
+}
+_MAX_UPLOAD_BYTES = 150 * 1024 * 1024  # 150 MB (previene OOM crashes)
+
+
+def _validar_audio_upload(filename: str, content: bytes, etiqueta: str = ""):
+    """Valida extensión, tamaño y magic bytes de un upload de audio.
+    Devuelve (extension, None) si es válido o (extension, JSONResponse de error).
+    Los magic bytes previenen que alguien renombre un ejecutable a .mp3."""
+    pref = f"{etiqueta}: " if etiqueta else ""
+    extension = os.path.splitext(filename or "")[1].lower()
+    if extension not in _AUDIO_EXTENSIONES:
+        return extension, JSONResponse(
+            status_code=400,
+            content={"error": f"{pref}Formato no soportado: {extension}. Usa MP3, WAV, FLAC o AIFF."}
+        )
+    if len(content) > _MAX_UPLOAD_BYTES:
+        return extension, JSONResponse(
+            status_code=413,
+            content={"error": f"{pref}Archivo demasiado grande ({len(content) // (1024*1024)} MB). Máximo: 150 MB. Puedes convertir a MP3 para reducir el tamaño."}
+        )
+    header = content[:4]
+    if not any(header.startswith(sig) for sig in _AUDIO_SIGNATURES):
+        return extension, JSONResponse(
+            status_code=415,
+            content={"error": f"{pref}El archivo no parece ser audio válido. Asegúrate de subir un MP3, WAV, FLAC o AIFF real."}
+        )
+    return extension, None
 
 
 @app.post("/api/diagnostico")
@@ -231,9 +274,11 @@ async def diagnosticar(
     referencia: str = Form(""),
     tiempo_disponible: str = Form(""),
     bpm_manual: str = Form(""),
+    audio_ref: UploadFile | None = File(None),
 ):
     """
     Recibe un archivo de audio + contexto del cuestionario.
+    Opcionalmente un track de referencia (audio_ref) para comparar.
     Retorna un diagnóstico estructurado.
     """
     # Si el usuario seleccionó "Otro", el campo libre es obligatorio.
@@ -244,42 +289,27 @@ async def diagnosticar(
             content={"error": "Si seleccionas 'Otro' como género, escribe en el campo de texto qué género estás produciendo (mínimo 2 caracteres)."},
         )
 
-    # Validar extensión
-    extension = os.path.splitext(audio.filename or "")[1].lower()
-    if extension not in [".mp3", ".wav", ".flac", ".aiff", ".aif", ".ogg"]:
-        return JSONResponse(
-            status_code=400,
-            content={"error": f"Formato no soportado: {extension}. Usa MP3, WAV, FLAC o AIFF."}
-        )
-
-    # Leer contenido y validar tamaño (máx 150 MB para prevenir OOM crashes)
-    MAX_UPLOAD_BYTES = 150 * 1024 * 1024  # 150 MB
+    # Validar extensión, tamaño y magic bytes del track principal
     content = await audio.read()
-    if len(content) > MAX_UPLOAD_BYTES:
-        return JSONResponse(
-            status_code=413,
-            content={"error": f"Archivo demasiado grande ({len(content) // (1024*1024)} MB). Máximo: 150 MB. Puedes convertir a MP3 para reducir el tamaño."}
-        )
+    extension, err = _validar_audio_upload(audio.filename, content)
+    if err:
+        return err
 
-    # Validar magic bytes — confirmar que el archivo es audio real, no solo extensión
-    # Previene que alguien renombre un ejecutable a .mp3
-    _AUDIO_SIGNATURES = {
-        b"RIFF": "wav",       # WAV (RIFF header)
-        b"fLaC": "flac",      # FLAC
-        b"FORM": "aiff",      # AIFF
-        b"OggS": "ogg",       # OGG Vorbis
-        b"\xff\xfb": "mp3",   # MP3 (MPEG frame sync)
-        b"\xff\xf3": "mp3",   # MP3 (MPEG 2.5)
-        b"\xff\xf2": "mp3",   # MP3 (MPEG 2)
-        b"ID3": "mp3",        # MP3 con ID3 tag
-    }
-    header = content[:4]
-    is_valid_audio = any(header.startswith(sig) for sig in _AUDIO_SIGNATURES)
-    if not is_valid_audio:
-        return JSONResponse(
-            status_code=415,
-            content={"error": "El archivo no parece ser audio válido. Asegúrate de subir un MP3, WAV, FLAC o AIFF real."}
-        )
+    # Track de referencia (opcional): mismas validaciones, fail-fast antes de analizar nada
+    content_ref = None
+    extension_ref = None
+    senales_ref = None
+    comparacion_error = None
+    tiene_ref = audio_ref is not None and (audio_ref.filename or "").strip() != ""
+    if tiene_ref:
+        content_ref = await audio_ref.read()
+        if not content_ref:
+            tiene_ref = False
+            comparacion_error = "El track de referencia llegó vacío (0 bytes). Tu diagnóstico se generó igualmente, sin la comparación."
+        else:
+            extension_ref, err = _validar_audio_upload(audio_ref.filename, content_ref, "Track de referencia")
+            if err:
+                return err
 
     # Guardar archivo temporal
     session_id = str(uuid.uuid4())[:8]
@@ -289,6 +319,15 @@ async def diagnosticar(
     try:
         with open(tmp_path, "wb") as f:
             f.write(content)
+        tmp_ref_path = None
+        if tiene_ref:
+            tmp_ref_path = os.path.join(tmp_dir, f"{session_id}_ref{extension_ref}")
+            with open(tmp_ref_path, "wb") as f:
+                f.write(content_ref)
+        # Liberar los bytes crudos: ya están en disco y pueden ser hasta 300 MB
+        # que de otro modo seguirían vivos en RAM durante todo el análisis
+        content = None
+        content_ref = None
 
         # Validar duración mínima (8 seg) — audios más cortos dan diagnósticos sin sentido
         _load_engine()
@@ -302,6 +341,16 @@ async def diagnosticar(
                 status_code=400,
                 content={"error": "El audio es demasiado corto (mínimo 8 segundos). Sube un fragmento más largo de tu track."}
             )
+        if tiene_ref:
+            try:
+                duracion_ref = _lr.get_duration(path=tmp_ref_path)
+            except Exception:
+                duracion_ref = 0
+            if duracion_ref < 8:
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": "El track de referencia es demasiado corto (mínimo 8 segundos). Sube un track más largo o quítalo para analizar sin comparación."}
+                )
 
         # Extraer señales con timeout de 90s (previene que archivos corruptos cuelguen el worker)
         bpm_int = None
@@ -324,6 +373,22 @@ async def diagnosticar(
                 content={"error": "El análisis tardó demasiado. El archivo puede estar corrupto. Inténtalo con otro archivo."}
             )
 
+        # Extraer señales de la referencia — EN SERIE (no en paralelo: el worker de
+        # Railway comparte CPU) y sin armonía (~90% más rápido). Si falla, el
+        # diagnóstico del usuario sale igual, solo se pierde la comparación.
+        if tiene_ref:
+            try:
+                senales_ref = await asyncio.wait_for(
+                    loop.run_in_executor(None, lambda: _extraer_senales(tmp_ref_path, omitir_armonia=True)),
+                    timeout=60
+                )
+            except asyncio.TimeoutError:
+                print(f"[ERROR] diagnosticar: Timeout en referencia ({session_id})")
+                comparacion_error = "No se pudo analizar el track de referencia (tardó demasiado). Tu diagnóstico se generó igualmente, sin la comparación."
+            except Exception as e:
+                print(f"[ERROR] diagnosticar: referencia {type(e).__name__}: {e}")
+                comparacion_error = "No se pudo analizar el track de referencia. Tu diagnóstico se generó igualmente, sin la comparación."
+
         # Construir contexto. genero_custom solo se usa cuando genero == "otro"
         # (texto libre que el usuario escribe para describir su género).
         contexto = {
@@ -341,6 +406,18 @@ async def diagnosticar(
         # Generar diagnóstico
         resultado = _generar_diagnostico(senales, contexto)
 
+        # Comparación contra la referencia (si la hay)
+        if senales_ref is not None:
+            try:
+                comp = _comparar_senales(senales, senales_ref, contexto)
+                comp["ref_filename"] = (audio_ref.filename or "")[:120]
+                resultado["comparacion_referencia"] = comp
+            except Exception as e:
+                print(f"[ERROR] diagnosticar: comparador {type(e).__name__}: {e}")
+                comparacion_error = "No se pudo completar la comparación con la referencia. Tu diagnóstico se generó igualmente."
+        if comparacion_error:
+            resultado["comparacion_referencia"] = {"error": comparacion_error}
+
         # Guardar sesión para análisis futuro
         sesion = {
             "session_id": session_id,
@@ -349,6 +426,9 @@ async def diagnosticar(
             "senales": {k: v for k, v in senales.items() if k != "bloques_rms"},
             "resultado": resultado,
         }
+        if senales_ref is not None:
+            # Para calibrar los umbrales del comparador con casos reales
+            sesion["senales_ref"] = {k: v for k, v in senales_ref.items() if k != "bloques_rms"}
         with open(SESIONES_PATH, "a") as f:
             f.write(json.dumps(sesion, ensure_ascii=False) + "\n")
 

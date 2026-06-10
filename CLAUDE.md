@@ -203,7 +203,7 @@ Auditoría V-01 a V-10 cerrada (ver `MENTOTRACK.md §7.3`). Reglas vivas:
 - Dashboard admin: cookie HttpOnly+Secure+SameSite=strict, ADMIN_KEY como fallback inicial.
 - Apps Script POST-only (params en URL filtraban hashes).
 - Acceso directo a `dashboard.html` y a `.git/*` bloqueado en el catch-all.
-- Upload máx 100 MB (validado en cliente y servidor), magic bytes verificados además de extensión.
+- Upload máx 150 MB por archivo (validado en cliente y servidor), magic bytes verificados además de extensión. Aplica también al track de referencia opcional (`audio_ref` en `/api/diagnostico`).
 - **Tras el cutover B**: rotar password de Postgres y desactivar Public Networking en Railway.
 
 ---

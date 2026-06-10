@@ -124,7 +124,7 @@ def comparar_senales(senales_user: dict, senales_ref: dict, contexto: dict | Non
                          "más el bus o el máster (sin pasarte).")
             candidatos.append({
                 "clave": "rango_dinamico", "label": "el rango dinámico",
-                "magnitud": ("más comprimida" if d < 0 else "más dinámica"),
+                "magnitud": ("más comprimido" if d < 0 else "más dinámico"),
                 "peso": abs(d) / 0.2, "texto": texto,
             })
         else:
