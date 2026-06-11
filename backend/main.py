@@ -51,7 +51,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.33")
+app = FastAPI(title="Mentotrack API", version="0.5.34")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -216,7 +216,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.33"}
+    return {"status": "ok", "version": "0.5.34"}
 
 
 # Validación compartida de uploads de audio (track principal y referencia)
@@ -3512,6 +3512,185 @@ async def _task_monthly_reporte():
                     print(f"[REPORTE-CRON] error generando reporte: {e}")
     except asyncio.CancelledError:
         pass
+
+
+# =========================================================================
+# Encuesta por email — un clic desde el email registra el voto (v0.5.34)
+# =========================================================================
+
+ENCUESTA_ACTUAL = "comunidad-2026-06"
+_ENCUESTA_OPCIONES = {
+    "todo": "Sí — compartiría mis tracks y comentaría los de otros",
+    "solo_compartir": "Compartiría mis tracks, pero no me veo comentando los de otros",
+    "solo_comentar": "Comentaría los de otros, pero aún no compartiría los míos",
+    "no": "No me interesa",
+}
+
+
+def _encuesta_token(email: str, dias: int = 90) -> str:
+    """Token firmado que identifica al destinatario en los links del email.
+    Scope propio ('encuesta') para que no sirva como token de sesión."""
+    payload = {
+        "em": (email or "").strip().lower(),
+        "sc": "encuesta",
+        "exp": datetime.utcnow() + timedelta(days=dias),
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+
+
+def _email_desde_token_encuesta(token: str) -> str | None:
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        if payload.get("sc") != "encuesta":
+            return None
+        return (payload.get("em") or "").strip().lower() or None
+    except Exception:
+        return None
+
+
+@app.get("/encuesta")
+@limiter.limit("30/minute")
+async def encuesta_page(request: Request, t: str = "", o: str = ""):
+    """Página de voto de la encuesta. Llega desde el email con ?t=token&o=opcion.
+    El voto se registra vía POST desde JS (los scanners de email siguen los GET
+    pero no ejecutan JS — evita falsos votos)."""
+    email = _email_desde_token_encuesta(t)
+    if not email:
+        return HTMLResponse(
+            "<html><body style='font-family:sans-serif;background:#111;color:#eee;"
+            "display:flex;align-items:center;justify-content:center;min-height:100vh'>"
+            "<p>Este enlace no es válido o ha caducado.</p></body></html>",
+            status_code=400,
+        )
+    o_valida = o if o in _ENCUESTA_OPCIONES else ""
+    botones = "".join(
+        f"""<button class="opt" data-o="{clave}" onclick="votar('{clave}')">{texto}</button>"""
+        for clave, texto in _ENCUESTA_OPCIONES.items()
+    )
+    html = f"""<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Encuesta — Mentotrack</title>
+<style>
+  body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0c0c0e; color: #e5e5e5; margin: 0; display: flex; justify-content: center; padding: 40px 16px; }}
+  .box {{ max-width: 560px; width: 100%; }}
+  h1 {{ font-size: 20px; color: #fff; }}
+  p {{ line-height: 1.55; color: #b8b8bd; font-size: 15px; }}
+  .opt {{ display: block; width: 100%; text-align: left; margin: 10px 0; padding: 14px 16px; border-radius: 10px; border: 1px solid #2e2e33; background: #18181c; color: #e5e5e5; font-size: 15px; cursor: pointer; }}
+  .opt:hover {{ border-color: #25F464; }}
+  .opt.sel {{ border-color: #25F464; background: rgba(37,244,100,0.08); }}
+  #gracias {{ display: none; color: #25F464; font-weight: 600; margin-top: 14px; }}
+  textarea {{ width: 100%; box-sizing: border-box; margin-top: 16px; padding: 12px; border-radius: 10px; border: 1px solid #2e2e33; background: #18181c; color: #e5e5e5; font-size: 14px; min-height: 90px; font-family: inherit; }}
+  #enviarCom {{ margin-top: 8px; padding: 10px 18px; border-radius: 8px; border: none; background: #25F464; color: #0c0c0e; font-weight: 600; cursor: pointer; font-size: 14px; }}
+  #comOk {{ display: none; color: #25F464; font-size: 13px; margin-left: 10px; }}
+  .baja {{ margin-top: 36px; font-size: 12px; }} .baja a {{ color: #6b6b70; }}
+</style></head>
+<body><div class="box">
+  <h1>¿Comunidad de feedback dentro de Mentotrack?</h1>
+  <p>La idea: compartir públicamente tu idea inacabada o tu track casi terminado con otros
+  productores que usan Mentotrack —con tu nombre, no anónimo— y daros feedback entre vosotros.</p>
+  <p><strong style="color:#fff">Elige la opción que mejor te describa:</strong></p>
+  {botones}
+  <div id="gracias">✓ Respuesta registrada. Puedes cambiarla con otro clic.</div>
+  <textarea id="comentario" maxlength="2000" placeholder="¿Quieres matizar tu respuesta? ¿Qué te animaría o te frenaría? (opcional)"></textarea>
+  <div><button id="enviarCom" onclick="enviarComentario()">Enviar comentario</button><span id="comOk">✓ Guardado</span></div>
+  <p class="baja"><a href="/email/baja?t={t}">No quiero recibir más emails como este</a></p>
+</div>
+<script>
+  const T = {json.dumps(t)};
+  let votado = false;
+  function marcar(o) {{
+    document.querySelectorAll('.opt').forEach(b => b.classList.toggle('sel', b.dataset.o === o));
+    document.getElementById('gracias').style.display = 'block';
+  }}
+  function votar(o) {{
+    fetch('/api/encuesta/voto', {{
+      method: 'POST', headers: {{'Content-Type': 'application/json'}},
+      body: JSON.stringify({{ t: T, o: o }})
+    }}).then(r => {{ if (r.ok) {{ votado = true; marcar(o); }} }}).catch(() => {{}});
+  }}
+  function enviarComentario() {{
+    const c = document.getElementById('comentario').value.trim();
+    if (!c) return;
+    fetch('/api/encuesta/comentario', {{
+      method: 'POST', headers: {{'Content-Type': 'application/json'}},
+      body: JSON.stringify({{ t: T, comentario: c }})
+    }}).then(r => {{ if (r.ok) document.getElementById('comOk').style.display = 'inline'; }}).catch(() => {{}});
+  }}
+  const oInicial = {json.dumps(o_valida)};
+  if (oInicial) votar(oInicial);
+</script>
+</body></html>"""
+    return HTMLResponse(html)
+
+
+@app.post("/api/encuesta/voto")
+@limiter.limit("10/minute")
+async def encuesta_voto(request: Request, data: dict):
+    email = _email_desde_token_encuesta(data.get("t", ""))
+    opcion = data.get("o", "")
+    if not email or opcion not in _ENCUESTA_OPCIONES:
+        return JSONResponse(status_code=400, content={"error": "Token u opción no válidos"})
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "DB no disponible"})
+    from db import get_pool
+    import repositories as repo
+    await repo.upsert_encuesta_respuesta(get_pool(), ENCUESTA_ACTUAL, email, opcion)
+    return {"ok": True}
+
+
+@app.post("/api/encuesta/comentario")
+@limiter.limit("5/minute")
+async def encuesta_comentario(request: Request, data: dict):
+    email = _email_desde_token_encuesta(data.get("t", ""))
+    comentario = _sanitize(data.get("comentario", ""), 2000)
+    if not email or not comentario:
+        return JSONResponse(status_code=400, content={"error": "Token o comentario no válidos"})
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "DB no disponible"})
+    from db import get_pool
+    import repositories as repo
+    ok = await repo.set_encuesta_comentario(get_pool(), ENCUESTA_ACTUAL, email, comentario)
+    if not ok:
+        return JSONResponse(status_code=400, content={"error": "Elige primero una opción"})
+    return {"ok": True}
+
+
+@app.get("/email/baja")
+@limiter.limit("10/minute")
+async def email_baja(request: Request, t: str = ""):
+    """Baja de emails no transaccionales (encuestas/novedades)."""
+    email = _email_desde_token_encuesta(t)
+    if not email:
+        return HTMLResponse("<p>Enlace no válido o caducado.</p>", status_code=400)
+    if not _pg_available():
+        return HTMLResponse("<p>Servicio no disponible, inténtalo más tarde.</p>", status_code=503)
+    from db import get_pool
+    import repositories as repo
+    await repo.set_email_opt_out(get_pool(), email)
+    return HTMLResponse(
+        "<html><body style='font-family:sans-serif;background:#111;color:#eee;"
+        "display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center'>"
+        "<div><p>Listo — no volverás a recibir emails de encuestas o novedades de Mentotrack.</p>"
+        "<p style='color:#888;font-size:13px'>Los emails operativos (como recuperar tu contraseña) no se ven afectados.</p></div>"
+        "</body></html>"
+    )
+
+
+@app.get("/api/admin/encuesta")
+@limiter.limit("10/minute")
+async def admin_encuesta(request: Request, encuesta: str = ""):
+    """Resultados de la encuesta (requiere cookie admin)."""
+    admin_cookie = request.cookies.get("admin_session", "")
+    if not _verify_admin_token(admin_cookie):
+        return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "DB no disponible"})
+    from db import get_pool
+    import repositories as repo
+    stats = await repo.stats_encuesta(get_pool(), encuesta or ENCUESTA_ACTUAL)
+    stats["opciones_texto"] = _ENCUESTA_OPCIONES
+    return stats
 
 
 # =========================================================================

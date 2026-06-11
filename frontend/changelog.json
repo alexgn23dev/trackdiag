@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "version": "0.5.34",
+      "date": "2026-06-11",
+      "title": "Encuestas por email con voto en un clic",
+      "changes": [
+        "Sistema de encuestas a usuarios por email: cada opción del email es un link personalizado que registra tu voto en un clic, con página para matizar con un comentario. Primera encuesta: ¿quieres una zona de comunidad para compartir tracks y daros feedback entre productores?",
+        "Enlace de baja en todos los emails de este tipo: si te das de baja no volverás a recibir encuestas ni novedades (los emails operativos, como recuperar contraseña, no se ven afectados)."
+      ]
+    },
+    {
       "version": "0.5.33",
       "date": "2026-06-11",
       "title": "Seguimiento de la comparación con referencia (admin)",

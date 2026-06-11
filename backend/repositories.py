@@ -1319,3 +1319,100 @@ async def stats_reporte_mensual(pool: asyncpg.Pool, year: int, month: int) -> di
             },
         },
     }
+
+
+# =========================================================================
+# Encuestas por email (v0.5.34)
+# =========================================================================
+
+
+@with_retry()
+async def upsert_encuesta_respuesta(
+    pool: asyncpg.Pool, encuesta: str, email: str, opcion: str
+) -> None:
+    """Registra (o actualiza) el voto de un usuario en una encuesta.
+    Un voto por (encuesta, email); el último clic gana. El comentario
+    previo se conserva si el usuario solo cambia la opción."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """INSERT INTO encuesta_respuestas (encuesta, email, opcion)
+               VALUES ($1, lower($2), $3)
+               ON CONFLICT (encuesta, email)
+               DO UPDATE SET opcion = EXCLUDED.opcion, timestamp = now()""",
+            encuesta, email, opcion,
+        )
+
+
+@with_retry()
+async def set_encuesta_comentario(
+    pool: asyncpg.Pool, encuesta: str, email: str, comentario: str
+) -> bool:
+    """Añade el comentario libre a un voto ya registrado. Devuelve False
+    si el usuario aún no ha votado en esa encuesta."""
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            """UPDATE encuesta_respuestas SET comentario = $3
+               WHERE encuesta = $1 AND email = lower($2)""",
+            encuesta, email, comentario,
+        )
+    return result == "UPDATE 1"
+
+
+@with_retry()
+async def set_email_opt_out(pool: asyncpg.Pool, email: str) -> bool:
+    """Marca al usuario como dado de baja de emails no transaccionales."""
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            "UPDATE usuarios SET email_opt_out = TRUE WHERE lower(email) = lower($1)",
+            email,
+        )
+    return result.startswith("UPDATE") and not result.endswith(" 0")
+
+
+@with_retry()
+async def emails_para_envio(pool: asyncpg.Pool) -> list[dict]:
+    """Usuarios con email válido que NO se han dado de baja. Para envíos
+    de encuestas/novedades vía Resend."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """SELECT email, username FROM usuarios
+               WHERE email LIKE '%@%' AND NOT email_opt_out
+               ORDER BY fecha_registro ASC"""
+        )
+    return [dict(r) for r in rows]
+
+
+@with_retry()
+async def stats_encuesta(pool: asyncpg.Pool, encuesta: str) -> dict:
+    """Resultados de una encuesta: conteo por opción + comentarios."""
+    async with pool.acquire() as conn:
+        counts = await conn.fetch(
+            """SELECT opcion, COUNT(*) AS n FROM encuesta_respuestas
+               WHERE encuesta = $1 GROUP BY opcion ORDER BY n DESC""",
+            encuesta,
+        )
+        comentarios = await conn.fetch(
+            """SELECT email, opcion, comentario, timestamp
+               FROM encuesta_respuestas
+               WHERE encuesta = $1 AND comentario IS NOT NULL AND comentario != ''
+               ORDER BY timestamp DESC""",
+            encuesta,
+        )
+        total = await conn.fetchval(
+            "SELECT COUNT(*) FROM encuesta_respuestas WHERE encuesta = $1",
+            encuesta,
+        )
+    return {
+        "encuesta": encuesta,
+        "total_respuestas": int(total or 0),
+        "por_opcion": {r["opcion"]: int(r["n"]) for r in counts},
+        "comentarios": [
+            {
+                "email": r["email"],
+                "opcion": r["opcion"],
+                "comentario": r["comentario"],
+                "timestamp": r["timestamp"].isoformat() if r["timestamp"] else None,
+            }
+            for r in comentarios
+        ],
+    }
