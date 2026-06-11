@@ -1,6 +1,14 @@
 {
   "entries": [
     {
+      "version": "0.5.37",
+      "date": "2026-06-11",
+      "title": "Mejora de entregabilidad del email de la encuesta",
+      "changes": [
+        "El email de la encuesta incluye ahora versión en texto plano además del HTML (score SpamAssassin 0.0) para minimizar el riesgo de acabar en spam."
+      ]
+    },
+    {
       "version": "0.5.36",
       "date": "2026-06-11",
       "title": "Confirmación automática tras el envío de la encuesta",

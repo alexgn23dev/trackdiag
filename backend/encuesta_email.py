@@ -69,6 +69,31 @@ def email_html(t: str) -> str:
 </body></html>"""
 
 
+def email_texto(t: str) -> str:
+    """Versión texto plano (mejora la entregabilidad: los filtros penalizan
+    los emails que solo llevan HTML)."""
+    lineas_opciones = "\n".join(
+        f"- {texto}:\n  {BASE_URL}/encuesta?t={t}&o={clave}\n"
+        for clave, texto in OPCIONES
+    )
+    return f"""Soy Alex, de Mentotrack. Estoy pensando en transformar esta plataforma en algo más interactivo, con comunidad, donde podáis ayudaros entre todos.
+
+¿Cómo lo haríamos? Creando una sección donde compartas públicamente tu idea inacabada o tu track casi terminado —con tu nombre, no anónimo— junto a otros productores que también usan la plataforma, para daros feedback entre vosotros y ayudaros a terminar los proyectos.
+
+Responde con un clic (abre el enlace de la opción que mejor te describa):
+
+{lineas_opciones}
+Tras el clic podrás añadir un comentario si quieres matizar tu respuesta.
+
+Gracias por tu colaboración.
+Alex · Mentotrack — Producción Online
+
+--
+Recibes este email porque tienes cuenta en mentotrack.com.
+Darte de baja: {BASE_URL}/email/baja?t={t}
+"""
+
+
 def payload_para(email: str, t: str) -> dict:
     """Payload completo para la API de Resend (send o batch)."""
     return {
@@ -77,5 +102,6 @@ def payload_para(email: str, t: str) -> dict:
         "reply_to": REPLY_TO,
         "subject": SUBJECT,
         "html": email_html(t),
+        "text": email_texto(t),
         "headers": {"List-Unsubscribe": f"<{BASE_URL}/email/baja?t={t}>"},
     }
