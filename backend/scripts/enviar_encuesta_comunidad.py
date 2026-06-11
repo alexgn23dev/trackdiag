@@ -73,7 +73,8 @@ def email_html(username: str, t: str) -> str:
     <p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#3f3f46">
       ¿Cómo lo haríamos? Creando una sección donde compartas públicamente tu idea inacabada
       o tu track casi terminado —con tu nombre, no anónimo— junto a otros productores que
-      también usan la plataforma, para daros feedback entre vosotros.
+      también usan la plataforma, para daros feedback entre vosotros y ayudaros a terminar
+      los proyectos.
     </p>
     <p style="margin:0 0 6px;font-size:15px;color:#18181b;font-weight:600">
       Responde con un clic:
