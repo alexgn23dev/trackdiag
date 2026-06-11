@@ -1,6 +1,14 @@
 {
   "entries": [
     {
+      "version": "0.5.36",
+      "date": "2026-06-11",
+      "title": "Confirmación automática tras el envío de la encuesta",
+      "changes": [
+        "Tras completar el envío programado de la encuesta, el servidor envía un email de confirmación al admin con el número de emails enviados y fallos."
+      ]
+    },
+    {
       "version": "0.5.35",
       "date": "2026-06-11",
       "title": "Envío programado de la encuesta de comunidad",

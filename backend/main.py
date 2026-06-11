@@ -51,7 +51,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.35")
+app = FastAPI(title="Mentotrack API", version="0.5.36")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -225,7 +225,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.35"}
+    return {"status": "ok", "version": "0.5.36"}
 
 
 # Validación compartida de uploads de audio (track principal y referencia)
@@ -3563,6 +3563,23 @@ async def _enviar_encuesta_masiva(campana: str, destinatarios: list | None = Non
             print(f"[ENCUESTA-ENVIO] {enviados}/{len(destinatarios)}…")
     await repo.finalizar_envio_campana(pool, campana, enviados)
     print(f"[ENCUESTA-ENVIO] {campana}: hecho — {enviados} enviados, {fallos} fallos")
+    # Confirmación a Alex (a gmail: el buzón de producciononline filtra los Resend)
+    try:
+        await asyncio.to_thread(resend.Emails.send, {
+            "from": encuesta_email.FROM,
+            "to": ["alexgn23@gmail.com"],
+            "subject": f"✅ Encuesta '{campana}' enviada — {enviados} emails",
+            "html": (
+                f"<p>Envío completado a las {datetime.now(timezone.utc).strftime('%H:%M')} UTC.</p>"
+                f"<p><strong>{enviados}</strong> enviados · {fallos} fallos · "
+                f"{len(destinatarios)} destinatarios.</p>"
+                "<p>Para ver respuestas: pregunta a Claude o abre "
+                "<a href='https://www.mentotrack.com/api/admin/encuesta'>/api/admin/encuesta</a> "
+                "con tu sesión de admin abierta.</p>"
+            ),
+        })
+    except Exception as e:
+        print(f"[ENCUESTA-ENVIO] no se pudo enviar la confirmación: {e}")
     return enviados
 
 
