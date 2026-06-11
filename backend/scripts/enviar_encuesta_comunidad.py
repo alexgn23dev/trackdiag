@@ -65,7 +65,6 @@ def email_html(username: str, t: str) -> str:
 <tr><td align="center">
 <table role="presentation" width="560" style="max-width:560px;background:#ffffff;border-radius:14px;padding:32px 28px" cellpadding="0" cellspacing="0">
   <tr><td>
-    <p style="margin:0 0 16px;font-size:13px;color:#16a34a;font-weight:600">MENTOTRACK</p>
     <p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#3f3f46">
       Soy Alex, de Mentotrack. Estoy pensando en transformar esta plataforma en algo más
       interactivo, con comunidad, donde podáis ayudaros entre todos.
