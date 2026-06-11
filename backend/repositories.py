@@ -1202,6 +1202,19 @@ async def stats_reporte_mensual(pool: asyncpg.Pool, year: int, month: int) -> di
             """SELECT COUNT(*) FROM analisis"""
         )
 
+        # Análisis con track de referencia — la sección se escribe en el texto
+        # del informe desde v0.5.32; no hay columna dedicada, se detecta por LIKE
+        con_ref_mes = await conn.fetchval(
+            """SELECT COUNT(*) FROM analisis
+               WHERE timestamp >= $1 AND timestamp < $2
+                 AND diagnostico LIKE '%COMPARACIÓN CON REFERENCIA%'""",
+            start_date, end_date,
+        )
+        con_ref_all_time = await conn.fetchval(
+            """SELECT COUNT(*) FROM analisis
+               WHERE diagnostico LIKE '%COMPARACIÓN CON REFERENCIA%'"""
+        )
+
         # Total de usuarios
         total_usuarios = await conn.fetchval(
             """SELECT COUNT(*) FROM usuarios"""
@@ -1266,6 +1279,8 @@ async def stats_reporte_mensual(pool: asyncpg.Pool, year: int, month: int) -> di
         "analisis": {
             "total_mes": int(total_mes or 0),
             "total_all_time": int(total_all_time or 0),
+            "con_referencia_mes": int(con_ref_mes or 0),
+            "con_referencia_all_time": int(con_ref_all_time or 0),
             "por_semana": [
                 {
                     "semana": row["semana_num"],

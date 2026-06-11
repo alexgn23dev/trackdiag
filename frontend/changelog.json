@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "version": "0.5.33",
+      "date": "2026-06-11",
+      "title": "Seguimiento de la comparación con referencia (admin)",
+      "changes": [
+        "El dashboard admin marca con un badge REF los análisis que usaron track de referencia, y al abrir el detalle muestra el resultado de la comparación.",
+        "El reporte mensual incluye la adopción de la feature: cuántos análisis del mes usaron referencia y el total acumulado."
+      ]
+    },
+    {
       "version": "0.5.32",
       "date": "2026-06-10",
       "title": "Compara tu track con una referencia",

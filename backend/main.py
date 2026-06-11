@@ -51,7 +51,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.32")
+app = FastAPI(title="Mentotrack API", version="0.5.33")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -216,7 +216,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.32"}
+    return {"status": "ok", "version": "0.5.33"}
 
 
 # Validación compartida de uploads de audio (track principal y referencia)
@@ -3251,6 +3251,15 @@ def _generate_reporte_html(stats_generales: dict, stats_embudo: dict, mes_str: s
         <div class="kpi-value">{stats_generales['analisis']['total_all_time']}</div>
         <div class="kpi-label">Total histórico</div>
     </div>
+    <div class="kpi">
+        <div class="kpi-value">{stats_generales['analisis'].get('con_referencia_mes', 0)}</div>
+        <div class="kpi-label">Con track de referencia</div>
+    </div>
+    <p style="font-size: 13px; color: #6b7280;">
+        Track de referencia: {stats_generales['analisis'].get('con_referencia_mes', 0)} de {stats_generales['analisis']['total_mes']} análisis este mes
+        ({(stats_generales['analisis'].get('con_referencia_mes', 0) / stats_generales['analisis']['total_mes'] * 100) if stats_generales['analisis']['total_mes'] else 0:.0f}%)
+        · {stats_generales['analisis'].get('con_referencia_all_time', 0)} en total desde el lanzamiento (v0.5.32, jun 2026).
+    </p>
 
     <h3>Desglose por semana</h3>
     <table>
