@@ -51,12 +51,13 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.34")
+app = FastAPI(title="Mentotrack API", version="0.5.35")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Tarea de cron para reporte mensual
 _reporte_task_handle = None
+_encuesta_task_handle = None
 
 
 def _run_alembic_upgrade() -> None:
@@ -87,7 +88,7 @@ async def _startup_db():
     no depende de la BD; los endpoints que sí dependan fallarán explícitos).
     Lanza también la tarea de cron del reporte mensual.
     """
-    global _reporte_task_handle
+    global _reporte_task_handle, _encuesta_task_handle
     if os.environ.get("DATABASE_URL"):
         # Migraciones primero (sync, rápido si no hay nada que aplicar).
         await asyncio.to_thread(_run_alembic_upgrade)
@@ -95,15 +96,23 @@ async def _startup_db():
         await init_pool()
         # Lanza la tarea de reporte mensual (no await, es long-running)
         _reporte_task_handle = asyncio.create_task(_task_monthly_reporte())
+        # Envío programado de la encuesta de comunidad (one-shot, con candado en DB)
+        _encuesta_task_handle = asyncio.create_task(_task_envio_encuesta())
 
 
 @app.on_event("shutdown")
 async def _shutdown_db():
-    global _reporte_task_handle
+    global _reporte_task_handle, _encuesta_task_handle
     if _reporte_task_handle:
         _reporte_task_handle.cancel()
         try:
             await _reporte_task_handle
+        except asyncio.CancelledError:
+            pass
+    if _encuesta_task_handle:
+        _encuesta_task_handle.cancel()
+        try:
+            await _encuesta_task_handle
         except asyncio.CancelledError:
             pass
     if os.environ.get("DATABASE_URL"):
@@ -216,7 +225,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.34"}
+    return {"status": "ok", "version": "0.5.35"}
 
 
 # Validación compartida de uploads de audio (track principal y referencia)
@@ -3512,6 +3521,74 @@ async def _task_monthly_reporte():
                     print(f"[REPORTE-CRON] error generando reporte: {e}")
     except asyncio.CancelledError:
         pass
+
+
+# -------------------------------------------------------------------------
+# Envío programado de la encuesta de comunidad — UNA SOLA VEZ
+# 2026-06-12 06:03 UTC = 08:03 hora peninsular española (CEST, UTC+2)
+# -------------------------------------------------------------------------
+_ENVIO_ENCUESTA_UTC = datetime(2026, 6, 12, 6, 3, tzinfo=timezone.utc)
+
+
+async def _enviar_encuesta_masiva(campana: str, destinatarios: list | None = None) -> int:
+    """Envía la encuesta a todos los usuarios (sin opt-out). El candado en
+    email_envios garantiza que la campaña solo se envía una vez aunque haya
+    redeploys o varios workers."""
+    from db import get_pool
+    import repositories as repo
+    import encuesta_email
+    import resend
+
+    pool = get_pool()
+    if not await repo.claim_envio_campana(pool, campana):
+        print(f"[ENCUESTA-ENVIO] {campana}: ya enviada o en curso — no se repite")
+        return 0
+    if destinatarios is None:
+        destinatarios = await repo.emails_para_envio(pool)
+    print(f"[ENCUESTA-ENVIO] {campana}: enviando a {len(destinatarios)} usuarios…")
+    resend.api_key = RESEND_API_KEY
+    enviados = 0
+    fallos = 0
+    for d in destinatarios:
+        try:
+            token = _encuesta_token(d["email"])
+            params = encuesta_email.payload_para(d["email"], token)
+            await asyncio.to_thread(resend.Emails.send, params)
+            enviados += 1
+        except Exception as e:
+            fallos += 1
+            print(f"[ENCUESTA-ENVIO] fallo con {d['email']}: {type(e).__name__}: {e}")
+        await asyncio.sleep(0.6)  # rate limit de Resend (2 req/s)
+        if enviados and enviados % 100 == 0:
+            print(f"[ENCUESTA-ENVIO] {enviados}/{len(destinatarios)}…")
+    await repo.finalizar_envio_campana(pool, campana, enviados)
+    print(f"[ENCUESTA-ENVIO] {campana}: hecho — {enviados} enviados, {fallos} fallos")
+    return enviados
+
+
+async def _task_envio_encuesta():
+    """Tarea one-shot: duerme hasta la hora programada y lanza el envío.
+    Si el deploy llega tarde (caída, redeploy), envía igualmente dentro de
+    una ventana de 48 h; pasada la ventana no hace nada."""
+    try:
+        ahora = datetime.now(timezone.utc)
+        if ahora > _ENVIO_ENCUESTA_UTC + timedelta(hours=48):
+            return
+        espera = (_ENVIO_ENCUESTA_UTC - ahora).total_seconds()
+        if espera > 0:
+            print(f"[ENCUESTA-ENVIO] programado para {_ENVIO_ENCUESTA_UTC.isoformat()} (en {espera/3600:.1f} h)")
+            await asyncio.sleep(espera)
+        if not _pg_available():
+            print("[ENCUESTA-ENVIO] Postgres no disponible — abortado")
+            return
+        if not _resend_disponible():
+            print("[ENCUESTA-ENVIO] Resend no disponible — abortado")
+            return
+        await _enviar_encuesta_masiva(ENCUESTA_ACTUAL)
+    except asyncio.CancelledError:
+        pass
+    except Exception as e:
+        print(f"[ENCUESTA-ENVIO] error en la tarea: {type(e).__name__}: {e}")
 
 
 # =========================================================================

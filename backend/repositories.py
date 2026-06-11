@@ -1416,3 +1416,25 @@ async def stats_encuesta(pool: asyncpg.Pool, encuesta: str) -> dict:
             for r in comentarios
         ],
     }
+
+
+@with_retry()
+async def claim_envio_campana(pool: asyncpg.Pool, campana: str) -> bool:
+    """Candado anti-doble-envío: True solo si ESTE proceso consigue insertar
+    la fila de la campaña. Si ya existe (envío hecho o en curso), False."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """INSERT INTO email_envios (campana) VALUES ($1)
+               ON CONFLICT (campana) DO NOTHING RETURNING campana""",
+            campana,
+        )
+    return row is not None
+
+
+@with_retry()
+async def finalizar_envio_campana(pool: asyncpg.Pool, campana: str, n_enviados: int) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE email_envios SET enviado_at = now(), n_enviados = $2 WHERE campana = $1",
+            campana, n_enviados,
+        )

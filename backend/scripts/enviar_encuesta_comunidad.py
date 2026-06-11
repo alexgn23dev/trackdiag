@@ -24,17 +24,11 @@ import httpx
 import jwt
 
 ENCUESTA = "comunidad-2026-06"
-BASE_URL = os.environ.get("BASE_URL", "https://www.mentotrack.com")
-FROM = os.environ.get("RESEND_FROM", "Alex de Mentotrack <noreply@mentotrack.com>")
-REPLY_TO = "alex@producciononline.com"
-SUBJECT = "¿Quieres feedback entre productores?"
 
-OPCIONES = [
-    ("todo", "Sí — compartiría mis tracks y comentaría los de otros"),
-    ("solo_compartir", "Compartiría mis tracks, pero no me veo comentando"),
-    ("solo_comentar", "Comentaría los de otros, pero aún no compartiría los míos"),
-    ("no", "No me interesa"),
-]
+# El template y el copy viven en backend/encuesta_email.py (compartido con el
+# envío programado del servidor). Este script solo orquesta el envío manual.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+import encuesta_email  # noqa: E402
 
 
 def token_para(email: str) -> str:
@@ -45,55 +39,6 @@ def token_para(email: str) -> str:
         "exp": datetime.utcnow() + timedelta(days=90),
     }
     return jwt.encode(payload, secret, algorithm="HS256")
-
-
-def email_html(username: str, t: str) -> str:
-    # `username` ya no se usa en el saludo (copy de Alex, sin saludo personalizado)
-    botones = "".join(
-        f"""<tr><td style="padding:6px 0">
-              <a href="{BASE_URL}/encuesta?t={t}&amp;o={clave}"
-                 style="display:block;padding:13px 16px;border:1px solid #d4d4d8;border-radius:10px;
-                        color:#18181b;text-decoration:none;font-size:15px;background:#fafafa">
-                {texto}</a>
-            </td></tr>"""
-        for clave, texto in OPCIONES
-    )
-    return f"""<!DOCTYPE html>
-<html lang="es"><body style="margin:0;background:#f4f4f5;padding:24px 12px;
-  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-<tr><td align="center">
-<table role="presentation" width="560" style="max-width:560px;background:#ffffff;border-radius:14px;padding:32px 28px" cellpadding="0" cellspacing="0">
-  <tr><td>
-    <p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#3f3f46">
-      Soy Alex, de Mentotrack. Estoy pensando en transformar esta plataforma en algo más
-      interactivo, con comunidad, donde podáis ayudaros entre todos.
-    </p>
-    <p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#3f3f46">
-      ¿Cómo lo haríamos? Creando una sección donde compartas públicamente tu idea inacabada
-      o tu track casi terminado —con tu nombre, no anónimo— junto a otros productores que
-      también usan la plataforma, para daros feedback entre vosotros y ayudaros a terminar
-      los proyectos.
-    </p>
-    <p style="margin:0 0 6px;font-size:15px;color:#18181b;font-weight:600">
-      Responde con un clic:
-    </p>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">{botones}</table>
-    <p style="margin:14px 0 0;font-size:13px;color:#71717a">
-      Tras el clic podrás añadir un comentario si quieres matizar tu respuesta.
-    </p>
-    <p style="margin:22px 0 0;font-size:15px;color:#3f3f46">
-      Gracias por tu colaboración.<br>
-      <strong>Alex</strong> · Mentotrack — Producción Online
-    </p>
-    <p style="margin:28px 0 0;font-size:12px;color:#a1a1aa;border-top:1px solid #e4e4e7;padding-top:14px">
-      Recibes este email porque tienes cuenta en mentotrack.com ·
-      <a href="{BASE_URL}/email/baja?t={t}" style="color:#a1a1aa">No quiero recibir más emails como este</a>
-    </p>
-  </td></tr>
-</table>
-</td></tr></table>
-</body></html>"""
 
 
 async def destinatarios() -> list[dict]:
@@ -121,15 +66,7 @@ def enviar_batch(client: httpx.Client, lote: list[dict]) -> None:
 
 
 def construir_payload(dest: dict) -> dict:
-    t = token_para(dest["email"])
-    return {
-        "from": FROM,
-        "to": [dest["email"]],
-        "reply_to": REPLY_TO,
-        "subject": SUBJECT,
-        "html": email_html(dest.get("username") or "", t),
-        "headers": {"List-Unsubscribe": f"<{BASE_URL}/email/baja?t={t}>"},
-    }
+    return encuesta_email.payload_para(dest["email"], token_para(dest["email"]))
 
 
 def main():
@@ -162,7 +99,7 @@ def main():
 
     if not args.send:
         # Dry-run: muestra resumen y guarda una preview del HTML
-        preview = email_html("productor_ejemplo", token_para("preview@example.com"))
+        preview = encuesta_email.email_html(token_para("preview@example.com"))
         path = "/tmp/encuesta_preview.html"
         with open(path, "w") as f:
             f.write(preview)

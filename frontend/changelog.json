@@ -1,6 +1,14 @@
 {
   "entries": [
     {
+      "version": "0.5.35",
+      "date": "2026-06-11",
+      "title": "Envío programado de la encuesta de comunidad",
+      "changes": [
+        "La encuesta '¿Quieres feedback entre productores?' se enviará automáticamente desde el servidor el 12 de junio a las 08:03 (hora peninsular) a todos los usuarios, con candado en base de datos para que el envío no pueda duplicarse aunque haya redeploys."
+      ]
+    },
+    {
       "version": "0.5.34",
       "date": "2026-06-11",
       "title": "Encuestas por email con voto en un clic",
