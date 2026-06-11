@@ -14,7 +14,6 @@ JWT_SECRET DEBE ser el de producción — los links se validan en el servidor.
 
 import argparse
 import asyncio
-import html
 import os
 import sys
 import time
@@ -28,7 +27,7 @@ ENCUESTA = "comunidad-2026-06"
 BASE_URL = os.environ.get("BASE_URL", "https://www.mentotrack.com")
 FROM = os.environ.get("RESEND_FROM", "Alex de Mentotrack <noreply@mentotrack.com>")
 REPLY_TO = "alex@producciononline.com"
-SUBJECT = "Una pregunta rápida: ¿feedback entre productores dentro de Mentotrack?"
+SUBJECT = "¿Quieres feedback entre productores?"
 
 OPCIONES = [
     ("todo", "Sí — compartiría mis tracks y comentaría los de otros"),
@@ -49,7 +48,7 @@ def token_para(email: str) -> str:
 
 
 def email_html(username: str, t: str) -> str:
-    nombre = html.escape(username) if username else "productor/a"
+    # `username` ya no se usa en el saludo (copy de Alex, sin saludo personalizado)
     botones = "".join(
         f"""<tr><td style="padding:6px 0">
               <a href="{BASE_URL}/encuesta?t={t}&amp;o={clave}"
@@ -66,17 +65,15 @@ def email_html(username: str, t: str) -> str:
 <tr><td align="center">
 <table role="presentation" width="560" style="max-width:560px;background:#ffffff;border-radius:14px;padding:32px 28px" cellpadding="0" cellspacing="0">
   <tr><td>
-    <p style="margin:0 0 4px;font-size:13px;color:#16a34a;font-weight:600">MENTOTRACK</p>
-    <h1 style="margin:0 0 16px;font-size:21px;color:#18181b">Hola, {nombre} 👋</h1>
+    <p style="margin:0 0 16px;font-size:13px;color:#16a34a;font-weight:600">MENTOTRACK</p>
     <p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#3f3f46">
-      Soy Alex, de Mentotrack. Una pregunta rápida — <strong>tu respuesta decide lo próximo
-      que construimos</strong>.
+      Soy Alex, de Mentotrack. Estoy pensando en transformar esta plataforma en algo más
+      interactivo, con comunidad, donde podáis ayudaros entre todos.
     </p>
     <p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#3f3f46">
-      La idea: una <strong>zona de comunidad dentro de Mentotrack</strong> donde compartas
-      públicamente tu idea inacabada o tu track casi terminado —con tu nombre, no anónimo—
-      junto a otros productores que también usan la plataforma, para daros feedback
-      entre vosotros.
+      ¿Cómo lo haríamos? Creando una sección donde compartas públicamente tu idea inacabada
+      o tu track casi terminado —con tu nombre, no anónimo— junto a otros productores que
+      también usan la plataforma, para daros feedback entre vosotros.
     </p>
     <p style="margin:0 0 6px;font-size:15px;color:#18181b;font-weight:600">
       Responde con un clic:
@@ -86,7 +83,7 @@ def email_html(username: str, t: str) -> str:
       Tras el clic podrás añadir un comentario si quieres matizar tu respuesta.
     </p>
     <p style="margin:22px 0 0;font-size:15px;color:#3f3f46">
-      Gracias por estar al otro lado.<br>
+      Gracias por tu colaboración.<br>
       <strong>Alex</strong> · Mentotrack — Producción Online
     </p>
     <p style="margin:28px 0 0;font-size:12px;color:#a1a1aa;border-top:1px solid #e4e4e7;padding-top:14px">
