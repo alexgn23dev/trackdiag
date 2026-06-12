@@ -1972,6 +1972,8 @@
         const [saved, setSaved] = useState(false);
         const [error, setError] = useState('');
         const [publicadoOpts, setPublicadoOpts] = useState({});
+        // null = sin responder | true = "Sí" (despliega autoeditado/sellos) | false = "No"
+        const [haPublicado, setHaPublicado] = useState(null);
         const [form, setForm] = useState({
             perfil_experiencia: '', perfil_estilos: [],
             perfil_publicado: '', perfil_donde: '', perfil_bio: '',
@@ -1994,6 +1996,8 @@
                         perfil_donde: p.perfil_donde || '',
                         perfil_bio: p.perfil_bio || '',
                     });
+                    if (p.perfil_publicado === 'no') setHaPublicado(false);
+                    else if (p.perfil_publicado) setHaPublicado(true);
                     setLoading(false);
                 })
                 .catch(() => { if (vivo) { setError('No se pudo cargar el perfil'); setLoading(false); } });
@@ -2064,6 +2068,14 @@
                     </div>
                 </div>
 
+                {/* Sobre ti */}
+                <div className="mb-5">
+                    <label className="block text-sm font-medium mb-2" style={{color: 'var(--po-light)'}}>Cuenta a la comunidad algo sobre ti <span className="text-xs" style={{color: 'var(--po-medium)'}}>(opcional)</span></label>
+                    <textarea value={form.perfil_bio} onChange={e => upd('perfil_bio', e.target.value)}
+                        placeholder="Quién eres, qué música haces, qué te inspira..." maxLength={500} rows={2}
+                        className="w-full px-4 py-3 rounded-lg text-sm input-field" style={{resize: 'vertical'}} />
+                </div>
+
                 {/* Experiencia */}
                 <div className="mb-5">
                     <label className="block text-sm font-medium mb-2" style={{color: 'var(--po-light)'}}>¿Cuánto tiempo llevas produciendo?</label>
@@ -2101,39 +2113,49 @@
                     </div>
                 </div>
 
-                {/* Trayectoria publicada */}
+                {/* ¿Has publicado música? — Sí/No; con Sí se despliegan las opciones */}
                 <div className="mb-5">
                     <label className="block text-sm font-medium mb-2" style={{color: 'var(--po-light)'}}>¿Has publicado música?</label>
-                    <div className="flex flex-col gap-2">
-                        {Object.entries(publicadoOpts).map(([val, txt]) => (
-                            <button key={val} type="button" onClick={() => upd('perfil_publicado', val)}
-                                className="px-3 py-2 rounded-lg text-xs text-left transition-colors"
+                    <div className="flex gap-2 mb-2">
+                        {[[true, 'Sí'], [false, 'No']].map(([val, txt]) => (
+                            <button key={txt} type="button"
+                                onClick={() => {
+                                    setHaPublicado(val);
+                                    // "No" fija el valor; "Sí" lo resetea para que elija una opción
+                                    upd('perfil_publicado', val ? (form.perfil_publicado !== 'no' ? form.perfil_publicado : '') : 'no');
+                                }}
+                                className="px-5 py-2 rounded-lg text-xs transition-colors"
                                 style={{
-                                    background: form.perfil_publicado === val ? 'var(--po-purple)' : 'transparent',
-                                    color: form.perfil_publicado === val ? '#fff' : 'var(--po-light)',
-                                    border: '1px solid ' + (form.perfil_publicado === val ? 'var(--po-purple)' : '#333'),
+                                    background: haPublicado === val ? 'var(--po-purple)' : 'transparent',
+                                    color: haPublicado === val ? '#fff' : 'var(--po-light)',
+                                    border: '1px solid ' + (haPublicado === val ? 'var(--po-purple)' : '#333'),
                                 }}>{txt}</button>
                         ))}
                     </div>
+                    {haPublicado === true && (
+                        <div className="flex flex-col gap-2 fade-in">
+                            {Object.entries(publicadoOpts).filter(([val]) => val !== 'no').map(([val, txt]) => (
+                                <button key={val} type="button" onClick={() => upd('perfil_publicado', val)}
+                                    className="px-3 py-2 rounded-lg text-xs text-left transition-colors"
+                                    style={{
+                                        background: form.perfil_publicado === val ? 'var(--po-purple)' : 'transparent',
+                                        color: form.perfil_publicado === val ? '#fff' : 'var(--po-light)',
+                                        border: '1px solid ' + (form.perfil_publicado === val ? 'var(--po-purple)' : '#333'),
+                                    }}>{txt}</button>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 {/* Dónde — solo si ha publicado algo */}
-                {form.perfil_publicado && form.perfil_publicado !== 'no' && (
+                {haPublicado === true && form.perfil_publicado && form.perfil_publicado !== 'no' && (
                     <div className="mb-5">
-                        <label className="block text-sm font-medium mb-2" style={{color: 'var(--po-light)'}}>¿Dónde? <span className="text-xs" style={{color: 'var(--po-medium)'}}>(sellos, plataformas… opcional)</span></label>
+                        <label className="block text-sm font-medium mb-2" style={{color: 'var(--po-light)'}}>¿Dónde? <span className="text-xs" style={{color: 'var(--po-medium)'}}>(opcional)</span></label>
                         <input type="text" value={form.perfil_donde} onChange={e => upd('perfil_donde', e.target.value)}
-                            placeholder="Ej: Drumcode, Beatport, mi propio Bandcamp…" maxLength={200}
+                            placeholder="Ej: Drumcode, Defected…" maxLength={200}
                             className="w-full px-4 py-3 rounded-lg text-sm input-field" />
                     </div>
                 )}
-
-                {/* Bio */}
-                <div className="mb-6">
-                    <label className="block text-sm font-medium mb-2" style={{color: 'var(--po-light)'}}>Sobre ti <span className="text-xs" style={{color: 'var(--po-medium)'}}>(opcional)</span></label>
-                    <textarea value={form.perfil_bio} onChange={e => upd('perfil_bio', e.target.value)}
-                        placeholder="Una línea sobre ti como productor/a…" maxLength={500} rows={2}
-                        className="w-full px-4 py-3 rounded-lg text-sm input-field" style={{resize: 'vertical'}} />
-                </div>
 
                 {error && <p className="text-xs text-red-400 mb-3">{error}</p>}
                 <div className="flex items-center gap-3">

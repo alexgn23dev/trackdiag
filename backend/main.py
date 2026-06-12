@@ -3802,11 +3802,11 @@ async def admin_encuesta(request: Request, encuesta: str = ""):
 # Perfil de comunidad (v0.5.40)
 # =========================================================================
 
-# Opciones de trayectoria publicada. El frontend muestra estos labels.
+# Opciones de trayectoria publicada. El frontend pregunta Sí/No y, si Sí,
+# despliega autoeditado/sellos ("no" es el value de la respuesta No).
 PERFIL_PUBLICADO_OPCIONES = {
     "no": "Aún no he publicado música",
-    "autoeditado": "Autoeditado (Bandcamp, SoundCloud, distribuidora propia…)",
-    "plataformas": "En plataformas (Spotify, Beatport…)",
+    "autoeditado": "Autoeditado (Bandcamp, DistroKid, Triple Point…)",
     "sellos": "Firmado por sellos",
 }
 
