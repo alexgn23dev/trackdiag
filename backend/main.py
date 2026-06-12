@@ -51,7 +51,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.39")
+app = FastAPI(title="Mentotrack API", version="0.5.40")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -225,7 +225,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.39"}
+    return {"status": "ok", "version": "0.5.40"}
 
 
 # Validación compartida de uploads de audio (track principal y referencia)
@@ -464,7 +464,10 @@ async def diagnosticar(
 @app.get("/api/opciones")
 def opciones():
     """Retorna las opciones del cuestionario para el frontend."""
-    return {
+    return _OPCIONES
+
+
+_OPCIONES = {
         "generos": [
             {"value": "tech_house", "label": "Tech House"},
             {"value": "house", "label": "House"},
@@ -517,7 +520,12 @@ def opciones():
             {"value": "mas_2h", "label": "Más de 2 horas"},
             {"value": "sin_prisa", "label": "No tengo prisa"},
         ],
-    }
+}
+
+# Mapas inversos label → value (para mapear el formulario guardado, que
+# almacena labels en ES, de vuelta a values al pre-rellenar el perfil).
+_LABEL_A_VALUE_GENERO = {o["label"].lower(): o["value"] for o in _OPCIONES["generos"]}
+_LABEL_A_VALUE_EXPERIENCIA = {o["label"].lower(): o["value"] for o in _OPCIONES["experiencia"]}
 
 
 # =========================================================================
@@ -3788,6 +3796,96 @@ async def admin_encuesta(request: Request, encuesta: str = ""):
     stats = await repo.stats_encuesta(get_pool(), encuesta or ENCUESTA_ACTUAL)
     stats["opciones_texto"] = _ENCUESTA_OPCIONES
     return stats
+
+
+# =========================================================================
+# Perfil de comunidad (v0.5.40)
+# =========================================================================
+
+# Opciones de trayectoria publicada. El frontend muestra estos labels.
+PERFIL_PUBLICADO_OPCIONES = {
+    "no": "Aún no he publicado música",
+    "autoeditado": "Autoeditado (Bandcamp, SoundCloud, distribuidora propia…)",
+    "plataformas": "En plataformas (Spotify, Beatport…)",
+    "sellos": "Firmado por sellos",
+}
+
+
+@app.get("/api/perfil")
+@limiter.limit("30/minute")
+async def get_perfil(request: Request):
+    """Perfil de comunidad del usuario logueado."""
+    email, err = _require_auth_user(request)
+    if err:
+        return err
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Base de datos no disponible"})
+    try:
+        from db import get_pool
+        import repositories as repo
+        pool = get_pool()
+        perfil = await repo.get_perfil(pool, email)
+        if perfil is None:
+            return JSONResponse(status_code=404, content={"error": "Usuario no encontrado"})
+        # Si el perfil aún no se ha completado, sugerir valores desde los análisis
+        prefill = {}
+        if not perfil.get("perfil_completo"):
+            user = await repo.get_user_by_email(pool, email)
+            if user:
+                labels = await repo.perfil_prefill_labels(pool, user["id"])
+                exp_label = (labels.get("experiencia_label") or "").strip().lower()
+                exp_value = _LABEL_A_VALUE_EXPERIENCIA.get(exp_label)
+                estilos = []
+                for gl in labels.get("genero_labels", []):
+                    v = _LABEL_A_VALUE_GENERO.get((gl or "").strip().lower())
+                    if v and v != "otro" and v not in estilos:
+                        estilos.append(v)
+                prefill = {"perfil_experiencia": exp_value, "perfil_estilos": estilos}
+        return {
+            "perfil": perfil,
+            "prefill": prefill,
+            "publicado_opciones": PERFIL_PUBLICADO_OPCIONES,
+        }
+    except Exception as e:
+        print(f"[PERFIL GET] {e}")
+        return JSONResponse(status_code=500, content={"error": "Error obteniendo el perfil"})
+
+
+@app.post("/api/perfil")
+@limiter.limit("15/minute")
+async def post_perfil(request: Request, data: dict):
+    """Guarda el perfil de comunidad. Body: perfil_experiencia, perfil_estilos
+    (lista de values), perfil_publicado, perfil_donde, perfil_bio."""
+    email, err = _require_auth_user(request)
+    if err:
+        return err
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Base de datos no disponible"})
+    # Saneado: estilos máximo 8, cada uno corto; textos acotados
+    estilos = data.get("perfil_estilos") or []
+    if not isinstance(estilos, list):
+        estilos = []
+    estilos = [str(e)[:40] for e in estilos][:8]
+    publicado = data.get("perfil_publicado") or None
+    if publicado and publicado not in PERFIL_PUBLICADO_OPCIONES:
+        publicado = None
+    datos = {
+        "perfil_experiencia": (data.get("perfil_experiencia") or None),
+        "perfil_estilos": estilos,
+        "perfil_publicado": publicado,
+        "perfil_donde": _sanitize(data.get("perfil_donde", ""), 200) or None,
+        "perfil_bio": _sanitize(data.get("perfil_bio", ""), 500) or None,
+    }
+    try:
+        from db import get_pool
+        import repositories as repo
+        ok = await repo.upsert_perfil(get_pool(), email, datos)
+        if not ok:
+            return JSONResponse(status_code=404, content={"error": "Usuario no encontrado"})
+        return {"ok": True}
+    except Exception as e:
+        print(f"[PERFIL POST] {e}")
+        return JSONResponse(status_code=500, content={"error": "Error guardando el perfil"})
 
 
 # =========================================================================

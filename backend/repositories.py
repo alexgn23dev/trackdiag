@@ -1438,3 +1438,95 @@ async def finalizar_envio_campana(pool: asyncpg.Pool, campana: str, n_enviados: 
             "UPDATE email_envios SET enviado_at = now(), n_enviados = $2 WHERE campana = $1",
             campana, n_enviados,
         )
+
+
+# =========================================================================
+# Perfil de comunidad (v0.5.40)
+# =========================================================================
+
+_PERFIL_COLS = ("perfil_experiencia", "perfil_estilos", "perfil_publicado",
+                "perfil_donde", "perfil_bio", "perfil_completo")
+
+
+@with_retry()
+async def get_perfil(pool: asyncpg.Pool, email: str) -> Optional[dict]:
+    """Devuelve el perfil de comunidad del usuario (username + campos de perfil).
+    `perfil_estilos` se devuelve ya como lista Python."""
+    email = (email or "").strip().lower()
+    if not email:
+        return None
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """SELECT username, perfil_experiencia, perfil_estilos, perfil_publicado,
+                      perfil_donde, perfil_bio, perfil_completo
+               FROM usuarios WHERE LOWER(email) = $1""",
+            email,
+        )
+    if not row:
+        return None
+    d = dict(row)
+    estilos = d.get("perfil_estilos")
+    if isinstance(estilos, str):
+        try:
+            estilos = json.loads(estilos)
+        except (ValueError, TypeError):
+            estilos = []
+    d["perfil_estilos"] = estilos or []
+    return d
+
+
+@with_retry()
+async def upsert_perfil(pool: asyncpg.Pool, email: str, datos: dict) -> bool:
+    """Guarda el perfil de comunidad. `datos` admite: perfil_experiencia,
+    perfil_estilos (lista), perfil_publicado, perfil_donde, perfil_bio.
+    Marca perfil_completo = TRUE. Devuelve True si el usuario existía."""
+    email = (email or "").strip().lower()
+    if not email:
+        return False
+    estilos = datos.get("perfil_estilos") or []
+    if not isinstance(estilos, list):
+        estilos = []
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            """UPDATE usuarios SET
+                 perfil_experiencia = $2,
+                 perfil_estilos = $3::jsonb,
+                 perfil_publicado = $4,
+                 perfil_donde = $5,
+                 perfil_bio = $6,
+                 perfil_completo = TRUE
+               WHERE LOWER(email) = $1""",
+            email,
+            (datos.get("perfil_experiencia") or None),
+            json.dumps(estilos, ensure_ascii=False),
+            (datos.get("perfil_publicado") or None),
+            (datos.get("perfil_donde") or None),
+            (datos.get("perfil_bio") or None),
+        )
+    return result.endswith(" 1")
+
+
+@with_retry()
+async def perfil_prefill_labels(pool: asyncpg.Pool, usuario_id) -> dict:
+    """Sugerencias para pre-rellenar el perfil desde los análisis del usuario:
+    el último valor de experiencia y los géneros distintos usados (labels en ES,
+    el endpoint los mapea a values). Para que no rellene el perfil desde cero
+    quien ya ha analizado tracks."""
+    async with pool.acquire() as conn:
+        exp = await conn.fetchval(
+            """SELECT formulario->>'experiencia'
+               FROM analisis
+               WHERE usuario_id = $1 AND formulario->>'experiencia' IS NOT NULL
+               ORDER BY timestamp DESC LIMIT 1""",
+            usuario_id,
+        )
+        generos = await conn.fetch(
+            """SELECT DISTINCT formulario->>'genero' AS g
+               FROM analisis
+               WHERE usuario_id = $1 AND formulario->>'genero' IS NOT NULL""",
+            usuario_id,
+        )
+    return {
+        "experiencia_label": exp,
+        "genero_labels": [r["g"] for r in generos if r["g"]],
+    }

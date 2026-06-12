@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "version": "0.5.40",
+      "date": "2026-06-12",
+      "title": "Perfil de productor (primer paso de la comunidad)",
+      "changes": [
+        "Nuevo 'Mi perfil' en tu panel: cuánto llevas produciendo, qué estilos haces, tu trayectoria publicada y una bio. Es la base de la futura comunidad de feedback entre productores — da credibilidad a lo que comentas y compartes.",
+        "Si ya has analizado tracks, el perfil se pre-rellena solo con tus datos (experiencia y estilos), para que completarlo cueste segundos."
+      ]
+    },
+    {
       "version": "0.5.39",
       "date": "2026-06-12",
       "title": "Nuevos géneros: Hard Dance, Drum & Bass y Organic House",
