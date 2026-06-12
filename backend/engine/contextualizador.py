@@ -30,7 +30,7 @@ DURACIONES_GENERO = {
     "breaks":            {"min": 300, "max": 420, "label": "5–7 minutos"},
     "hard_dance":        {"min": 240, "max": 360, "label": "4–6 minutos"},
     "dnb":               {"min": 210, "max": 330, "label": "3:30–5:30 minutos"},
-    "organic_house":     {"min": 360, "max": 540, "label": "6–9 minutos"},
+    "organic_house":     {"min": 300, "max": 480, "label": "5–8 minutos"},
 }
 
 # =============================================================================
