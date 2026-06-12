@@ -1,6 +1,14 @@
 {
   "entries": [
     {
+      "version": "0.5.38",
+      "date": "2026-06-12",
+      "title": "Pestaña de encuesta en el dashboard admin",
+      "changes": [
+        "Nueva pestaña 'Encuesta' en el dashboard admin que muestra en tiempo real (auto-refresh cada 20 s) el recuento de respuestas por opción y todos los comentarios que dejan los usuarios."
+      ]
+    },
+    {
       "version": "0.5.37",
       "date": "2026-06-11",
       "title": "Mejora de entregabilidad del email de la encuesta",

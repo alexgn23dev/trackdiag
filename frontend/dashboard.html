@@ -2120,6 +2120,126 @@
 
 
     // =========================================================================
+    // Pestaña ENCUESTA — respuestas en tiempo real (auto-refresh 20s)
+    // =========================================================================
+    const ENCUESTA_COLORES = {
+        todo: '#22c55e',
+        solo_compartir: '#3b82f6',
+        solo_comentar: '#a78bfa',
+        no: '#ef4444',
+    };
+    const ENCUESTA_ORDEN = ['todo', 'solo_compartir', 'solo_comentar', 'no'];
+
+    function EncuestaTab() {
+        const [data, setData] = useState(null);
+        const [error, setError] = useState(null);
+        const [loading, setLoading] = useState(true);
+        const [ultima, setUltima] = useState(null);
+
+        const cargar = async () => {
+            try {
+                const resp = await fetch(`${API_URL}/api/admin/encuesta`, { credentials: 'same-origin' });
+                if (!resp.ok) { setError(`HTTP ${resp.status}`); setLoading(false); return; }
+                setData(await resp.json());
+                setError(null);
+                setUltima(new Date());
+            } catch (e) {
+                setError(String(e));
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        // Carga inicial + auto-refresh cada 20s
+        useEffect(() => {
+            cargar();
+            const id = setInterval(cargar, 20000);
+            return () => clearInterval(id);
+        }, []);
+
+        const total = data?.total_respuestas || 0;
+        const porOpcion = data?.por_opcion || {};
+        const textos = data?.opciones_texto || {};
+        const comentarios = data?.comentarios || [];
+
+        const fmtFecha = (iso) => {
+            if (!iso) return '—';
+            const d = new Date(iso);
+            return d.toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+        };
+
+        return (
+            <div className="fade-in space-y-4">
+                <div className="card p-5">
+                    <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
+                        <div>
+                            <h3 className="text-sm font-semibold text-gray-300">Encuesta de comunidad</h3>
+                            <p className="text-xs text-gray-500 mt-1">
+                                ¿Quieres feedback entre productores? · se actualiza solo cada 20 s
+                                {ultima && <span className="text-gray-600"> · última lectura {ultima.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>}
+                            </p>
+                        </div>
+                        <div className="text-right">
+                            <div className="text-2xl font-bold text-white tabular-nums">{total}</div>
+                            <div className="text-xs text-gray-500">respuestas</div>
+                        </div>
+                    </div>
+
+                    {loading && !data && <p className="text-xs text-gray-500">Cargando…</p>}
+                    {error && <p className="text-xs text-red-400">Error: {error}</p>}
+
+                    {total > 0 && (
+                        <div className="space-y-2.5">
+                            {ENCUESTA_ORDEN.filter(op => porOpcion[op]).map(op => {
+                                const n = porOpcion[op] || 0;
+                                const pct = total > 0 ? (n / total * 100) : 0;
+                                return (
+                                    <div key={op} className="flex items-center gap-3 text-xs">
+                                        <span className="text-gray-300 flex-shrink-0" style={{ width: '230px' }}>{textos[op] || op}</span>
+                                        <div className="flex-1 bg-gray-800/40 rounded h-3 overflow-hidden">
+                                            <div style={{ width: `${pct}%`, background: ENCUESTA_COLORES[op] || '#8b5cf6', height: '100%' }} />
+                                        </div>
+                                        <span className="text-gray-200 w-20 text-right tabular-nums">{n} · {pct.toFixed(0)}%</span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                    {!loading && total === 0 && !error && (
+                        <p className="text-sm text-gray-500 text-center py-6">Aún no hay respuestas.</p>
+                    )}
+                </div>
+
+                {/* Comentarios opcionales */}
+                <div className="card p-5">
+                    <h4 className="text-xs font-semibold text-gray-400 uppercase mb-3">
+                        Comentarios <span className="text-gray-600 normal-case">({comentarios.length})</span>
+                    </h4>
+                    {comentarios.length === 0 ? (
+                        <p className="text-sm text-gray-500 py-2">Nadie ha dejado comentario todavía.</p>
+                    ) : (
+                        <div className="space-y-3">
+                            {comentarios.map((c, i) => (
+                                <div key={i} className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.03)', borderLeft: `3px solid ${ENCUESTA_COLORES[c.opcion] || '#52525b'}` }}>
+                                    <div className="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
+                                        <span className="text-xs text-gray-300 font-medium">{c.email}</span>
+                                        <span className="text-xs flex items-center gap-2">
+                                            <span style={{ color: ENCUESTA_COLORES[c.opcion] || '#a1a1aa' }}>{textos[c.opcion] || c.opcion}</span>
+                                            <span className="text-gray-600">{fmtFecha(c.timestamp)}</span>
+                                        </span>
+                                    </div>
+                                    <p className="text-sm text-gray-200 leading-relaxed">{c.comentario}</p>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    }
+
+
+    // =========================================================================
     // Dashboard principal
     // =========================================================================
 
@@ -2389,7 +2509,7 @@
 
                 {/* Tabs */}
                 <div className="flex gap-1 mb-6 bg-gray-800/50 rounded-lg p-1 w-fit flex-wrap">
-                    {[['overview', 'Resumen'], ['analisis', 'Análisis'], ['users', 'Usuarios'], ['feedback', 'Feedback'], ['motor', 'Motor'], ['auditorias', 'Auditorías'], ['embudo', 'Embudo']].map(([id, label]) => (
+                    {[['overview', 'Resumen'], ['analisis', 'Análisis'], ['users', 'Usuarios'], ['feedback', 'Feedback'], ['motor', 'Motor'], ['auditorias', 'Auditorías'], ['embudo', 'Embudo'], ['encuesta', 'Encuesta']].map(([id, label]) => (
                         <button
                             key={id}
                             onClick={() => setTab(id)}
@@ -2923,6 +3043,11 @@
                 {/* ============ TAB: EMBUDO (CTA conversion funnel) ============ */}
                 {tab === 'embudo' && (
                     <EmbudoTab />
+                )}
+
+                {/* ============ TAB: ENCUESTA (respuestas en tiempo real) ============ */}
+                {tab === 'encuesta' && (
+                    <EncuestaTab />
                 )}
 
                 {/* Detail Modal */}
