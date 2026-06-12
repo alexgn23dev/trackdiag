@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "version": "0.5.39",
+      "date": "2026-06-12",
+      "title": "Nuevos géneros: Hard Dance, Drum & Bass y Organic House",
+      "changes": [
+        "Añadidos al cuestionario tres géneros: Hard Dance / Bounce / Hardstyle, Drum & Bass / Jungle y Organic / Melodic House.",
+        "El motor los reconoce con su lenguaje propio: en Hard Dance y DnB no penaliza los graves contundentes ni la densidad alta (son parte del estilo); en Organic House sí cuida que el exceso de graves no tape la melodía. Cada uno con su duración típica, target de loudness y notas de estructura."
+      ]
+    },
+    {
       "version": "0.5.38",
       "date": "2026-06-12",
       "title": "Pestaña de encuesta en el dashboard admin",

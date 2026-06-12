@@ -28,6 +28,9 @@ DURACIONES_GENERO = {
     "afro_house":        {"min": 360, "max": 480, "label": "6–8 minutos"},
     "indie_dance":       {"min": 240, "max": 360, "label": "4–6 minutos"},
     "breaks":            {"min": 300, "max": 420, "label": "5–7 minutos"},
+    "hard_dance":        {"min": 240, "max": 360, "label": "4–6 minutos"},
+    "dnb":               {"min": 210, "max": 330, "label": "3:30–5:30 minutos"},
+    "organic_house":     {"min": 360, "max": 540, "label": "6–9 minutos"},
 }
 
 # =============================================================================
@@ -125,6 +128,24 @@ ESTRUCTURA_GENERO = {
         "builds": "típicamente con tensión rítmica antes del drop",
         "nota": "En breaks el ritmo no es lineal — el groove vive en el shuffle. Asegúrate de que el kick y el snare tengan suficiente espacio para que el patrón se entienda.",
     },
+    "hard_dance": {
+        "patron": "kick distorsionado protagonista + melodías eufóricas o raw",
+        "breaks": "melódicos y emocionales, preparan el siguiente drop",
+        "builds": "agresivos, con risers y screeches hacia el kick del drop",
+        "nota": "En hard dance / hardstyle el kick ES el track: cuerpo distorsionado y tono afinado a la tonalidad. La energía es alta por diseño; cuida que el kick tenga pegada y no se coma toda la mezcla, y que el rango dinámico no quede totalmente plano.",
+    },
+    "dnb": {
+        "patron": "breakbeat rápido (~174 BPM) + sub/reese protagonista",
+        "breaks": "el breakdown baja energía antes del 'drop' (cambio de bajo)",
+        "builds": "tensión con risers y corte de graves antes de soltar el bajo",
+        "nota": "En drum & bass el groove vive en el breakbeat y el bajo es el motor. El momento clave es el drop donde entra el reese/sub — debe pegar fuerte y limpio. Cuida la relación kick+snare+sub y que el sub no emborrone.",
+    },
+    "organic_house": {
+        "patron": "groove orgánico y atmosférico con melodía y textura",
+        "breaks": "largos y envolventes, viven de la atmósfera más que del impacto",
+        "builds": "graduales y sin prisa, acumulando capas melódicas y percusión orgánica",
+        "nota": "El organic / melodic house es sobre viaje y atmósfera, no sobre golpes de efecto. Deja respirar la mezcla: instrumentos orgánicos, reverbs amplios y un bajo redondo que no tape la melodía. Si suena demasiado dramático o saturado, probablemente no encaja en el género.",
+    },
 }
 
 # =============================================================================
@@ -147,6 +168,9 @@ LUFS_GENERO = {
     "indie_dance":        {"target": -9,  "rango": "-8 a -10"},
     "breaks":             {"target": -8,  "rango": "-7 a -9"},
     "psytrance":          {"target": -8,  "rango": "-7 a -9"},
+    "hard_dance":         {"target": -6,  "rango": "-5 a -7"},
+    "dnb":                {"target": -8,  "rango": "-7 a -9"},
+    "organic_house":      {"target": -10, "rango": "-9 a -11"},
 }
 
 

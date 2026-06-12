@@ -51,7 +51,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.38")
+app = FastAPI(title="Mentotrack API", version="0.5.39")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -225,7 +225,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.38"}
+    return {"status": "ok", "version": "0.5.39"}
 
 
 # Validación compartida de uploads de audio (track principal y referencia)
@@ -481,6 +481,9 @@ def opciones():
             {"value": "afro_house", "label": "Afro House"},
             {"value": "indie_dance", "label": "Indie Dance"},
             {"value": "breaks", "label": "Breaks"},
+            {"value": "hard_dance", "label": "Hard Dance / Bounce / Hardstyle"},
+            {"value": "dnb", "label": "Drum & Bass / Jungle"},
+            {"value": "organic_house", "label": "Organic / Melodic House"},
             {"value": "otro", "label": "Otro"},
         ],
         "fases": [

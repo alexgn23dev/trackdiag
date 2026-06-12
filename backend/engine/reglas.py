@@ -258,7 +258,7 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     generos_graves_ok = ["techno", "techno_acido", "minimal", "tech_house",
                          "hard_techno", "psytrance"]
     generos_graves_menos = ["trance", "progressive_house",
-                            "melodic_techno", "indie_dance"]
+                            "melodic_techno", "indie_dance", "organic_house"]
     usuario_menciona_graves = any(p in bloqueo for p in
                                   ["grave", "bajo", "bass", "kick", "bombo", "turbio", "mud", "sub"])
     if senales["balance_grave"] == "excesivo":
@@ -280,7 +280,8 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     # tras feedback de Alex (2026-05): en estos géneros el bajo prominente forma
     # parte del lenguaje y no debe penalizarse como "exceso".
     generos_kick_protagonista = ["techno", "techno_acido", "tech_house", "hard_techno",
-                                  "minimal", "deep_house", "afro_house", "dub_techno"]
+                                  "minimal", "deep_house", "afro_house", "dub_techno",
+                                  "hard_dance", "dnb"]
     if genero in generos_kick_protagonista:
         if senales["balance_grave"] == "elevado":
             score -= 2; razones.append(f"(−) En {genero} el kick es protagonista — cierta dominancia grave es esperable")
@@ -320,7 +321,8 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     # feedback de Alex: penalizar densidad sin co-síntoma generaba falsos
     # positivos sistemáticos en tech_house/techno/hard_techno.
     generos_densos_naturales = ["tech_house", "techno", "techno_acido",
-                                 "hard_techno", "minimal", "psytrance"]
+                                 "hard_techno", "minimal", "psytrance",
+                                 "hard_dance", "dnb"]
     if senales["densidad_global"] in ["alta", "saturada"]:
         if senales["densidad_global"] == "saturada":
             score += 3; razones.append(f"Densidad espectral saturada ({senales['densidad_espectral']:.4f})")
