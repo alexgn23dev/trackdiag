@@ -96,6 +96,16 @@ async def get_user_by_username(pool: asyncpg.Pool, username: str) -> Optional[di
 
 
 @with_retry()
+async def get_user_by_id(pool: asyncpg.Pool, usuario_id) -> Optional[dict]:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT id, email, username, email_opt_out FROM usuarios WHERE id = $1",
+            usuario_id,
+        )
+    return dict(row) if row else None
+
+
+@with_retry()
 async def get_user_by_identifier(pool: asyncpg.Pool, identifier: str) -> Optional[dict]:
     """Email si contiene '@', si no username."""
     ident = (identifier or "").strip()
@@ -1457,9 +1467,11 @@ async def get_perfil(pool: asyncpg.Pool, email: str) -> Optional[dict]:
         return None
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            """SELECT username, perfil_experiencia, perfil_estilos, perfil_publicado,
-                      perfil_donde, perfil_bio, perfil_completo
-               FROM usuarios WHERE LOWER(email) = $1""",
+            """SELECT u.username, u.perfil_experiencia, u.perfil_estilos, u.perfil_publicado,
+                      u.perfil_donde, u.perfil_bio, u.perfil_completo,
+                      (SELECT COUNT(*) FROM comunidad_comentarios cc
+                         WHERE cc.usuario_id = u.id AND cc.util AND cc.activo) AS utiles_recibidos
+               FROM usuarios u WHERE LOWER(u.email) = $1""",
             email,
         )
     if not row:
@@ -1584,7 +1596,9 @@ async def list_comunidad_posts(
                        u.perfil_experiencia, u.perfil_estilos,
                        u.perfil_publicado, u.perfil_donde, u.perfil_bio,
                        (SELECT COUNT(*) FROM comunidad_comentarios c
-                          WHERE c.post_id = p.id AND c.activo) AS n_comentarios
+                          WHERE c.post_id = p.id AND c.activo) AS n_comentarios,
+                       (SELECT COUNT(*) FROM comunidad_comentarios cu
+                          WHERE cu.usuario_id = p.usuario_id AND cu.util AND cu.activo) AS autor_utiles
                 FROM comunidad_posts p
                 JOIN usuarios u ON u.id = p.usuario_id
                 WHERE {where}
@@ -1670,7 +1684,9 @@ async def list_comentarios(pool: asyncpg.Pool, post_id) -> list[dict]:
         rows = await conn.fetch(
             """SELECT c.id, c.timestamp, c.texto, c.util, c.usuario_id,
                       u.username, u.perfil_experiencia, u.perfil_estilos,
-                      u.perfil_publicado
+                      u.perfil_publicado,
+                      (SELECT COUNT(*) FROM comunidad_comentarios cc
+                         WHERE cc.usuario_id = c.usuario_id AND cc.util AND cc.activo) AS autor_utiles
                FROM comunidad_comentarios c
                JOIN usuarios u ON u.id = c.usuario_id
                WHERE c.post_id = $1 AND c.activo

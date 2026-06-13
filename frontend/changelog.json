@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "version": "0.5.46",
+      "date": "2026-06-14",
+      "title": "Avisos por email y reputación visible en la comunidad",
+      "changes": [
+        "Cuando alguien comenta tu track en la comunidad, te llega un email con el comentario y un enlace para responder — para que no se te escape ningún feedback.",
+        "Reputación visible: los feedbacks que otros marcan como útiles se suman y se muestran como ⭐ junto a tu nombre (en el muro, en los comentarios y en tu perfil). Cuanto más ayudas, más sube."
+      ]
+    },
+    {
       "version": "0.5.44",
       "date": "2026-06-13",
       "title": "Feedback en la comunidad: comentarios, reputación y reciprocidad",

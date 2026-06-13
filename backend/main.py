@@ -51,7 +51,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.45")
+app = FastAPI(title="Mentotrack API", version="0.5.46")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -225,7 +225,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.45"}
+    return {"status": "ok", "version": "0.5.46"}
 
 
 # Validación compartida de uploads de audio (track principal y referencia)
@@ -3940,6 +3940,48 @@ def _require_comunidad(request: Request) -> tuple[str | None, JSONResponse | Non
     return email, None
 
 
+# Referencias vivas a las tareas de aviso (evita que el GC las cancele)
+_AVISO_TASKS: set = set()
+
+
+async def _notificar_comentario(dueno_email: str, autor_username: str, titulo: str, texto: str) -> None:
+    """Avisa por email al dueño de un track de que ha recibido un comentario.
+    Fire-and-forget: cualquier fallo se loguea sin afectar al comentario."""
+    if not _resend_disponible():
+        return
+    try:
+        import resend
+        import html as _html
+        resend.api_key = RESEND_API_KEY
+        autor = _html.escape(_sanitize(autor_username, 40))
+        titulo_s = _html.escape(_sanitize(titulo, 120))
+        # recorte del comentario para el preview del email
+        extracto = texto if len(texto) <= 400 else texto[:400] + "…"
+        extracto_html = _html.escape(extracto)
+        url = f"{APP_BASE_URL}/comunidad"
+        html = f"""<!DOCTYPE html><html lang="es"><body style="margin:0;background:#f4f4f5;padding:24px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+<table role="presentation" width="540" style="max-width:540px;background:#fff;border-radius:14px;padding:30px 28px" cellpadding="0" cellspacing="0"><tr><td>
+  <p style="margin:0 0 14px;font-size:16px;color:#18181b"><strong>{autor}</strong> ha comentado tu track en la comunidad 🎧</p>
+  <p style="margin:0 0 6px;font-size:14px;color:#71717a">Tu track: <strong style="color:#3f3f46">{titulo_s}</strong></p>
+  <div style="margin:14px 0;padding:14px 16px;border-left:3px solid #25F464;background:#fafafa;border-radius:8px;font-size:15px;color:#3f3f46;line-height:1.55;white-space:pre-wrap">{extracto_html}</div>
+  <a href="{url}" style="display:inline-block;margin-top:8px;padding:11px 20px;background:#18181b;color:#fff;border-radius:10px;text-decoration:none;font-size:14px;font-weight:600">Ver y responder en la comunidad</a>
+  <p style="margin:24px 0 0;font-size:12px;color:#a1a1aa;border-top:1px solid #e4e4e7;padding-top:14px">Recibes este aviso porque compartiste un track en la comunidad de Mentotrack.</p>
+</td></tr></table></td></tr></table></body></html>"""
+        text = (f"{autor} ha comentado tu track \"{titulo_s}\" en la comunidad de Mentotrack.\n\n"
+                f"\"{extracto}\"\n\nVer y responder: {url}\n")
+        await asyncio.to_thread(resend.Emails.send, {
+            "from": RESEND_FROM,
+            "to": dueno_email,
+            "subject": f"💬 {autor} ha comentado tu track en la comunidad",
+            "html": html,
+            "text": text,
+        })
+        print(f"[COMUNIDAD] aviso de comentario enviado a {dueno_email}")
+    except Exception as e:
+        print(f"[COMUNIDAD] aviso de comentario falló: {type(e).__name__}: {e}")
+
+
 # Cap propio para audio compartido: 80 MB cabe un WAV 16-bit de ~7,5 min y
 # cualquier MP3. (El análisis admite 150 MB, pero el audio compartido se
 # almacena en el volumen de 5 GB — el cap cuida el espacio.)
@@ -4254,6 +4296,7 @@ async def comunidad_posts(request: Request, estilo: str = "", limit: int = 50):
                 "publicado": r.get("perfil_publicado"),
                 "donde": r.get("perfil_donde"),
                 "bio": r.get("perfil_bio"),
+                "utiles": int(r.get("autor_utiles") or 0),
             },
         })
     return {"posts": posts}
@@ -4377,6 +4420,7 @@ def _comentario_autor_dict(r: dict, viewer_id=None, post_owner_id=None) -> dict:
             "experiencia": r.get("perfil_experiencia"),
             "estilos": r.get("perfil_estilos") or [],
             "publicado": r.get("perfil_publicado"),
+            "utiles": int(r.get("autor_utiles") or 0),
         },
     }
 
@@ -4451,6 +4495,19 @@ async def comunidad_crear_comentario(request: Request, post_id: str, data: dict)
     row = await repo.crear_comentario(pool, pid, user["id"], texto)
     if row is None:
         return JSONResponse(status_code=404, content={"error": "Este track ya no está disponible."})
+    # Avisar al dueño del track por email (fire-and-forget: no bloquea la respuesta).
+    # Guardamos referencia a la tarea para que el GC no la cancele antes de tiempo.
+    try:
+        dueno = await repo.get_user_by_id(pool, post["usuario_id"])
+        if dueno and dueno.get("email"):
+            _t = asyncio.create_task(_notificar_comentario(
+                dueno["email"], (user.get("username") or "Un productor"),
+                post.get("titulo") or "tu track", texto,
+            ))
+            _AVISO_TASKS.add(_t)
+            _t.add_done_callback(_AVISO_TASKS.discard)
+    except Exception as e:
+        print(f"[COMUNIDAD] no se pudo programar el aviso de comentario: {e}")
     return {"ok": True, "comentario_id": str(row["id"])}
 
 

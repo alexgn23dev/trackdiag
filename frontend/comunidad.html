@@ -93,6 +93,7 @@
         .autor { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: 1rem; }
         .autor-nombre { font-weight: 600; font-size: .9rem; }
         .badge { font-size: .7rem; padding: .15rem .55rem; border-radius: 999px; background: rgba(37,244,100,.1); color: var(--green); border: 1px solid rgba(37,244,100,.2); }
+        .badge-rep { font-size: .7rem; padding: .15rem .55rem; border-radius: 999px; background: rgba(250,204,21,.12); color: #fbbf24; border: 1px solid rgba(250,204,21,.25); font-weight: 600; }
         /* Player */
         .player { display: flex; align-items: center; gap: .9rem; margin: 1rem 0; }
         .play-btn {
@@ -231,7 +232,8 @@
         function renderComentario(c, postId, puedoUtil) {
             const el = document.createElement('div');
             el.className = 'com';
-            const badges = distintivoCom(c.autor).map(d => `<span class="com-badge">${esc(d)}</span>`).join('');
+            const repBadge = (c.autor && c.autor.utiles) ? `<span class="badge-rep" style="font-size:.65rem" title="${c.autor.utiles} feedback(s) útiles">⭐ ${c.autor.utiles}</span>` : '';
+            const badges = repBadge + distintivoCom(c.autor).map(d => `<span class="com-badge">${esc(d)}</span>`).join('');
             let acciones = '';
             if (puedoUtil) acciones += `<button class="com-accion util-toggle ${c.util ? 'util-on' : ''}">${c.util ? '✓ Útil' : 'Marcar útil'}</button>`;
             if (c.es_autor) acciones += `<button class="com-accion borrar">Borrar</button>`;
@@ -375,12 +377,18 @@
             if (a.publicado && LBL_PUB[a.publicado]) partes.push(LBL_PUB[a.publicado]);
             return partes;
         }
+        // Badge de reputación (separado, con estrella) — N feedbacks útiles recibidos
+        function badgeUtiles(a) {
+            const n = a && a.utiles ? a.utiles : 0;
+            if (!n) return '';
+            return `<span class="badge-rep" title="${n} feedback(s) que otros marcaron como útiles">⭐ ${n} útil${n === 1 ? '' : 'es'}</span>`;
+        }
 
         function renderPost(p) {
             const card = document.createElement('div');
             card.className = 'post';
             const estiloTxt = p.estilo_custom || LBL_GEN[p.estilo] || p.estilo || '';
-            const badges = distintivo(p.autor).map(d => `<span class="badge">${esc(d)}</span>`).join('');
+            const badges = badgeUtiles(p.autor) + distintivo(p.autor).map(d => `<span class="badge">${esc(d)}</span>`).join('');
 
             const datos = [];
             if (estiloTxt) datos.push(`<span class="dato"><b>${esc(estiloTxt)}</b></span>`);

@@ -32,6 +32,8 @@ ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 # Puerto (Railway asigna el suyo via $PORT)
 ENV PORT=8000
+# Logs de la app en tiempo real (sin buffer de stdout) — para ver prints/avisos
+ENV PYTHONUNBUFFERED=1
 EXPOSE 8000
 
 # Arrancar desde el directorio backend para que los imports funcionen
