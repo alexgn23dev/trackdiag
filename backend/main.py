@@ -51,7 +51,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.41")
+app = FastAPI(title="Mentotrack API", version="0.5.42")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -225,7 +225,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.41"}
+    return {"status": "ok", "version": "0.5.42"}
 
 
 # Validación compartida de uploads de audio (track principal y referencia)
@@ -3933,6 +3933,27 @@ def _calcular_waveform(path: str, n_picos: int = 240):
     return [round(p / mx, 3) for p in picos], dur
 
 
+# Un MP3 ya pequeño se guarda tal cual (no re-comprimir lossy→lossy);
+# todo lo demás (WAV/FLAC/AIFF/OGG o MP3 enorme) se transcodifica a MP3 320,
+# ~10x menos peso en el volumen y mejor streaming. Umbral: 30 MB.
+_MP3_PASSTHROUGH_MAX = 30 * 1024 * 1024
+
+
+def _transcodificar_mp3(origen: str, destino: str) -> bool:
+    """Convierte `origen` a MP3 320 kbps en `destino` con ffmpeg (ya está en
+    el contenedor para librosa). Devuelve True si generó un MP3 válido."""
+    import subprocess
+    try:
+        r = subprocess.run(
+            ["ffmpeg", "-y", "-i", origen, "-vn", "-map", "a:0",
+             "-codec:a", "libmp3lame", "-b:a", "320k", destino],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=180,
+        )
+        return r.returncode == 0 and os.path.isfile(destino) and os.path.getsize(destino) > 0
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return False
+
+
 def _parse_float(s, lo=None, hi=None):
     try:
         v = float(str(s).strip())
@@ -4025,33 +4046,70 @@ async def comunidad_compartir(
         print(f"[COMUNIDAD] volumen casi lleno ({libre // (1024*1024)} MB libres) — upload rechazado")
         return JSONResponse(status_code=503, content={"error": "El almacenamiento de la comunidad está temporalmente lleno. Inténtalo más tarde."})
 
-    # Guardar el audio en el volumen (nombre aleatorio, no adivinable)
-    fname = f"{uuid.uuid4().hex}{extension}"
-    fpath = destino / fname
+    # Escribir el original en un tmp EFÍMERO (no en el volumen) para validar
+    # duración y transcodificar. El volumen solo recibirá el MP3 final.
+    tmp_dir = tempfile.mkdtemp()
+    tmp_orig = os.path.join(tmp_dir, f"orig{extension}")
     try:
-        with open(fpath, "wb") as f:
+        with open(tmp_orig, "wb") as f:
             f.write(content)
     except OSError as e:
-        print(f"[COMUNIDAD] error guardando audio: {e}")
-        return JSONResponse(status_code=500, content={"error": "No se pudo guardar el audio. Inténtalo de nuevo."})
-    audio_bytes = len(content)
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        print(f"[COMUNIDAD] error guardando tmp: {e}")
+        return JSONResponse(status_code=500, content={"error": "No se pudo procesar el audio. Inténtalo de nuevo."})
+    orig_bytes = len(content)
     content = None  # liberar RAM
 
-    # Duración razonable (8 s – 20 min): acota el coste de la waveform y evita
-    # que un MP3/OGG de horas (cabe en 80 MB) deje hilos decodificando sin fin
+    fname = audio_mime = None
+    audio_bytes = orig_bytes
     try:
-        import librosa as _lr
-        dur_chk = _lr.get_duration(path=str(fpath))
-    except Exception:
-        dur_chk = 0
-    if dur_chk < 8 or dur_chk > 20 * 60:
-        fpath.unlink(missing_ok=True)
-        return JSONResponse(
-            status_code=400,
-            content={"error": "La duración del track debe estar entre 8 segundos y 20 minutos."},
-        )
+        # Duración razonable (8 s – 20 min): acota el coste de transcode/waveform
+        # y evita que un MP3/OGG de horas (cabe en 80 MB) cuelgue el worker
+        try:
+            import librosa as _lr
+            dur_chk = _lr.get_duration(path=tmp_orig)
+        except Exception:
+            dur_chk = 0
+        if dur_chk < 8 or dur_chk > 20 * 60:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "La duración del track debe estar entre 8 segundos y 20 minutos."},
+            )
 
-    # Forma de onda (si falla, el post sale sin onda — no es bloqueante)
+        loop = asyncio.get_event_loop()
+        fname = f"{uuid.uuid4().hex}.mp3"
+        fpath = destino / fname
+        # MP3 ya pequeño → tal cual. Resto → transcode a MP3 320.
+        if extension == ".mp3" and orig_bytes <= _MP3_PASSTHROUGH_MAX:
+            shutil.move(tmp_orig, fpath)
+            audio_mime = "audio/mpeg"
+        else:
+            ok = await asyncio.wait_for(
+                loop.run_in_executor(None, lambda: _transcodificar_mp3(tmp_orig, str(fpath))),
+                timeout=200,
+            )
+            if ok:
+                audio_mime = "audio/mpeg"
+                audio_bytes = fpath.stat().st_size
+            else:
+                # Fallback: guardar el original (su extensión real) para no
+                # bloquear al usuario por un fallo de ffmpeg (raro)
+                print(f"[COMUNIDAD] transcode falló, guardando original ({extension})")
+                fname = f"{uuid.uuid4().hex}{extension}"
+                fpath = destino / fname
+                shutil.move(tmp_orig, fpath)
+                audio_mime = _MIME_AUDIO.get(extension, "application/octet-stream")
+                audio_bytes = fpath.stat().st_size
+    except asyncio.TimeoutError:
+        print("[COMUNIDAD] transcode timeout")
+        return JSONResponse(status_code=400, content={"error": "El audio tardó demasiado en procesarse. Prueba con un archivo más corto o ya en MP3."})
+    except OSError as e:
+        print(f"[COMUNIDAD] error de E/S guardando audio: {e}")
+        return JSONResponse(status_code=500, content={"error": "No se pudo guardar el audio. Inténtalo de nuevo."})
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    # Forma de onda sobre el archivo final (si falla, el post sale sin onda)
     waveform, dur = [], None
     try:
         loop = asyncio.get_event_loop()
@@ -4078,7 +4136,7 @@ async def comunidad_compartir(
         "duracion_seg": dur,
         "waveform": waveform,
         "audio_file": fname,
-        "audio_mime": _MIME_AUDIO.get(extension, "application/octet-stream"),
+        "audio_mime": audio_mime,
         "audio_bytes": audio_bytes,
         "descargo_aceptado": True,
         "analisis_id": None,

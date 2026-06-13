@@ -1,6 +1,14 @@
 {
   "entries": [
     {
+      "version": "0.5.42",
+      "date": "2026-06-13",
+      "title": "Optimización del audio compartido (MP3)",
+      "changes": [
+        "Los tracks que compartes con la comunidad se guardan en MP3 320 — misma calidad de escucha, hasta 10x menos peso, y reproducción más fluida. Si ya subes un MP3, se conserva tal cual (sin recomprimir)."
+      ]
+    },
+    {
       "version": "0.5.41",
       "date": "2026-06-13",
       "title": "Comparte tu track con la comunidad",
