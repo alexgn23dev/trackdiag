@@ -1,9 +1,11 @@
 FROM python:3.11-slim
 
-# Dependencias del sistema para librosa (audio processing)
+# Dependencias del sistema para librosa (audio processing) + gosu (drop de
+# privilegios en el entrypoint tras chownear el volumen)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libsndfile1 \
     ffmpeg \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
 
 # Crear usuario no-root (seguridad: no correr como root)
@@ -22,8 +24,11 @@ COPY frontend/ ./frontend/
 # Dar permisos al usuario para escribir archivos temporales y sesiones
 RUN chown -R appuser:appuser /app
 
-# Cambiar a usuario no-root
-USER appuser
+# Entrypoint: arranca como root para chownear el volumen (/data lo monta
+# Railway como root) y baja a appuser con gosu antes de ejecutar la app
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 # Puerto (Railway asigna el suyo via $PORT)
 ENV PORT=8000

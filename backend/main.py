@@ -4011,19 +4011,23 @@ async def comunidad_compartir(
             content={"error": f"Para compartir, el archivo puede pesar máximo 80 MB (el tuyo: {len(content) // (1024*1024)} MB). Expórtalo en MP3 320 y listo."},
         )
 
-    # Espacio libre del volumen: si queda poco, parar ANTES de escribir
-    # (un volumen lleno rompería la feature para todos)
+    # Directorio del volumen: si no está disponible (permisos/montaje),
+    # responder claro en vez de un 500 sin gestionar
     try:
-        libre = shutil.disk_usage(_audio_comunidad_dir()).free
-    except OSError:
-        libre = None
-    if libre is not None and libre < max(len(content) * 2, 250 * 1024 * 1024):
+        destino = _audio_comunidad_dir()
+        libre = shutil.disk_usage(destino).free
+    except OSError as e:
+        print(f"[COMUNIDAD] volumen no disponible: {type(e).__name__}: {e}")
+        return JSONResponse(status_code=503, content={"error": "El almacenamiento de la comunidad no está disponible ahora mismo. Inténtalo en un rato."})
+    # Espacio libre: si queda poco, parar ANTES de escribir
+    # (un volumen lleno rompería la feature para todos)
+    if libre < max(len(content) * 2, 250 * 1024 * 1024):
         print(f"[COMUNIDAD] volumen casi lleno ({libre // (1024*1024)} MB libres) — upload rechazado")
         return JSONResponse(status_code=503, content={"error": "El almacenamiento de la comunidad está temporalmente lleno. Inténtalo más tarde."})
 
     # Guardar el audio en el volumen (nombre aleatorio, no adivinable)
     fname = f"{uuid.uuid4().hex}{extension}"
-    fpath = _audio_comunidad_dir() / fname
+    fpath = destino / fname
     try:
         with open(fpath, "wb") as f:
             f.write(content)
@@ -4142,9 +4146,12 @@ async def comunidad_audio(request: Request, post_id: str):
     post = await repo.get_comunidad_post(get_pool(), pid)
     if not post:
         return JSONResponse(status_code=404, content={"error": "No encontrado"})
-    fpath = _audio_comunidad_dir() / post["audio_file"]
-    if not fpath.is_file():
-        return JSONResponse(status_code=404, content={"error": "Audio no disponible"})
+    try:
+        fpath = _audio_comunidad_dir() / post["audio_file"]
+        if not fpath.is_file():
+            return JSONResponse(status_code=404, content={"error": "Audio no disponible"})
+    except OSError:
+        return JSONResponse(status_code=503, content={"error": "Almacenamiento no disponible"})
 
     file_size = fpath.stat().st_size
     media_type = post.get("audio_mime") or "application/octet-stream"
