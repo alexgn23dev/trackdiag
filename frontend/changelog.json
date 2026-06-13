@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "version": "0.5.41",
+      "date": "2026-06-13",
+      "title": "Comparte tu track con la comunidad",
+      "changes": [
+        "Tras analizar un track puedes compartirlo con la comunidad de Mentotrack: se publica con tu nombre y tu perfil de productor, junto a los datos objetivos del análisis (estilo, BPM —corregible—, loudness, balance, compatibilidad mono y tu objetivo).",
+        "Para compartir necesitas tu perfil de productor completo y aceptar las condiciones de autoría: tu música sigue siendo tuya, la compartes bajo tu responsabilidad y la regla de la comunidad es respetar la autoría de lo que escuchas.",
+        "Máximo 3 tracks publicados por persona (retira uno para subir otro) y duración entre 8 segundos y 20 minutos. El muro público de la comunidad llega en la próxima versión — los tracks compartidos ahora estarán entre los primeros."
+      ]
+    },
+    {
       "version": "0.5.40",
       "date": "2026-06-12",
       "title": "Perfil de productor (primer paso de la comunidad)",

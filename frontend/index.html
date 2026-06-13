@@ -910,7 +910,214 @@
     }
 
 
-    function DiagnosticoScreen({ resultado, onReset, contexto, userEmail }) {
+    // =====================================================================
+    // Compartir con la comunidad — card + modal en la pantalla de diagnóstico.
+    // Requiere: perfil completo, aceptar el descargo. El archivo se reutiliza
+    // del análisis recién hecho (sigue en memoria del navegador).
+    // =====================================================================
+    const DESCARGO_COMUNIDAD = "Al compartir confirmas que este track es tuyo y conservas todos sus derechos. " +
+        "Lo publicas con tu nombre y bajo tu responsabilidad: Mentotrack es el espacio donde se muestra y no se hace " +
+        "responsable del uso que terceros puedan hacer de lo publicado. Y la regla de oro: respeta la autoría de lo que " +
+        "escuchas — aquí se viene a ayudar, no a copiar.";
+
+    function CompartirComunidad({ file, resultado, contexto, opciones, nombreProyecto, onIrAPerfil }) {
+        const [open, setOpen] = useState(false);
+        const [estado, setEstado] = useState('form'); // form | cargando | sin_perfil | enviando | ok
+        const [error, setError] = useState('');
+        const [titulo, setTitulo] = useState('');
+        const [bpmEdit, setBpmEdit] = useState('');
+        const [aceptado, setAceptado] = useState(false);
+
+        const d = resultado?.datos_audio || {};
+        const labelDe = (lista, val) => ((opciones?.[lista] || []).find(o => o.value === val)?.label) || val || '—';
+        const estiloLabel = contexto.genero === 'otro' ? (contexto.genero_custom || 'Otro') : labelDe('generos', contexto.genero);
+
+        const abrir = () => {
+            setOpen(true);
+            setError('');
+            setTitulo(t => t || nombreProyecto || (file?.name || '').replace(/\.[^.]+$/, ''));
+            setBpmEdit(b => b || (d.bpm ? String(d.bpm) : ''));
+            setEstado('cargando');
+            trackEvent('comunidad_share_opened', {});
+            fetch(`${API_URL}/api/perfil`, { headers: authHeaders() })
+                .then(r => {
+                    if (r.status === 401) {
+                        // Sesión caducada ≠ perfil incompleto: mensaje honesto
+                        setEstado('form');
+                        setError('Tu sesión ha caducado. Recarga la página e inicia sesión de nuevo para compartir.');
+                        return undefined;
+                    }
+                    return r.ok ? r.json() : false;
+                })
+                .then(data => {
+                    if (data === undefined) return; // 401 ya gestionado
+                    if (!data || !data.perfil) { setEstado('form'); return; } // error → el backend re-valida al enviar
+                    setEstado(data.perfil.perfil_completo ? 'form' : 'sin_perfil');
+                })
+                .catch(() => setEstado('form')); // si falla el check, el backend re-valida igualmente
+        };
+
+        const compartir = async () => {
+            if (!aceptado || !titulo.trim() || estado === 'enviando') return;
+            // BPM: si lo han escrito, debe ser válido (no descartarlo en silencio)
+            if (bpmEdit !== '') {
+                const b = Number(bpmEdit);
+                if (!Number.isFinite(b) || b < 40 || b > 300) {
+                    setError('El BPM debe estar entre 40 y 300 (o deja el campo vacío).');
+                    return;
+                }
+            }
+            setEstado('enviando');
+            setError('');
+            const fd = new FormData();
+            fd.append('audio', file);
+            fd.append('titulo', titulo.trim());
+            fd.append('estilo', contexto.genero || '');
+            fd.append('estilo_custom', contexto.genero === 'otro' ? (contexto.genero_custom || '') : '');
+            fd.append('bpm', bpmEdit || '');
+            fd.append('objetivo', contexto.objetivo || '');
+            fd.append('lufs', d.loudness?.lufs_integrado ?? '');
+            fd.append('balance', d.balance_grave || '');
+            fd.append('mono_correlacion', d.mono_compat?.correlacion_lr ?? '');
+            fd.append('mono_nivel', d.mono_compat?.nivel_compatibilidad || '');
+            fd.append('estado_track', resultado.estado_track || '');
+            fd.append('descargo', 'si');
+            try {
+                const { token } = getAuth();
+                const resp = await fetch(`${API_URL}/api/comunidad/compartir`, {
+                    method: 'POST',
+                    headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+                    body: fd,
+                });
+                const data = await resp.json().catch(() => ({}));
+                if (!resp.ok) {
+                    if (data.codigo === 'perfil_incompleto') { setEstado('sin_perfil'); return; }
+                    throw new Error(data.error || 'No se pudo publicar');
+                }
+                setEstado('ok');
+                trackEvent('comunidad_share_submitted', { estilo: contexto.genero });
+            } catch (e) {
+                setEstado('form');
+                setError(e.message || 'No se pudo publicar. Inténtalo de nuevo.');
+            }
+        };
+
+        if (!file) return null;
+
+        return (
+            <React.Fragment>
+                {/* Card CTA */}
+                <div className="card p-6 mb-4" style={{borderLeft: '3px solid var(--po-green)'}}>
+                    <p className="text-xs font-medium uppercase tracking-wider mb-2" style={{color: 'var(--po-green)'}}>
+                        Comunidad · nuevo
+                    </p>
+                    <p className="text-white text-sm leading-relaxed mb-1 font-medium">
+                        ¿Quieres feedback de otros productores sobre este track?
+                    </p>
+                    <p className="text-gray-400 text-xs leading-relaxed mb-4">
+                        Compártelo con la comunidad de Mentotrack: se publicará con tu nombre, junto a los datos
+                        objetivos de este análisis, para que otros productores lo escuchen y te den su opinión.
+                    </p>
+                    <button onClick={abrir} className="px-5 py-2.5 btn-primary rounded-lg text-sm font-semibold">
+                        Compartir con la comunidad
+                    </button>
+                </div>
+
+                {/* Modal */}
+                {open && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 fade-in"
+                         style={{ background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(4px)' }}
+                         onClick={(e) => { if (e.target === e.currentTarget && estado !== 'enviando') setOpen(false); }}>
+                        <div className="card w-full max-w-lg p-6" style={{background: '#141417', maxHeight: '90vh', overflowY: 'auto'}}>
+                            {estado === 'cargando' && (
+                                <p className="text-sm text-gray-400 text-center py-8">Comprobando tu perfil…</p>
+                            )}
+
+                            {estado === 'sin_perfil' && (
+                                <div className="text-center py-4">
+                                    <p className="text-white text-sm font-medium mb-2">Antes de compartir, completa tu perfil</p>
+                                    <p className="text-gray-400 text-xs leading-relaxed mb-5" style={{maxWidth: '380px', margin: '0 auto 20px'}}>
+                                        Tu perfil (experiencia, estilos, trayectoria) es lo que verán los demás junto a tu track
+                                        y tus comentarios. Es lo que da credibilidad al feedback en la comunidad — se rellena en un minuto.
+                                    </p>
+                                    <button onClick={() => { setOpen(false); onIrAPerfil(); }} className="px-5 py-2.5 btn-primary rounded-lg text-sm font-semibold">
+                                        Completar mi perfil
+                                    </button>
+                                </div>
+                            )}
+
+                            {(estado === 'form' || estado === 'enviando') && (
+                                <div>
+                                    <h3 className="text-white text-base font-bold mb-4">Compartir con la comunidad</h3>
+
+                                    <label className="block text-xs font-medium mb-1.5" style={{color: 'var(--po-light)'}}>Título</label>
+                                    <input type="text" value={titulo} onChange={e => setTitulo(e.target.value)} maxLength={120}
+                                        className="w-full px-4 py-3 rounded-lg text-sm input-field mb-4" placeholder="Nombre del track" />
+
+                                    <div className="flex gap-3 mb-4">
+                                        <div className="flex-1">
+                                            <label className="block text-xs font-medium mb-1.5" style={{color: 'var(--po-light)'}}>
+                                                BPM <span style={{color: 'var(--po-medium)'}}>(corrígelo si el detector falló)</span>
+                                            </label>
+                                            <input type="number" value={bpmEdit} onChange={e => setBpmEdit(e.target.value)} min={40} max={300}
+                                                className="w-full px-4 py-3 rounded-lg text-sm input-field" />
+                                        </div>
+                                        <div className="flex-1">
+                                            <label className="block text-xs font-medium mb-1.5" style={{color: 'var(--po-light)'}}>Estilo</label>
+                                            <div className="px-4 py-3 rounded-lg text-sm" style={{border: '1px solid #2e2e33', color: '#e5e5e5'}}>{estiloLabel}</div>
+                                        </div>
+                                    </div>
+
+                                    {/* Datos del análisis que acompañan al post */}
+                                    <p className="text-xs font-medium mb-1.5" style={{color: 'var(--po-light)'}}>Se publica junto a estos datos del análisis:</p>
+                                    <div className="flex flex-wrap gap-1.5 mb-4">
+                                        {d.loudness?.lufs_integrado != null && <span className="text-xs px-2 py-1 rounded-full text-gray-300" style={{background: 'rgba(255,255,255,0.06)'}}>{d.loudness.lufs_integrado} LUFS</span>}
+                                        {d.balance_grave && <span className="text-xs px-2 py-1 rounded-full text-gray-300" style={{background: 'rgba(255,255,255,0.06)'}}>balance: {d.balance_grave}</span>}
+                                        {d.mono_compat?.nivel_compatibilidad && <span className="text-xs px-2 py-1 rounded-full text-gray-300" style={{background: 'rgba(255,255,255,0.06)'}}>mono: {d.mono_compat.nivel_compatibilidad}</span>}
+                                        <span className="text-xs px-2 py-1 rounded-full text-gray-300" style={{background: 'rgba(255,255,255,0.06)'}}>objetivo: {labelDe('objetivos', contexto.objetivo)}</span>
+                                    </div>
+
+                                    <div className="rounded-lg p-3 mb-4" style={{background: 'rgba(255,255,255,0.03)', border: '1px solid #2e2e33'}}>
+                                        <label className="flex items-start gap-2.5 cursor-pointer">
+                                            <input type="checkbox" checked={aceptado} onChange={e => setAceptado(e.target.checked)} className="mt-0.5" />
+                                            <span className="text-xs text-gray-400 leading-relaxed">{DESCARGO_COMUNIDAD}</span>
+                                        </label>
+                                    </div>
+
+                                    {error && <p className="text-xs text-red-400 mb-3">{error}</p>}
+
+                                    <div className="flex gap-3">
+                                        <button onClick={compartir} disabled={!aceptado || !titulo.trim() || estado === 'enviando'}
+                                            className="flex-1 px-5 py-3 btn-primary rounded-lg text-sm font-semibold"
+                                            style={(!aceptado || !titulo.trim() || estado === 'enviando') ? {opacity: 0.5, cursor: 'not-allowed'} : {}}>
+                                            {estado === 'enviando' ? 'Publicando…' : 'Publicar track'}
+                                        </button>
+                                        <button onClick={() => setOpen(false)} disabled={estado === 'enviando'}
+                                            className="px-5 py-3 btn-secondary rounded-lg text-sm">Cancelar</button>
+                                    </div>
+                                    {estado === 'enviando' && (
+                                        <p className="text-xs text-gray-500 mt-2 text-center">Subiendo el audio — puede tardar unos segundos…</p>
+                                    )}
+                                </div>
+                            )}
+
+                            {estado === 'ok' && (
+                                <div className="text-center py-6">
+                                    <div className="text-3xl mb-3">🤝</div>
+                                    <p className="text-white text-sm font-medium mb-2">¡Track publicado en la comunidad!</p>
+                                    <p className="text-gray-400 text-xs mb-5">El muro de la comunidad está a punto de abrir — tu track estará entre los primeros que otros productores escuchen y comenten.</p>
+                                    <button onClick={() => setOpen(false)} className="px-5 py-2.5 btn-secondary rounded-lg text-sm">Cerrar</button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </React.Fragment>
+        );
+    }
+
+
+    function DiagnosticoScreen({ resultado, onReset, contexto, userEmail, file, opciones, nombreProyecto, onIrAPerfil }) {
         const r = resultado;
         const d = r.datos_audio;
         const [feedbackStep, setFeedbackStep] = useState(0); // 0=coincide?, 1=detalle, 2=feedback real
@@ -1701,6 +1908,18 @@
                         >
                             Analizar otro track
                         </button>
+                    </div>
+
+                    {/* ===== COMPARTIR CON LA COMUNIDAD ===== */}
+                    <div className="mt-6">
+                        <CompartirComunidad
+                            file={file}
+                            resultado={r}
+                            contexto={contexto}
+                            opciones={opciones}
+                            nombreProyecto={nombreProyecto}
+                            onIrAPerfil={onIrAPerfil}
+                        />
                     </div>
 
                     {/* ===== PANEL MODAL TUTORIALES ===== */}
@@ -3372,7 +3591,11 @@
                 {/* (screen 'email' eliminada — la auth ahora pasa por el AuthModal) */}
                 {screen === 'processing' && <ProcessingScreen datos={resultado?.datos_audio} conReferencia={!!fileRef} />}
                 {screen === 'diagnostico' && resultado && (
-                    <DiagnosticoScreen resultado={resultado} onReset={handleReset} contexto={contexto} userEmail={userEmail} />
+                    <DiagnosticoScreen
+                        resultado={resultado} onReset={handleReset} contexto={contexto} userEmail={userEmail}
+                        file={file} opciones={opciones} nombreProyecto={nombreProyecto}
+                        onIrAPerfil={() => { setPanelView('perfil'); handleOpenPanel(); }}
+                    />
                 )}
 
                 {/* ============ AUTH MODAL (login / register / forgot / set_username) ============ */}
@@ -3613,6 +3836,15 @@
                                     <p className="text-gray-500 text-xs mt-1">{panelUsername ? '@' + panelUsername : panelAuth} · {panelHistorial.length} {panelHistorial.length === 1 ? 'análisis' : 'análisis'}</p>
                                 </div>
                                 <div className="flex flex-wrap gap-2 justify-end">
+                                    {resultado && (
+                                        <button
+                                            onClick={() => setScreen('diagnostico')}
+                                            className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-xs transition-colors"
+                                            title="Vuelve al diagnóstico que acabas de hacer (p. ej. para compartir el track)"
+                                        >
+                                            ← Volver al diagnóstico
+                                        </button>
+                                    )}
                                     <button
                                         onClick={handleReset}
                                         className="px-4 py-2 btn-primary rounded-lg text-xs transition-colors"

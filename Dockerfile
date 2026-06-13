@@ -30,5 +30,8 @@ ENV PORT=8000
 EXPOSE 8000
 
 # Arrancar desde el directorio backend para que los imports funcionen
+# --proxy-headers: detrás del proxy de Railway, request.client.host debe ser
+# la IP real del cliente (X-Forwarded-For) — sin esto, los rate limits de
+# slowapi comparten un único cubo global para todos los usuarios.
 WORKDIR /app/backend
-CMD uvicorn main:app --host 0.0.0.0 --port ${PORT}
+CMD uvicorn main:app --host 0.0.0.0 --port ${PORT} --proxy-headers --forwarded-allow-ips "*"

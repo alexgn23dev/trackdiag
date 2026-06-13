@@ -1530,3 +1530,108 @@ async def perfil_prefill_labels(pool: asyncpg.Pool, usuario_id) -> dict:
         "experiencia_label": exp,
         "genero_labels": [r["g"] for r in generos if r["g"]],
     }
+
+
+# =========================================================================
+# Comunidad — tracks compartidos (v0.5.41)
+# =========================================================================
+
+
+@with_retry()
+async def crear_comunidad_post(pool: asyncpg.Pool, datos: dict) -> dict:
+    """Inserta un post de la comunidad. `datos` debe traer las claves de la
+    tabla (usuario_id, titulo, audio_file obligatorios). Devuelve la fila."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """INSERT INTO comunidad_posts
+                 (usuario_id, titulo, estilo, estilo_custom, bpm, objetivo,
+                  lufs, balance, mono_correlacion, mono_nivel, estado_track,
+                  duracion_seg, waveform, audio_file, audio_mime, audio_bytes,
+                  descargo_aceptado, analisis_id)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14,$15,$16,$17,$18)
+               RETURNING id, timestamp""",
+            datos["usuario_id"], datos["titulo"],
+            datos.get("estilo"), datos.get("estilo_custom"),
+            datos.get("bpm"), datos.get("objetivo"),
+            datos.get("lufs"), datos.get("balance"),
+            datos.get("mono_correlacion"), datos.get("mono_nivel"),
+            datos.get("estado_track"), datos.get("duracion_seg"),
+            json.dumps(datos.get("waveform") or [], ensure_ascii=False),
+            datos["audio_file"], datos.get("audio_mime"), datos.get("audio_bytes"),
+            bool(datos.get("descargo_aceptado")), datos.get("analisis_id"),
+        )
+    return dict(row)
+
+
+@with_retry()
+async def list_comunidad_posts(
+    pool: asyncpg.Pool, estilo: str | None = None, limit: int = 50
+) -> list[dict]:
+    """Posts activos, más recientes primero, con el distintivo del autor
+    (username + perfil). NUNCA expone el email del autor."""
+    where = "p.activo"
+    args: list = []
+    if estilo:
+        where += " AND p.estilo = $1"
+        args.append(estilo)
+    args.append(min(limit, 100))
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            f"""SELECT p.id, p.timestamp, p.titulo, p.estilo, p.estilo_custom,
+                       p.bpm, p.objetivo, p.lufs, p.balance, p.mono_correlacion,
+                       p.mono_nivel, p.estado_track, p.duracion_seg, p.waveform,
+                       u.username,
+                       u.perfil_experiencia, u.perfil_estilos,
+                       u.perfil_publicado, u.perfil_donde, u.perfil_bio
+                FROM comunidad_posts p
+                JOIN usuarios u ON u.id = p.usuario_id
+                WHERE {where}
+                ORDER BY p.timestamp DESC
+                LIMIT ${len(args)}""",
+            *args,
+        )
+    out = []
+    for r in rows:
+        d = dict(r)
+        for k in ("waveform", "perfil_estilos"):
+            if isinstance(d.get(k), str):
+                try:
+                    d[k] = json.loads(d[k])
+                except (ValueError, TypeError):
+                    d[k] = []
+        out.append(d)
+    return out
+
+
+@with_retry()
+async def get_comunidad_post(pool: asyncpg.Pool, post_id) -> Optional[dict]:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT * FROM comunidad_posts WHERE id = $1 AND activo", post_id
+        )
+    return dict(row) if row else None
+
+
+@with_retry()
+async def desactivar_comunidad_post(pool: asyncpg.Pool, post_id, usuario_id) -> Optional[str]:
+    """Soft-delete del post (solo el dueño). Devuelve el audio_file para
+    borrar el archivo del disco, o None si no existía/no es suyo."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """UPDATE comunidad_posts SET activo = FALSE
+               WHERE id = $1 AND usuario_id = $2 AND activo
+               RETURNING audio_file""",
+            post_id, usuario_id,
+        )
+    return row["audio_file"] if row else None
+
+
+@with_retry()
+async def contar_posts_activos(pool: asyncpg.Pool, usuario_id) -> int:
+    """Posts activos de un usuario (cuota: máx 3 para cuidar el volumen)."""
+    async with pool.acquire() as conn:
+        n = await conn.fetchval(
+            "SELECT COUNT(*) FROM comunidad_posts WHERE usuario_id = $1 AND activo",
+            usuario_id,
+        )
+    return int(n or 0)

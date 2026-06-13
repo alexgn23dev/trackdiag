@@ -21,7 +21,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse, RedirectResponse, HTMLResponse
+from fastapi.responses import JSONResponse, FileResponse, RedirectResponse, HTMLResponse, StreamingResponse
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
@@ -51,7 +51,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.40")
+app = FastAPI(title="Mentotrack API", version="0.5.41")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -134,7 +134,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["Content-Type", "Authorization"],
 )
 
@@ -225,7 +225,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.40"}
+    return {"status": "ok", "version": "0.5.41"}
 
 
 # Validación compartida de uploads de audio (track principal y referencia)
@@ -3886,6 +3886,342 @@ async def post_perfil(request: Request, data: dict):
     except Exception as e:
         print(f"[PERFIL POST] {e}")
         return JSONResponse(status_code=500, content={"error": "Error guardando el perfil"})
+
+
+# =========================================================================
+# Comunidad — compartir tracks para feedback entre productores (v0.5.41)
+# =========================================================================
+
+# Cap propio para audio compartido: 80 MB cabe un WAV 16-bit de ~7,5 min y
+# cualquier MP3. (El análisis admite 150 MB, pero el audio compartido se
+# almacena en el volumen de 5 GB — el cap cuida el espacio.)
+_AUDIO_COMUNIDAD_MAX = 80 * 1024 * 1024
+_MIME_AUDIO = {
+    ".mp3": "audio/mpeg", ".wav": "audio/wav", ".flac": "audio/flac",
+    ".aiff": "audio/aiff", ".aif": "audio/aiff", ".ogg": "audio/ogg",
+}
+
+
+def _audio_comunidad_dir() -> Path:
+    """Directorio de audio compartido: el volumen persistente de Railway en
+    prod (RAILWAY_VOLUME_MOUNT_PATH=/data), tmp en local."""
+    base = os.environ.get("RAILWAY_VOLUME_MOUNT_PATH") or os.environ.get("AUDIO_DIR") or tempfile.gettempdir()
+    d = Path(base) / "comunidad"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _calcular_waveform(path: str, n_picos: int = 240):
+    """Picos RMS normalizados 0-1 (para pintar la forma de onda en cliente)
+    + duración en segundos. Carga a 11 kHz mono — rápido y suficiente."""
+    import librosa as _lr
+    import numpy as _np
+    y, sr = _lr.load(path, sr=11025, mono=True)
+    if len(y) == 0:
+        return [], 0.0
+    dur = float(len(y)) / sr
+    bloque = max(1, len(y) // n_picos)
+    picos = []
+    for i in range(0, min(len(y), bloque * n_picos), bloque):
+        seg = y[i:i + bloque]
+        if len(seg) == 0:
+            break
+        picos.append(float(_np.sqrt(_np.mean(seg ** 2))))
+    mx = max(picos) if picos else 1.0
+    if mx <= 0:
+        mx = 1.0
+    return [round(p / mx, 3) for p in picos], dur
+
+
+def _parse_float(s, lo=None, hi=None):
+    try:
+        v = float(str(s).strip())
+    except (ValueError, TypeError):
+        return None
+    # NaN/inf pasarían los límites (NaN < x es False) y romperían el JSON del listado
+    if v != v or v in (float("inf"), float("-inf")):
+        return None
+    if lo is not None and v < lo:
+        return None
+    if hi is not None and v > hi:
+        return None
+    return v
+
+
+@app.post("/api/comunidad/compartir")
+@limiter.limit("10/hour")
+async def comunidad_compartir(
+    request: Request,
+    audio: UploadFile = File(...),
+    titulo: str = Form(...),
+    estilo: str = Form(""),
+    estilo_custom: str = Form(""),
+    bpm: str = Form(""),
+    objetivo: str = Form(""),
+    lufs: str = Form(""),
+    balance: str = Form(""),
+    mono_correlacion: str = Form(""),
+    mono_nivel: str = Form(""),
+    estado_track: str = Form(""),
+    descargo: str = Form(""),
+):
+    """Comparte un track con la comunidad. Requiere sesión + perfil completo
+    + aceptar el descargo de autoría. El audio queda en el volumen y los
+    datos objetivos del análisis acompañan al post."""
+    email, err = _require_auth_user(request)
+    if err:
+        return err
+    if descargo not in ("si", "true", "1"):
+        return JSONResponse(status_code=400, content={"error": "Debes aceptar las condiciones para compartir."})
+    titulo = _sanitize(titulo, 120)
+    if len(titulo) < 2:
+        return JSONResponse(status_code=400, content={"error": "Ponle un título al track (mínimo 2 caracteres)."})
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Base de datos no disponible"})
+
+    from db import get_pool
+    import repositories as repo
+    pool = get_pool()
+    user = await repo.get_user_by_email(pool, email)
+    if not user:
+        return JSONResponse(status_code=404, content={"error": "Usuario no encontrado"})
+    perfil = await repo.get_perfil(pool, email)
+    if not perfil or not perfil.get("perfil_completo"):
+        return JSONResponse(
+            status_code=403,
+            content={"error": "Completa tu perfil de productor antes de compartir — es lo que da credibilidad a tu track y a tu feedback.", "codigo": "perfil_incompleto"},
+        )
+
+    # Cuota: máximo 3 tracks activos por usuario (protege el volumen de 5 GB
+    # y empuja a curar lo que compartes en vez de inundar el muro)
+    n_activos = await repo.contar_posts_activos(pool, user["id"])
+    if n_activos >= 3:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Ya tienes 3 tracks publicados en la comunidad. Retira alguno para compartir uno nuevo."},
+        )
+
+    content = await audio.read()
+    extension, errv = _validar_audio_upload(audio.filename, content)
+    if errv:
+        return errv
+    if len(content) > _AUDIO_COMUNIDAD_MAX:
+        return JSONResponse(
+            status_code=413,
+            content={"error": f"Para compartir, el archivo puede pesar máximo 80 MB (el tuyo: {len(content) // (1024*1024)} MB). Expórtalo en MP3 320 y listo."},
+        )
+
+    # Espacio libre del volumen: si queda poco, parar ANTES de escribir
+    # (un volumen lleno rompería la feature para todos)
+    try:
+        libre = shutil.disk_usage(_audio_comunidad_dir()).free
+    except OSError:
+        libre = None
+    if libre is not None and libre < max(len(content) * 2, 250 * 1024 * 1024):
+        print(f"[COMUNIDAD] volumen casi lleno ({libre // (1024*1024)} MB libres) — upload rechazado")
+        return JSONResponse(status_code=503, content={"error": "El almacenamiento de la comunidad está temporalmente lleno. Inténtalo más tarde."})
+
+    # Guardar el audio en el volumen (nombre aleatorio, no adivinable)
+    fname = f"{uuid.uuid4().hex}{extension}"
+    fpath = _audio_comunidad_dir() / fname
+    try:
+        with open(fpath, "wb") as f:
+            f.write(content)
+    except OSError as e:
+        print(f"[COMUNIDAD] error guardando audio: {e}")
+        return JSONResponse(status_code=500, content={"error": "No se pudo guardar el audio. Inténtalo de nuevo."})
+    audio_bytes = len(content)
+    content = None  # liberar RAM
+
+    # Duración razonable (8 s – 20 min): acota el coste de la waveform y evita
+    # que un MP3/OGG de horas (cabe en 80 MB) deje hilos decodificando sin fin
+    try:
+        import librosa as _lr
+        dur_chk = _lr.get_duration(path=str(fpath))
+    except Exception:
+        dur_chk = 0
+    if dur_chk < 8 or dur_chk > 20 * 60:
+        fpath.unlink(missing_ok=True)
+        return JSONResponse(
+            status_code=400,
+            content={"error": "La duración del track debe estar entre 8 segundos y 20 minutos."},
+        )
+
+    # Forma de onda (si falla, el post sale sin onda — no es bloqueante)
+    waveform, dur = [], None
+    try:
+        loop = asyncio.get_event_loop()
+        waveform, dur = await asyncio.wait_for(
+            loop.run_in_executor(None, lambda: _calcular_waveform(str(fpath))),
+            timeout=60,
+        )
+    except Exception as e:
+        print(f"[COMUNIDAD] waveform falló ({fname}): {type(e).__name__}: {e}")
+
+    bpm_v = _parse_float(bpm, 40, 300)
+    datos = {
+        "usuario_id": user["id"],
+        "titulo": titulo,
+        "estilo": _sanitize(estilo, 40) or None,
+        "estilo_custom": _sanitize(estilo_custom, 60) or None,
+        "bpm": int(bpm_v) if bpm_v else None,
+        "objetivo": _sanitize(objetivo, 20) or None,
+        "lufs": _parse_float(lufs, -60, 0),
+        "balance": _sanitize(balance, 30) or None,
+        "mono_correlacion": _parse_float(mono_correlacion, -1, 1),
+        "mono_nivel": _sanitize(mono_nivel, 30) or None,
+        "estado_track": _sanitize(estado_track, 40) or None,
+        "duracion_seg": dur,
+        "waveform": waveform,
+        "audio_file": fname,
+        "audio_mime": _MIME_AUDIO.get(extension, "application/octet-stream"),
+        "audio_bytes": audio_bytes,
+        "descargo_aceptado": True,
+        "analisis_id": None,
+    }
+    try:
+        row = await repo.crear_comunidad_post(pool, datos)
+    except Exception as e:
+        print(f"[COMUNIDAD] error insertando post: {type(e).__name__}: {e}")
+        fpath.unlink(missing_ok=True)  # no dejar audio huérfano
+        return JSONResponse(status_code=500, content={"error": "No se pudo publicar el track. Inténtalo de nuevo."})
+    return {"ok": True, "post_id": str(row["id"])}
+
+
+@app.get("/api/comunidad/posts")
+@limiter.limit("30/minute")
+async def comunidad_posts(request: Request, estilo: str = "", limit: int = 50):
+    """Muro de la comunidad: posts activos con el distintivo del autor."""
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Base de datos no disponible"})
+    from db import get_pool
+    import repositories as repo
+    rows = await repo.list_comunidad_posts(get_pool(), estilo.strip() or None, max(1, min(limit, 100)))
+    posts = []
+    for r in rows:
+        posts.append({
+            "id": str(r["id"]),
+            "timestamp": r["timestamp"].isoformat() if r.get("timestamp") else None,
+            "titulo": r["titulo"],
+            "estilo": r.get("estilo"),
+            "estilo_custom": r.get("estilo_custom"),
+            "bpm": r.get("bpm"),
+            "objetivo": r.get("objetivo"),
+            "lufs": r.get("lufs"),
+            "balance": r.get("balance"),
+            "mono_correlacion": r.get("mono_correlacion"),
+            "mono_nivel": r.get("mono_nivel"),
+            "estado_track": r.get("estado_track"),
+            "duracion_seg": r.get("duracion_seg"),
+            "waveform": r.get("waveform") or [],
+            "autor": {
+                "username": r.get("username") or "productor",
+                "experiencia": r.get("perfil_experiencia"),
+                "estilos": r.get("perfil_estilos") or [],
+                "publicado": r.get("perfil_publicado"),
+                "donde": r.get("perfil_donde"),
+                "bio": r.get("perfil_bio"),
+            },
+        })
+    return {"posts": posts}
+
+
+@app.get("/api/comunidad/audio/{post_id}")
+@limiter.limit("120/minute")
+async def comunidad_audio(request: Request, post_id: str):
+    """Sirve el audio de un post con soporte de rangos HTTP (Safari/iOS lo
+    exigen para reproducir, y permite hacer seek sin descargar todo)."""
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Base de datos no disponible"})
+    try:
+        pid = uuid.UUID(post_id)
+    except ValueError:
+        return JSONResponse(status_code=404, content={"error": "No encontrado"})
+    from db import get_pool
+    import repositories as repo
+    post = await repo.get_comunidad_post(get_pool(), pid)
+    if not post:
+        return JSONResponse(status_code=404, content={"error": "No encontrado"})
+    fpath = _audio_comunidad_dir() / post["audio_file"]
+    if not fpath.is_file():
+        return JSONResponse(status_code=404, content={"error": "Audio no disponible"})
+
+    file_size = fpath.stat().st_size
+    media_type = post.get("audio_mime") or "application/octet-stream"
+    range_header = request.headers.get("range", "")
+    start, end, status = 0, file_size - 1, 200
+    if range_header.startswith("bytes="):
+        # RFC 7233: un Range sintácticamente inválido se IGNORA (200 completo);
+        # solo un rango bien formado pero fuera del archivo devuelve 416.
+        rng = range_header[6:].split(",")[0].strip()
+        s, _, e = rng.partition("-")
+        try:
+            if s:
+                rs = int(s)
+                re_ = int(e) if e else file_size - 1
+                if rs >= file_size:
+                    return Response(status_code=416, headers={"Content-Range": f"bytes */{file_size}"})
+                if rs <= re_:
+                    start, end, status = rs, min(re_, file_size - 1), 206
+            elif e:
+                n = int(e)
+                if n > 0:
+                    start, status = max(0, file_size - n), 206
+        except ValueError:
+            start, end, status = 0, file_size - 1, 200
+
+    total = end - start + 1
+
+    def iterfile(s=start, restante=total):
+        with open(fpath, "rb") as f:
+            f.seek(s)
+            while restante > 0:
+                data = f.read(min(256 * 1024, restante))
+                if not data:
+                    break
+                restante -= len(data)
+                yield data
+
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(total),
+        "Cache-Control": "private, max-age=3600",
+        # identity evita que GZipMiddleware comprima el stream (rompería la
+        # semántica de Content-Range/Content-Length para el reproductor)
+        "Content-Encoding": "identity",
+    }
+    if status == 206:
+        headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"
+    return StreamingResponse(iterfile(), status_code=status, media_type=media_type, headers=headers)
+
+
+@app.delete("/api/comunidad/posts/{post_id}")
+@limiter.limit("10/minute")
+async def comunidad_borrar(request: Request, post_id: str):
+    """El autor retira su track de la comunidad (soft-delete + borra el audio)."""
+    email, err = _require_auth_user(request)
+    if err:
+        return err
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Base de datos no disponible"})
+    try:
+        pid = uuid.UUID(post_id)
+    except ValueError:
+        return JSONResponse(status_code=404, content={"error": "No encontrado"})
+    from db import get_pool
+    import repositories as repo
+    pool = get_pool()
+    user = await repo.get_user_by_email(pool, email)
+    if not user:
+        return JSONResponse(status_code=404, content={"error": "Usuario no encontrado"})
+    audio_file = await repo.desactivar_comunidad_post(pool, pid, user["id"])
+    if audio_file is None:
+        return JSONResponse(status_code=404, content={"error": "No encontrado o no es tuyo"})
+    try:
+        (_audio_comunidad_dir() / audio_file).unlink(missing_ok=True)
+    except OSError as e:
+        print(f"[COMUNIDAD] no se pudo borrar el audio {audio_file}: {e}")
+    return {"ok": True}
 
 
 # =========================================================================
