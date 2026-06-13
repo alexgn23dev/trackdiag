@@ -51,7 +51,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.44")
+app = FastAPI(title="Mentotrack API", version="0.5.45")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -225,7 +225,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.44"}
+    return {"status": "ok", "version": "0.5.45"}
 
 
 # Validación compartida de uploads de audio (track principal y referencia)
@@ -3910,6 +3910,36 @@ async def post_perfil(request: Request, data: dict):
 # Comunidad — compartir tracks para feedback entre productores (v0.5.41)
 # =========================================================================
 
+# PRUEBAS PRIVADAS: la comunidad solo está activa para los emails de esta
+# allowlist (env COMUNIDAD_EMAILS, coma-separada; default solo Alex). Quita la
+# variable o pon "*" para abrirla a todos cuando esté lista.
+_COMUNIDAD_EMAILS = {
+    e.strip().lower()
+    for e in os.environ.get("COMUNIDAD_EMAILS", "alexgn23@gmail.com").split(",")
+    if e.strip()
+}
+
+
+def _comunidad_habilitada(email: str | None) -> bool:
+    if "*" in _COMUNIDAD_EMAILS:
+        return True
+    return bool(email) and email.strip().lower() in _COMUNIDAD_EMAILS
+
+
+def _require_comunidad(request: Request) -> tuple[str | None, JSONResponse | None]:
+    """Auth + allowlist de la comunidad. Mientras esté en pruebas privadas,
+    solo los emails permitidos pasan; el resto recibe 403 'comunidad_oculta'."""
+    email, err = _require_auth_user(request)
+    if err:
+        return None, err
+    if not _comunidad_habilitada(email):
+        return None, JSONResponse(
+            status_code=403,
+            content={"error": "La comunidad está en pruebas privadas todavía.", "codigo": "comunidad_oculta"},
+        )
+    return email, None
+
+
 # Cap propio para audio compartido: 80 MB cabe un WAV 16-bit de ~7,5 min y
 # cualquier MP3. (El análisis admite 150 MB, pero el audio compartido se
 # almacena en el volumen de 5 GB — el cap cuida el espacio.)
@@ -3987,6 +4017,15 @@ def _parse_float(s, lo=None, hi=None):
     return v
 
 
+@app.get("/api/comunidad/habilitada")
+@limiter.limit("60/minute")
+async def comunidad_habilitada_endpoint(request: Request):
+    """¿Puede el usuario actual ver/usar la comunidad? (pruebas privadas).
+    El frontend oculta toda la UI de comunidad si devuelve false."""
+    email = _optional_auth_user(request)
+    return {"habilitada": _comunidad_habilitada(email)}
+
+
 @app.post("/api/comunidad/compartir")
 @limiter.limit("10/hour")
 async def comunidad_compartir(
@@ -4007,7 +4046,7 @@ async def comunidad_compartir(
     """Comparte un track con la comunidad. Requiere sesión + perfil completo
     + aceptar el descargo de autoría. El audio queda en el volumen y los
     datos objetivos del análisis acompañan al post."""
-    email, err = _require_auth_user(request)
+    email, err = _require_comunidad(request)
     if err:
         return err
     if descargo not in ("si", "true", "1"):
@@ -4181,7 +4220,10 @@ async def comunidad_compartir(
 @app.get("/api/comunidad/posts")
 @limiter.limit("30/minute")
 async def comunidad_posts(request: Request, estilo: str = "", limit: int = 50):
-    """Muro de la comunidad: posts activos con el distintivo del autor."""
+    """Muro de la comunidad: posts activos con el distintivo del autor.
+    En pruebas privadas: solo la allowlist (el resto, lista vacía)."""
+    if not _comunidad_habilitada(_optional_auth_user(request)):
+        return {"posts": [], "oculta": True}
     if not _pg_available():
         return JSONResponse(status_code=503, content={"error": "Base de datos no disponible"})
     from db import get_pool
@@ -4293,7 +4335,7 @@ async def comunidad_audio(request: Request, post_id: str):
 @limiter.limit("10/minute")
 async def comunidad_borrar(request: Request, post_id: str):
     """El autor retira su track de la comunidad (soft-delete + borra el audio)."""
-    email, err = _require_auth_user(request)
+    email, err = _require_comunidad(request)
     if err:
         return err
     if not _pg_available():
@@ -4342,8 +4384,10 @@ def _comentario_autor_dict(r: dict, viewer_id=None, post_owner_id=None) -> dict:
 @app.get("/api/comunidad/posts/{post_id}/comentarios")
 @limiter.limit("60/minute")
 async def comunidad_listar_comentarios(request: Request, post_id: str):
-    """Comentarios de un track (lectura pública). Con sesión, marca cuáles son
-    tuyos y si eres el dueño del track (para poder marcar 'útil')."""
+    """Comentarios de un track. En pruebas privadas: solo la allowlist.
+    Con sesión, marca cuáles son tuyos y si eres el dueño del track."""
+    if not _comunidad_habilitada(_optional_auth_user(request)):
+        return JSONResponse(status_code=403, content={"error": "La comunidad está en pruebas privadas.", "codigo": "comunidad_oculta"})
     if not _pg_available():
         return JSONResponse(status_code=503, content={"error": "Base de datos no disponible"})
     try:
@@ -4375,7 +4419,7 @@ async def comunidad_listar_comentarios(request: Request, post_id: str):
 async def comunidad_crear_comentario(request: Request, post_id: str, data: dict):
     """Deja feedback en un track. Requiere sesión + perfil completo (tu
     distintivo da credibilidad). No puedes comentar tu propio track."""
-    email, err = _require_auth_user(request)
+    email, err = _require_comunidad(request)
     if err:
         return err
     texto = _sanitize(data.get("texto", ""), 1500)
@@ -4414,7 +4458,7 @@ async def comunidad_crear_comentario(request: Request, post_id: str, data: dict)
 @limiter.limit("20/minute")
 async def comunidad_borrar_comentario(request: Request, comentario_id: str):
     """El autor borra su comentario."""
-    email, err = _require_auth_user(request)
+    email, err = _require_comunidad(request)
     if err:
         return err
     if not _pg_available():
@@ -4439,7 +4483,7 @@ async def comunidad_borrar_comentario(request: Request, comentario_id: str):
 @limiter.limit("60/minute")
 async def comunidad_marcar_util(request: Request, comentario_id: str):
     """El dueño del track marca/desmarca un comentario como 'me ayudó'."""
-    email, err = _require_auth_user(request)
+    email, err = _require_comunidad(request)
     if err:
         return err
     if not _pg_available():

@@ -16,7 +16,7 @@
     </script>
 
     <meta name="description" content="Escucha tracks de otros productores de música electrónica, dales feedback y comparte los tuyos. La comunidad de Mentotrack.">
-    <meta name="robots" content="index, follow">
+    <meta name="robots" content="noindex, nofollow">
     <meta name="theme-color" content="#0a0a0a">
     <link rel="canonical" href="https://www.mentotrack.com/comunidad">
     <meta property="og:type" content="website">
@@ -311,6 +311,11 @@
         }
 
         async function init() {
+            // Pruebas privadas: si el usuario no está habilitado, no mostramos nada
+            try {
+                const h = await fetch(`${API}/comunidad/habilitada`, { headers: authHdrs() }).then(r => r.json());
+                if (!h.habilitada) { mostrarOculta(); return; }
+            } catch (e) { mostrarOculta(); return; }
             try {
                 const opt = await fetch(`${API}/opciones`).then(r => r.json());
                 (opt.generos || []).forEach(g => LBL_GEN[g.value] = g.label);
@@ -318,6 +323,16 @@
             } catch (e) { /* sin labels, se muestran los values */ }
             renderFiltros();
             cargarPosts();
+        }
+
+        function mostrarOculta() {
+            const main = document.querySelector('main');
+            main.innerHTML = `
+                <div style="text-align:center; padding:5rem 1rem; color:var(--text-gray-400);">
+                    <h1 style="font-size:1.5rem; color:#fff; margin-bottom:.6rem;">La comunidad está en camino 🎧</h1>
+                    <p style="max-width:440px; margin:0 auto;">Estamos puliendo la zona de comunidad para productores. Muy pronto podrás compartir tus tracks y dar feedback a otros. ¡Vuelve en breve!</p>
+                    <a href="/" style="display:inline-block; margin-top:1.5rem; color:var(--green);">← Volver a Mentotrack</a>
+                </div>`;
         }
 
         function renderFiltros() {

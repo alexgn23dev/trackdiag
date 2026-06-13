@@ -1121,7 +1121,7 @@
     }
 
 
-    function DiagnosticoScreen({ resultado, onReset, contexto, userEmail, file, opciones, nombreProyecto, onIrAPerfil }) {
+    function DiagnosticoScreen({ resultado, onReset, contexto, userEmail, file, opciones, nombreProyecto, onIrAPerfil, comunidadOk }) {
         const r = resultado;
         const d = r.datos_audio;
         const [feedbackStep, setFeedbackStep] = useState(0); // 0=coincide?, 1=detalle, 2=feedback real
@@ -1914,17 +1914,19 @@
                         </button>
                     </div>
 
-                    {/* ===== COMPARTIR CON LA COMUNIDAD ===== */}
-                    <div className="mt-6">
-                        <CompartirComunidad
-                            file={file}
-                            resultado={r}
-                            contexto={contexto}
-                            opciones={opciones}
-                            nombreProyecto={nombreProyecto}
-                            onIrAPerfil={onIrAPerfil}
-                        />
-                    </div>
+                    {/* ===== COMPARTIR CON LA COMUNIDAD (solo allowlist, pruebas privadas) ===== */}
+                    {comunidadOk && (
+                        <div className="mt-6">
+                            <CompartirComunidad
+                                file={file}
+                                resultado={r}
+                                contexto={contexto}
+                                opciones={opciones}
+                                nombreProyecto={nombreProyecto}
+                                onIrAPerfil={onIrAPerfil}
+                            />
+                        </div>
+                    )}
 
                     {/* ===== PANEL MODAL TUTORIALES ===== */}
                     {showTutoriales && (
@@ -2440,6 +2442,7 @@
             dificultad_habitual: '',
         });
         const [fileRef, setFileRef] = useState(null); // track de referencia (opcional)
+        const [comunidadOk, setComunidadOk] = useState(false); // comunidad en pruebas privadas (allowlist)
         const [resultado, setResultado] = useState(null);
         const [error, setError] = useState(null);
         const [historialCount, setHistorialCount] = useState(obtenerHistorial().length);
@@ -2501,6 +2504,16 @@
                     });
                 });
         }, []);
+
+        // Comunidad en pruebas privadas: comprobar si esta cuenta está habilitada
+        // (allowlist server-side). Si no, toda la UI de comunidad queda oculta.
+        const comprobarComunidad = () => {
+            fetch(`${API_URL}/api/comunidad/habilitada`, { headers: authHeaders() })
+                .then(r => r.ok ? r.json() : { habilitada: false })
+                .then(d => setComunidadOk(!!(d && d.habilitada)))
+                .catch(() => setComunidadOk(false));
+        };
+        useEffect(() => { comprobarComunidad(); }, [panelAuth]);
 
         const MAX_FILE_MB = 150;
         const handleFileRefSelected = (f) => {
@@ -3598,6 +3611,7 @@
                     <DiagnosticoScreen
                         resultado={resultado} onReset={handleReset} contexto={contexto} userEmail={userEmail}
                         file={file} opciones={opciones} nombreProyecto={nombreProyecto}
+                        comunidadOk={comunidadOk}
                         onIrAPerfil={() => { setPanelView('perfil'); handleOpenPanel(); }}
                     />
                 )}
@@ -3863,15 +3877,17 @@
                                         <span>👤</span>
                                         <span>Mi perfil</span>
                                     </button>
-                                    <a
-                                        href="/comunidad"
-                                        onClick={() => trackEvent('panel_comunidad_clicked', { from: 'user_panel' })}
-                                        className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-xs transition-colors inline-flex items-center gap-1.5"
-                                        title="Escucha tracks de otros productores y comparte los tuyos"
-                                    >
-                                        <span>🎧</span>
-                                        <span>Comunidad</span>
-                                    </a>
+                                    {comunidadOk && (
+                                        <a
+                                            href="/comunidad"
+                                            onClick={() => trackEvent('panel_comunidad_clicked', { from: 'user_panel' })}
+                                            className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-xs transition-colors inline-flex items-center gap-1.5"
+                                            title="Escucha tracks de otros productores y comparte los tuyos"
+                                        >
+                                            <span>🎧</span>
+                                            <span>Comunidad</span>
+                                        </a>
+                                    )}
                                     <a
                                         href="/ideas"
                                         onClick={() => trackEvent('panel_ideas_clicked', { from: 'user_panel' })}
