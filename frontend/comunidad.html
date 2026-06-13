@@ -109,6 +109,37 @@
         .datos { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .4rem; }
         .dato { font-size: .73rem; padding: .25rem .6rem; border-radius: 6px; background: rgba(255,255,255,.04); color: var(--text-gray-400); }
         .dato b { color: #d1d5db; font-weight: 600; }
+        /* Comentarios */
+        .com-toggle {
+            margin-top: 1rem; background: none; border: none; color: var(--text-gray-400);
+            font-size: .82rem; cursor: pointer; padding: .3rem 0; display: inline-flex; align-items: center; gap: .4rem;
+        }
+        .com-toggle:hover { color: #fff; }
+        .com-seccion { margin-top: 1rem; border-top: 1px solid var(--card-border); padding-top: 1rem; display: none; }
+        .com-seccion.abierta { display: block; }
+        .com { padding: .7rem 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+        .com:last-child { border-bottom: none; }
+        .com-head { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: .3rem; }
+        .com-autor { font-weight: 600; font-size: .82rem; }
+        .com-badge { font-size: .65rem; padding: .1rem .45rem; border-radius: 999px; background: rgba(37,244,100,.1); color: var(--green); border: 1px solid rgba(37,244,100,.2); }
+        .com-fecha { font-size: .68rem; color: var(--text-gray-500); }
+        .com-util-badge { font-size: .65rem; color: var(--green); background: rgba(37,244,100,.1); padding: .1rem .5rem; border-radius: 999px; }
+        .com-texto { font-size: .88rem; color: #d1d5db; line-height: 1.5; }
+        .com-acciones { display: flex; gap: .8rem; margin-top: .35rem; }
+        .com-accion { background: none; border: none; color: var(--text-gray-500); font-size: .72rem; cursor: pointer; padding: 0; }
+        .com-accion:hover { color: #fff; }
+        .com-accion.util-on { color: var(--green); }
+        .com-composer { margin-top: .8rem; }
+        .com-composer textarea {
+            width: 100%; box-sizing: border-box; background: rgba(255,255,255,0.03); border: 1px solid #2e2e33;
+            color: #e5e5e5; border-radius: 10px; padding: .7rem; font-size: .85rem; font-family: inherit; resize: vertical; min-height: 60px;
+        }
+        .com-composer .fila { display: flex; gap: .6rem; align-items: center; margin-top: .5rem; }
+        .com-enviar { background: var(--green); color: #0a0a0a; border: none; border-radius: 8px; padding: .5rem 1rem; font-weight: 600; font-size: .8rem; cursor: pointer; }
+        .com-enviar:disabled { opacity: .5; cursor: not-allowed; }
+        .com-aviso { font-size: .78rem; color: var(--text-gray-500); }
+        .com-aviso a { color: var(--green); }
+        .com-err { font-size: .76rem; color: #f87171; margin-top: .4rem; }
         .loading, .empty { text-align: center; padding: 4rem 1rem; color: var(--text-gray-500); }
         .spinner { width: 32px; height: 32px; border: 3px solid #222; border-top-color: var(--green); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 1rem; }
         @keyframes spin { to { transform: rotate(360deg); } }
@@ -168,6 +199,116 @@
 
         const esc = (s) => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; };
         const fmtTiempo = (s) => { if (s == null || isNaN(s)) return '0:00'; const m = Math.floor(s / 60), sec = Math.floor(s % 60); return m + ':' + String(sec).padStart(2, '0'); };
+        const authTok = () => { try { return localStorage.getItem('mentotrack_token') || ''; } catch (e) { return ''; } };
+        const authHdrs = () => { const t = authTok(); return t ? { 'Authorization': 'Bearer ' + t, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' }; };
+        const fechaCorta = (iso) => { if (!iso) return ''; try { return new Date(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }); } catch (e) { return ''; } };
+
+        function distintivoCom(a) {
+            const partes = [];
+            if (a.experiencia && LBL_EXP[a.experiencia]) partes.push(LBL_EXP[a.experiencia]);
+            if (a.estilos && a.estilos.length) partes.push((LBL_GEN[a.estilos[0]] || a.estilos[0]));
+            if (a.publicado && LBL_PUB[a.publicado]) partes.push(LBL_PUB[a.publicado]);
+            return partes;
+        }
+
+        async function cargarComentarios(postId, seccion) {
+            const lista = seccion.querySelector('.com-lista');
+            lista.innerHTML = '<p class="com-aviso">Cargando…</p>';
+            try {
+                const data = await fetch(`${API}/comunidad/posts/${postId}/comentarios`, { headers: authHdrs() }).then(r => r.json());
+                const coms = data.comentarios || [];
+                if (coms.length === 0) {
+                    lista.innerHTML = '<p class="com-aviso">Aún no hay feedback. Sé el primero en ayudar.</p>';
+                } else {
+                    lista.innerHTML = '';
+                    coms.forEach(c => lista.appendChild(renderComentario(c, postId, data.puedo_marcar_util)));
+                }
+            } catch (e) {
+                lista.innerHTML = '<p class="com-err">No se pudieron cargar los comentarios.</p>';
+            }
+        }
+
+        function renderComentario(c, postId, puedoUtil) {
+            const el = document.createElement('div');
+            el.className = 'com';
+            const badges = distintivoCom(c.autor).map(d => `<span class="com-badge">${esc(d)}</span>`).join('');
+            let acciones = '';
+            if (puedoUtil) acciones += `<button class="com-accion util-toggle ${c.util ? 'util-on' : ''}">${c.util ? '✓ Útil' : 'Marcar útil'}</button>`;
+            if (c.es_autor) acciones += `<button class="com-accion borrar">Borrar</button>`;
+            el.innerHTML = `
+                <div class="com-head">
+                    <span class="com-autor">@${esc(c.autor.username)}</span>
+                    ${badges}
+                    <span class="com-fecha">${fechaCorta(c.timestamp)}</span>
+                    ${c.util ? '<span class="com-util-badge">✓ le ayudó</span>' : ''}
+                </div>
+                <div class="com-texto">${esc(c.texto)}</div>
+                ${acciones ? `<div class="com-acciones">${acciones}</div>` : ''}
+            `;
+            const utilBtn = el.querySelector('.util-toggle');
+            if (utilBtn) utilBtn.onclick = async () => {
+                utilBtn.disabled = true;
+                try {
+                    const r = await fetch(`${API}/comunidad/comentarios/${c.id}/util`, { method: 'POST', headers: authHdrs() });
+                    if (r.ok) { const d = await r.json(); c.util = d.util; cargarComentarios(postId, el.closest('.com-seccion')); }
+                } catch (e) {}
+            };
+            const borrarBtn = el.querySelector('.borrar');
+            if (borrarBtn) borrarBtn.onclick = async () => {
+                if (!confirm('¿Borrar tu comentario?')) return;
+                try {
+                    const r = await fetch(`${API}/comunidad/comentarios/${c.id}`, { method: 'DELETE', headers: authHdrs() });
+                    if (r.ok) cargarComentarios(postId, el.closest('.com-seccion'));
+                } catch (e) {}
+            };
+            return el;
+        }
+
+        function montarComposer(postId, composer, toggle) {
+            if (!authTok()) {
+                composer.innerHTML = '<p class="com-aviso">Para dejar feedback, <a href="/">inicia sesión en Mentotrack</a>.</p>';
+                return;
+            }
+            composer.innerHTML = `
+                <textarea placeholder="Tu feedback: qué te gusta, qué mejorarías, dónde exactamente…" maxlength="1500"></textarea>
+                <div class="fila">
+                    <button class="com-enviar">Comentar</button>
+                    <span class="com-err" style="display:none;"></span>
+                </div>
+            `;
+            const ta = composer.querySelector('textarea');
+            const btn = composer.querySelector('.com-enviar');
+            const err = composer.querySelector('.com-err');
+            btn.onclick = async () => {
+                const texto = ta.value.trim();
+                if (texto.length < 3) { err.textContent = 'Escribe un poco más.'; err.style.display = 'inline'; return; }
+                btn.disabled = true; err.style.display = 'none';
+                try {
+                    const r = await fetch(`${API}/comunidad/posts/${postId}/comentarios`, {
+                        method: 'POST', headers: authHdrs(), body: JSON.stringify({ texto })
+                    });
+                    const d = await r.json().catch(() => ({}));
+                    if (!r.ok) {
+                        if (d.codigo === 'perfil_incompleto') {
+                            err.innerHTML = 'Completa tu <a href="/" style="color:var(--green)">perfil de productor</a> antes de comentar.';
+                        } else {
+                            err.textContent = d.error || 'No se pudo publicar.';
+                        }
+                        err.style.display = 'inline'; btn.disabled = false; return;
+                    }
+                    ta.value = '';
+                    const seccion = composer.closest('.com-seccion');
+                    await cargarComentarios(postId, seccion);
+                    const cnt = toggle.querySelector('.com-count');
+                    cnt.textContent = (parseInt(cnt.textContent) || 0) + 1;
+                    gtag('event', 'comunidad_comentario', { post: postId });
+                } catch (e) {
+                    err.textContent = 'Error de conexión.'; err.style.display = 'inline';
+                } finally {
+                    btn.disabled = false;
+                }
+            };
+        }
 
         async function init() {
             try {
@@ -256,7 +397,26 @@
                     </div>
                 </div>
                 <div class="datos">${datos.join('')}</div>
+                <button class="com-toggle">💬 <span class="com-count">${p.n_comentarios || 0}</span> ${(p.n_comentarios === 1) ? 'comentario' : 'comentarios'}</button>
+                <div class="com-seccion">
+                    <div class="com-lista"></div>
+                    <div class="com-composer"></div>
+                </div>
             `;
+
+            // Comentarios: toggle + composer
+            const toggle = card.querySelector('.com-toggle');
+            const seccion = card.querySelector('.com-seccion');
+            const composer = card.querySelector('.com-composer');
+            let cargado = false;
+            toggle.onclick = () => {
+                seccion.classList.toggle('abierta');
+                if (seccion.classList.contains('abierta') && !cargado) {
+                    cargado = true;
+                    cargarComentarios(p.id, seccion);
+                    montarComposer(p.id, composer, toggle);
+                }
+            };
 
             // Player
             const audio = new Audio();

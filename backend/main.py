@@ -51,7 +51,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.43")
+app = FastAPI(title="Mentotrack API", version="0.5.44")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -225,7 +225,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.43"}
+    return {"status": "ok", "version": "0.5.44"}
 
 
 # Validación compartida de uploads de audio (track principal y referencia)
@@ -1725,6 +1725,16 @@ def _require_auth_user(request: Request) -> tuple[str | None, JSONResponse | Non
     if not email:
         return None, JSONResponse(status_code=401, content={"error": "Token inválido o expirado"})
     return email, None
+
+
+def _optional_auth_user(request: Request) -> str | None:
+    """Email del usuario si trae un token válido, None si no. Para endpoints
+    de lectura pública que enriquecen la respuesta cuando hay sesión (p.ej.
+    marcar qué comentarios son tuyos / si eres dueño del post)."""
+    token = _get_token_from_request(request)
+    if not token:
+        return None
+    return _verify_token(token)
 
 
 async def _get_usuario_id_from_email(email: str):
@@ -4021,13 +4031,23 @@ async def comunidad_compartir(
             content={"error": "Completa tu perfil de productor antes de compartir — es lo que da credibilidad a tu track y a tu feedback.", "codigo": "perfil_incompleto"},
         )
 
-    # Cuota: máximo 3 tracks activos por usuario (protege el volumen de 5 GB
-    # y empuja a curar lo que compartes en vez de inundar el muro)
-    n_activos = await repo.contar_posts_activos(pool, user["id"])
-    if n_activos >= 3:
+    # Reciprocidad + cuota: 1 track gratis siempre; para tener 2-3 a la vez
+    # hay que haber dado feedback en tantos tracks de otros como tracks tengas
+    # publicados. Da-para-recibir, y acota el volumen (máx 3).
+    recip = await repo.reciprocidad_stats(pool, user["id"])
+    if recip["activos"] >= 3:
         return JSONResponse(
             status_code=400,
-            content={"error": "Ya tienes 3 tracks publicados en la comunidad. Retira alguno para compartir uno nuevo."},
+            content={"error": "Ya tienes 3 tracks en la comunidad (el máximo). Retira alguno para compartir uno nuevo."},
+        )
+    if recip["comentados"] < recip["activos"]:
+        faltan = recip["activos"] - recip["comentados"]
+        return JSONResponse(
+            status_code=403,
+            content={
+                "error": f"Ya tienes {recip['activos']} track(s) en la comunidad. Para compartir otro a la vez, primero deja feedback en {faltan} track(s) más de otros productores — aquí se da para recibir.",
+                "codigo": "reciprocidad",
+            },
         )
 
     content = await audio.read()
@@ -4184,6 +4204,7 @@ async def comunidad_posts(request: Request, estilo: str = "", limit: int = 50):
             "estado_track": r.get("estado_track"),
             "duracion_seg": r.get("duracion_seg"),
             "waveform": r.get("waveform") or [],
+            "n_comentarios": int(r.get("n_comentarios") or 0),
             "autor": {
                 "username": r.get("username") or "productor",
                 "experiencia": r.get("perfil_experiencia"),
@@ -4295,6 +4316,148 @@ async def comunidad_borrar(request: Request, post_id: str):
     except OSError as e:
         print(f"[COMUNIDAD] no se pudo borrar el audio {audio_file}: {e}")
     return {"ok": True}
+
+
+# ---- Comentarios (feedback entre productores) -------------------------------
+
+def _comentario_autor_dict(r: dict, viewer_id=None, post_owner_id=None) -> dict:
+    """Serializa un comentario con el distintivo del autor. Marca es_autor
+    (el viewer lo escribió → puede borrar) y la respuesta del endpoint indica
+    a nivel de post si el viewer puede marcar útil (es dueño del track)."""
+    return {
+        "id": str(r["id"]),
+        "timestamp": r["timestamp"].isoformat() if r.get("timestamp") else None,
+        "texto": r["texto"],
+        "util": bool(r.get("util")),
+        "es_autor": viewer_id is not None and r.get("usuario_id") == viewer_id,
+        "autor": {
+            "username": r.get("username") or "productor",
+            "experiencia": r.get("perfil_experiencia"),
+            "estilos": r.get("perfil_estilos") or [],
+            "publicado": r.get("perfil_publicado"),
+        },
+    }
+
+
+@app.get("/api/comunidad/posts/{post_id}/comentarios")
+@limiter.limit("60/minute")
+async def comunidad_listar_comentarios(request: Request, post_id: str):
+    """Comentarios de un track (lectura pública). Con sesión, marca cuáles son
+    tuyos y si eres el dueño del track (para poder marcar 'útil')."""
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Base de datos no disponible"})
+    try:
+        pid = uuid.UUID(post_id)
+    except ValueError:
+        return JSONResponse(status_code=404, content={"error": "No encontrado"})
+    from db import get_pool
+    import repositories as repo
+    pool = get_pool()
+    post = await repo.get_comunidad_post(pool, pid)
+    if not post:
+        return JSONResponse(status_code=404, content={"error": "No encontrado"})
+    viewer_id = None
+    email = _optional_auth_user(request)
+    if email:
+        u = await repo.get_user_by_email(pool, email)
+        viewer_id = u["id"] if u else None
+    es_dueno = viewer_id is not None and viewer_id == post["usuario_id"]
+    rows = await repo.list_comentarios(pool, pid)
+    return {
+        "comentarios": [_comentario_autor_dict(r, viewer_id, post["usuario_id"]) for r in rows],
+        "puedo_marcar_util": es_dueno,
+        "es_mi_track": es_dueno,
+    }
+
+
+@app.post("/api/comunidad/posts/{post_id}/comentarios")
+@limiter.limit("20/hour")
+async def comunidad_crear_comentario(request: Request, post_id: str, data: dict):
+    """Deja feedback en un track. Requiere sesión + perfil completo (tu
+    distintivo da credibilidad). No puedes comentar tu propio track."""
+    email, err = _require_auth_user(request)
+    if err:
+        return err
+    texto = _sanitize(data.get("texto", ""), 1500)
+    if len(texto) < 3:
+        return JSONResponse(status_code=400, content={"error": "Escribe un comentario (mínimo 3 caracteres)."})
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Base de datos no disponible"})
+    try:
+        pid = uuid.UUID(post_id)
+    except ValueError:
+        return JSONResponse(status_code=404, content={"error": "No encontrado"})
+    from db import get_pool
+    import repositories as repo
+    pool = get_pool()
+    user = await repo.get_user_by_email(pool, email)
+    if not user:
+        return JSONResponse(status_code=404, content={"error": "Usuario no encontrado"})
+    perfil = await repo.get_perfil(pool, email)
+    if not perfil or not perfil.get("perfil_completo"):
+        return JSONResponse(
+            status_code=403,
+            content={"error": "Completa tu perfil de productor antes de comentar — da credibilidad a tu feedback.", "codigo": "perfil_incompleto"},
+        )
+    post = await repo.get_comunidad_post(pool, pid)
+    if not post:
+        return JSONResponse(status_code=404, content={"error": "Este track ya no está disponible."})
+    if post["usuario_id"] == user["id"]:
+        return JSONResponse(status_code=400, content={"error": "No puedes comentar tu propio track."})
+    row = await repo.crear_comentario(pool, pid, user["id"], texto)
+    if row is None:
+        return JSONResponse(status_code=404, content={"error": "Este track ya no está disponible."})
+    return {"ok": True, "comentario_id": str(row["id"])}
+
+
+@app.delete("/api/comunidad/comentarios/{comentario_id}")
+@limiter.limit("20/minute")
+async def comunidad_borrar_comentario(request: Request, comentario_id: str):
+    """El autor borra su comentario."""
+    email, err = _require_auth_user(request)
+    if err:
+        return err
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Base de datos no disponible"})
+    try:
+        cid = uuid.UUID(comentario_id)
+    except ValueError:
+        return JSONResponse(status_code=404, content={"error": "No encontrado"})
+    from db import get_pool
+    import repositories as repo
+    pool = get_pool()
+    user = await repo.get_user_by_email(pool, email)
+    if not user:
+        return JSONResponse(status_code=404, content={"error": "Usuario no encontrado"})
+    ok = await repo.borrar_comentario(pool, cid, user["id"])
+    if not ok:
+        return JSONResponse(status_code=404, content={"error": "No encontrado o no es tuyo"})
+    return {"ok": True}
+
+
+@app.post("/api/comunidad/comentarios/{comentario_id}/util")
+@limiter.limit("60/minute")
+async def comunidad_marcar_util(request: Request, comentario_id: str):
+    """El dueño del track marca/desmarca un comentario como 'me ayudó'."""
+    email, err = _require_auth_user(request)
+    if err:
+        return err
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Base de datos no disponible"})
+    try:
+        cid = uuid.UUID(comentario_id)
+    except ValueError:
+        return JSONResponse(status_code=404, content={"error": "No encontrado"})
+    from db import get_pool
+    import repositories as repo
+    pool = get_pool()
+    user = await repo.get_user_by_email(pool, email)
+    if not user:
+        return JSONResponse(status_code=404, content={"error": "Usuario no encontrado"})
+    nuevo = await repo.marcar_comentario_util(pool, cid, user["id"])
+    if nuevo is None:
+        return JSONResponse(status_code=403, content={"error": "Solo el dueño del track puede marcar útil un comentario."})
+    return {"ok": True, "util": nuevo}
 
 
 # =========================================================================

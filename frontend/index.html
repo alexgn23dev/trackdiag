@@ -992,6 +992,7 @@
                 const data = await resp.json().catch(() => ({}));
                 if (!resp.ok) {
                     if (data.codigo === 'perfil_incompleto') { setEstado('sin_perfil'); return; }
+                    // reciprocidad: mensaje del backend ya es claro y motivador
                     throw new Error(data.error || 'No se pudo publicar');
                 }
                 setEstado('ok');

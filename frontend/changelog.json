@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "version": "0.5.44",
+      "date": "2026-06-13",
+      "title": "Feedback en la comunidad: comentarios, reputación y reciprocidad",
+      "changes": [
+        "Ya puedes dejar feedback en los tracks de otros productores. Cada comentario muestra tu distintivo (experiencia, estilos, trayectoria), y el autor del track puede marcar los comentarios que le han ayudado — esos suben arriba y dan reputación a quien los dejó.",
+        "Reciprocidad: tu primer track en la comunidad es gratis; para tener varios a la vez, deja feedback en tracks de otros. Aquí se da para recibir.",
+        "Para comentar necesitas tu perfil de productor completo (igual que para compartir), y no puedes comentar tu propio track."
+      ]
+    },
+    {
       "version": "0.5.43",
       "date": "2026-06-13",
       "title": "El muro de la comunidad",

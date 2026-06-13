@@ -1582,7 +1582,9 @@ async def list_comunidad_posts(
                        p.mono_nivel, p.estado_track, p.duracion_seg, p.waveform,
                        u.username,
                        u.perfil_experiencia, u.perfil_estilos,
-                       u.perfil_publicado, u.perfil_donde, u.perfil_bio
+                       u.perfil_publicado, u.perfil_donde, u.perfil_bio,
+                       (SELECT COUNT(*) FROM comunidad_comentarios c
+                          WHERE c.post_id = p.id AND c.activo) AS n_comentarios
                 FROM comunidad_posts p
                 JOIN usuarios u ON u.id = p.usuario_id
                 WHERE {where}
@@ -1635,3 +1637,109 @@ async def contar_posts_activos(pool: asyncpg.Pool, usuario_id) -> int:
             usuario_id,
         )
     return int(n or 0)
+
+
+# =========================================================================
+# Comunidad — comentarios + reciprocidad (v0.5.44)
+# =========================================================================
+
+
+@with_retry()
+async def crear_comentario(pool: asyncpg.Pool, post_id, usuario_id, texto: str) -> Optional[dict]:
+    """Inserta un comentario si el post existe y está activo. Devuelve la fila
+    (id, timestamp) o None si el post no existe/está inactivo."""
+    async with pool.acquire() as conn:
+        existe = await conn.fetchval(
+            "SELECT 1 FROM comunidad_posts WHERE id = $1 AND activo", post_id
+        )
+        if not existe:
+            return None
+        row = await conn.fetchrow(
+            """INSERT INTO comunidad_comentarios (post_id, usuario_id, texto)
+               VALUES ($1, $2, $3) RETURNING id, timestamp""",
+            post_id, usuario_id, texto,
+        )
+    return dict(row)
+
+
+@with_retry()
+async def list_comentarios(pool: asyncpg.Pool, post_id) -> list[dict]:
+    """Comentarios activos de un post, con el distintivo del autor. Los marcados
+    como útiles flotan arriba; dentro de cada grupo, orden cronológico."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """SELECT c.id, c.timestamp, c.texto, c.util, c.usuario_id,
+                      u.username, u.perfil_experiencia, u.perfil_estilos,
+                      u.perfil_publicado
+               FROM comunidad_comentarios c
+               JOIN usuarios u ON u.id = c.usuario_id
+               WHERE c.post_id = $1 AND c.activo
+               ORDER BY c.util DESC, c.timestamp ASC""",
+            post_id,
+        )
+    out = []
+    for r in rows:
+        d = dict(r)
+        est = d.get("perfil_estilos")
+        if isinstance(est, str):
+            try:
+                est = json.loads(est)
+            except (ValueError, TypeError):
+                est = []
+        d["perfil_estilos"] = est or []
+        out.append(d)
+    return out
+
+
+@with_retry()
+async def borrar_comentario(pool: asyncpg.Pool, comentario_id, usuario_id) -> bool:
+    """Soft-delete del comentario (solo el autor)."""
+    async with pool.acquire() as conn:
+        res = await conn.execute(
+            """UPDATE comunidad_comentarios SET activo = FALSE
+               WHERE id = $1 AND usuario_id = $2 AND activo""",
+            comentario_id, usuario_id,
+        )
+    return res.endswith(" 1")
+
+
+@with_retry()
+async def marcar_comentario_util(pool: asyncpg.Pool, comentario_id, owner_id) -> Optional[bool]:
+    """El DUEÑO del post marca/desmarca un comentario como útil (toggle).
+    Verifica que `owner_id` es dueño del post del comentario. Devuelve el nuevo
+    estado `util`, o None si no autorizado / no existe."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """SELECT c.util, p.usuario_id AS owner
+               FROM comunidad_comentarios c
+               JOIN comunidad_posts p ON p.id = c.post_id
+               WHERE c.id = $1 AND c.activo""",
+            comentario_id,
+        )
+        if not row or row["owner"] != owner_id:
+            return None
+        nuevo = not row["util"]
+        await conn.execute(
+            "UPDATE comunidad_comentarios SET util = $2 WHERE id = $1",
+            comentario_id, nuevo,
+        )
+    return nuevo
+
+
+@with_retry()
+async def reciprocidad_stats(pool: asyncpg.Pool, usuario_id) -> dict:
+    """Para el gate de compartir: nº de posts activos del usuario y nº de tracks
+    DISTINTOS de OTROS en los que ha comentado (su 'dar' a la comunidad)."""
+    async with pool.acquire() as conn:
+        activos = await conn.fetchval(
+            "SELECT COUNT(*) FROM comunidad_posts WHERE usuario_id = $1 AND activo",
+            usuario_id,
+        )
+        comentados = await conn.fetchval(
+            """SELECT COUNT(DISTINCT c.post_id)
+               FROM comunidad_comentarios c
+               JOIN comunidad_posts p ON p.id = c.post_id
+               WHERE c.usuario_id = $1 AND c.activo AND p.usuario_id <> $1""",
+            usuario_id,
+        )
+    return {"activos": int(activos or 0), "comentados": int(comentados or 0)}
