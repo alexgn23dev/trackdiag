@@ -51,7 +51,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.42")
+app = FastAPI(title="Mentotrack API", version="0.5.43")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -225,7 +225,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.42"}
+    return {"status": "ok", "version": "0.5.43"}
 
 
 # Validación compartida de uploads de audio (track principal y referencia)
@@ -2116,6 +2116,14 @@ def serve_ideas():
     if not ideas_path.is_file():
         return JSONResponse(status_code=404, content={"error": "Página no encontrada"})
     return FileResponse(ideas_path, headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/comunidad")
+def serve_comunidad():
+    page = FRONTEND_DIR / "comunidad.html"
+    if not page.is_file():
+        return JSONResponse(status_code=404, content={"error": "Página no encontrada"})
+    return FileResponse(page, headers={"Cache-Control": "no-cache"})
 
 
 # =========================================================================

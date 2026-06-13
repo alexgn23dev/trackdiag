@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "version": "0.5.43",
+      "date": "2026-06-13",
+      "title": "El muro de la comunidad",
+      "changes": [
+        "Nueva página /comunidad: escucha los tracks que comparten otros productores, con su reproductor de forma de onda, el distintivo del autor (experiencia, estilos, trayectoria) y los datos objetivos del análisis (estilo, BPM, loudness, balance, compatibilidad mono, objetivo y estado del track).",
+        "Filtra el muro por estilo para encontrar tracks de tu género. Accede desde tu panel (botón Comunidad) o tras compartir un track."
+      ]
+    },
+    {
       "version": "0.5.42",
       "date": "2026-06-13",
       "title": "Optimización del audio compartido (MP3)",

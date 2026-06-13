@@ -1105,8 +1105,11 @@
                                 <div className="text-center py-6">
                                     <div className="text-3xl mb-3">🤝</div>
                                     <p className="text-white text-sm font-medium mb-2">¡Track publicado en la comunidad!</p>
-                                    <p className="text-gray-400 text-xs mb-5">El muro de la comunidad está a punto de abrir — tu track estará entre los primeros que otros productores escuchen y comenten.</p>
-                                    <button onClick={() => setOpen(false)} className="px-5 py-2.5 btn-secondary rounded-lg text-sm">Cerrar</button>
+                                    <p className="text-gray-400 text-xs mb-5">Ya está en el muro para que otros productores lo escuchen. Pásate a escuchar los suyos y devuélveles el feedback.</p>
+                                    <div className="flex gap-3 justify-center">
+                                        <a href="/comunidad" className="px-5 py-2.5 btn-primary rounded-lg text-sm font-semibold">Ver en la comunidad</a>
+                                        <button onClick={() => setOpen(false)} className="px-5 py-2.5 btn-secondary rounded-lg text-sm">Cerrar</button>
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -3859,6 +3862,15 @@
                                         <span>👤</span>
                                         <span>Mi perfil</span>
                                     </button>
+                                    <a
+                                        href="/comunidad"
+                                        onClick={() => trackEvent('panel_comunidad_clicked', { from: 'user_panel' })}
+                                        className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-xs transition-colors inline-flex items-center gap-1.5"
+                                        title="Escucha tracks de otros productores y comparte los tuyos"
+                                    >
+                                        <span>🎧</span>
+                                        <span>Comunidad</span>
+                                    </a>
                                     <a
                                         href="/ideas"
                                         onClick={() => trackEvent('panel_ideas_clicked', { from: 'user_panel' })}

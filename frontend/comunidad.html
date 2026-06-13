@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comunidad — Mentotrack</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+
+    <!-- Google Analytics 4 -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-W2FMW2T70F"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-W2FMW2T70F');
+    </script>
+
+    <meta name="description" content="Escucha tracks de otros productores de música electrónica, dales feedback y comparte los tuyos. La comunidad de Mentotrack.">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#0a0a0a">
+    <link rel="canonical" href="https://www.mentotrack.com/comunidad">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Mentotrack">
+    <meta property="og:title" content="Comunidad — Mentotrack">
+    <meta property="og:description" content="Escucha tracks de otros productores, dales feedback y comparte los tuyos.">
+    <meta property="og:url" content="https://www.mentotrack.com/comunidad">
+    <meta property="og:image" content="https://www.mentotrack.com/og-image.png">
+
+    <style>
+        :root {
+            --bg-dark: #0a0a0a;
+            --card-bg: rgba(255, 255, 255, 0.03);
+            --card-border: rgba(255, 255, 255, 0.06);
+            --purple: #7c3aed;
+            --green: #25F464;
+            --cyan: #22d3ee;
+            --text-primary: #ffffff;
+            --text-gray-400: #9ca3af;
+            --text-gray-500: #6b7280;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-primary);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            padding-bottom: 60px;
+        }
+        header {
+            background: rgba(10, 10, 10, 0.8);
+            border-bottom: 1px solid var(--card-border);
+            padding: 1.2rem 2rem;
+            position: sticky; top: 0; z-index: 100;
+            backdrop-filter: blur(10px);
+        }
+        .header-content {
+            max-width: 1100px; margin: 0 auto;
+            display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+        }
+        .back-link { color: var(--text-gray-400); text-decoration: none; font-size: 0.85rem; transition: color .2s; }
+        .back-link:hover { color: #fff; }
+        .logo { font-weight: 700; letter-spacing: -0.02em; }
+        .logo-knob { color: var(--green); }
+        .page-title { font-size: 0.85rem; color: var(--text-gray-500); }
+        main { max-width: 1100px; margin: 0 auto; padding: 2rem; }
+        .intro h1 { font-size: 1.6rem; margin-bottom: .4rem; }
+        .intro p { color: var(--text-gray-400); font-size: .95rem; max-width: 640px; margin-bottom: 1.5rem; }
+        .cta-share {
+            display: inline-block; background: var(--green); color: #0a0a0a;
+            padding: .7rem 1.3rem; border-radius: 10px; font-weight: 600; font-size: .9rem;
+            text-decoration: none; margin-bottom: 2rem; transition: transform .15s;
+        }
+        .cta-share:hover { transform: translateY(-1px); }
+        .filtros { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1.8rem; }
+        .filtro {
+            background: transparent; border: 1px solid #333; color: var(--text-gray-400);
+            padding: .4rem .9rem; border-radius: 999px; font-size: .8rem; cursor: pointer; transition: all .15s;
+        }
+        .filtro:hover { border-color: #555; color: #fff; }
+        .filtro.activo { background: var(--purple); border-color: var(--purple); color: #fff; }
+        .posts { display: grid; gap: 1.2rem; }
+        .post {
+            background: var(--card-bg); border: 1px solid var(--card-border);
+            border-radius: 14px; padding: 1.3rem; transition: border-color .2s;
+        }
+        .post:hover { border-color: rgba(255,255,255,0.12); }
+        .post-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: .8rem; }
+        .post-titulo { font-size: 1.1rem; font-weight: 600; }
+        .estado { font-size: .72rem; padding: .2rem .6rem; border-radius: 999px; white-space: nowrap; flex-shrink: 0; }
+        .estado.verde { background: rgba(37,244,100,.12); color: var(--green); }
+        .estado.en_desarrollo { background: rgba(245,158,11,.12); color: #fbbf24; }
+        .estado.avanzado { background: rgba(34,211,238,.12); color: var(--cyan); }
+        .autor { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+        .autor-nombre { font-weight: 600; font-size: .9rem; }
+        .badge { font-size: .7rem; padding: .15rem .55rem; border-radius: 999px; background: rgba(37,244,100,.1); color: var(--green); border: 1px solid rgba(37,244,100,.2); }
+        /* Player */
+        .player { display: flex; align-items: center; gap: .9rem; margin: 1rem 0; }
+        .play-btn {
+            flex-shrink: 0; width: 46px; height: 46px; border-radius: 50%;
+            background: var(--green); border: none; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; transition: transform .12s;
+        }
+        .play-btn:hover { transform: scale(1.06); }
+        .play-btn svg { width: 18px; height: 18px; fill: #0a0a0a; }
+        .wave-wrap { flex: 1; display: flex; flex-direction: column; gap: .25rem; }
+        .wave { width: 100%; height: 48px; cursor: pointer; display: block; }
+        .tiempo { font-size: .72rem; color: var(--text-gray-500); font-variant-numeric: tabular-nums; }
+        /* Datos */
+        .datos { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .4rem; }
+        .dato { font-size: .73rem; padding: .25rem .6rem; border-radius: 6px; background: rgba(255,255,255,.04); color: var(--text-gray-400); }
+        .dato b { color: #d1d5db; font-weight: 600; }
+        .loading, .empty { text-align: center; padding: 4rem 1rem; color: var(--text-gray-500); }
+        .spinner { width: 32px; height: 32px; border: 3px solid #222; border-top-color: var(--green); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 1rem; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        footer { max-width: 1100px; margin: 3rem auto 0; padding: 2rem; border-top: 1px solid var(--card-border); }
+        footer nav { display: flex; gap: 1.2rem; flex-wrap: wrap; margin-bottom: .6rem; }
+        footer a { color: var(--text-gray-500); text-decoration: none; font-size: .8rem; }
+        footer a:hover { color: #fff; }
+        footer p { color: var(--text-gray-500); font-size: .75rem; }
+        @media (max-width: 600px) { main { padding: 1.2rem; } header { padding: 1rem; } }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <a href="/" class="back-link">← Volver</a>
+            <div class="logo">mento<span class="logo-knob">⊙</span>track</div>
+            <div class="page-title">Comunidad</div>
+        </div>
+    </header>
+
+    <main>
+        <div class="intro">
+            <h1>La comunidad de Mentotrack</h1>
+            <p>Tracks de otros productores, compartidos con su análisis. Escúchalos, aprende de lo que hacen
+               y comparte los tuyos para recibir feedback. Aquí se viene a ayudar — respeta la autoría de lo que escuchas.</p>
+            <a href="/" class="cta-share">Analiza un track y compártelo →</a>
+        </div>
+
+        <div class="filtros" id="filtros"></div>
+        <div id="loading" class="loading"><div class="spinner"></div><p>Cargando tracks…</p></div>
+        <div id="empty" class="empty" style="display:none;">
+            <p>Aún no hay tracks compartidos. Sé el primero: analiza un track y compártelo con la comunidad.</p>
+        </div>
+        <div id="posts" class="posts"></div>
+    </main>
+
+    <footer>
+        <nav>
+            <a href="/">Inicio</a>
+            <a href="/ideas">Ideas</a>
+            <a href="/changelog">Changelog</a>
+            <a href="/terminos">Términos</a>
+            <a href="/privacidad">Privacidad</a>
+        </nav>
+        <p>© 2026 Mentotrack · Producción Online</p>
+    </footer>
+
+    <script>
+        const API = '/api';
+        // Mapas de labels que no cambian (los géneros se cargan de /api/opciones)
+        const LBL_EXP = { menos_6m: 'Menos de 6 meses', '6m_2a': '6 meses–2 años', '2a_5a': '2–5 años', mas_5a: '+5 años produciendo' };
+        const LBL_PUB = { no: '', autoeditado: 'Autoeditado', plataformas: 'En plataformas', sellos: 'Editado en sellos' };
+        const LBL_EST = { verde: '🌱 Fase temprana', en_desarrollo: '🟡 En desarrollo', avanzado: '🔵 Puliendo' };
+        let LBL_GEN = {}, LBL_OBJ = {};
+        let filtroActual = '';
+        let audioActual = null;
+
+        const esc = (s) => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; };
+        const fmtTiempo = (s) => { if (s == null || isNaN(s)) return '0:00'; const m = Math.floor(s / 60), sec = Math.floor(s % 60); return m + ':' + String(sec).padStart(2, '0'); };
+
+        async function init() {
+            try {
+                const opt = await fetch(`${API}/opciones`).then(r => r.json());
+                (opt.generos || []).forEach(g => LBL_GEN[g.value] = g.label);
+                (opt.objetivos || []).forEach(o => LBL_OBJ[o.value] = o.label);
+            } catch (e) { /* sin labels, se muestran los values */ }
+            renderFiltros();
+            cargarPosts();
+        }
+
+        function renderFiltros() {
+            const cont = document.getElementById('filtros');
+            const generos = Object.keys(LBL_GEN);
+            let html = `<button class="filtro ${filtroActual === '' ? 'activo' : ''}" data-e="">Todos</button>`;
+            generos.forEach(v => {
+                html += `<button class="filtro ${filtroActual === v ? 'activo' : ''}" data-e="${v}">${esc(LBL_GEN[v])}</button>`;
+            });
+            cont.innerHTML = html;
+            cont.querySelectorAll('.filtro').forEach(b => b.onclick = () => {
+                filtroActual = b.dataset.e; renderFiltros(); cargarPosts();
+            });
+        }
+
+        async function cargarPosts() {
+            const loading = document.getElementById('loading');
+            const empty = document.getElementById('empty');
+            const cont = document.getElementById('posts');
+            loading.style.display = 'block'; empty.style.display = 'none'; cont.innerHTML = '';
+            if (audioActual) { audioActual.pause(); audioActual = null; }
+            try {
+                const url = `${API}/comunidad/posts` + (filtroActual ? `?estilo=${encodeURIComponent(filtroActual)}` : '');
+                const data = await fetch(url).then(r => r.json());
+                const posts = data.posts || [];
+                loading.style.display = 'none';
+                if (posts.length === 0) { empty.style.display = 'block'; return; }
+                posts.forEach(p => cont.appendChild(renderPost(p)));
+            } catch (e) {
+                loading.style.display = 'none';
+                empty.style.display = 'block';
+                empty.querySelector('p').textContent = 'No se pudieron cargar los tracks. Recarga la página.';
+            }
+        }
+
+        function distintivo(a) {
+            const partes = [];
+            if (a.experiencia && LBL_EXP[a.experiencia]) partes.push(LBL_EXP[a.experiencia]);
+            if (a.estilos && a.estilos.length) partes.push(a.estilos.slice(0, 2).map(e => LBL_GEN[e] || e).join(', '));
+            if (a.publicado && LBL_PUB[a.publicado]) partes.push(LBL_PUB[a.publicado]);
+            return partes;
+        }
+
+        function renderPost(p) {
+            const card = document.createElement('div');
+            card.className = 'post';
+            const estiloTxt = p.estilo_custom || LBL_GEN[p.estilo] || p.estilo || '';
+            const badges = distintivo(p.autor).map(d => `<span class="badge">${esc(d)}</span>`).join('');
+
+            const datos = [];
+            if (estiloTxt) datos.push(`<span class="dato"><b>${esc(estiloTxt)}</b></span>`);
+            if (p.bpm) datos.push(`<span class="dato"><b>${p.bpm}</b> BPM</span>`);
+            if (p.objetivo && LBL_OBJ[p.objetivo]) datos.push(`<span class="dato">${esc(LBL_OBJ[p.objetivo])}</span>`);
+            if (p.lufs != null) datos.push(`<span class="dato"><b>${Number(p.lufs).toFixed(1)}</b> LUFS</span>`);
+            if (p.balance) datos.push(`<span class="dato">balance: ${esc(p.balance)}</span>`);
+            if (p.mono_nivel) datos.push(`<span class="dato">mono: ${esc(p.mono_nivel)}</span>`);
+
+            const estClass = ['verde', 'en_desarrollo', 'avanzado'].includes(p.estado_track) ? p.estado_track : '';
+            const estLbl = LBL_EST[p.estado_track] || '';
+
+            card.innerHTML = `
+                <div class="post-top">
+                    <div class="post-titulo">${esc(p.titulo)}</div>
+                    ${estLbl ? `<span class="estado ${estClass}">${esc(estLbl)}</span>` : ''}
+                </div>
+                <div class="autor">
+                    <span class="autor-nombre">@${esc(p.autor.username)}</span>
+                    ${badges}
+                </div>
+                <div class="player">
+                    <button class="play-btn" aria-label="Reproducir">
+                        <svg viewBox="0 0 24 24" class="ic-play"><path d="M8 5v14l11-7z"/></svg>
+                    </button>
+                    <div class="wave-wrap">
+                        <canvas class="wave" height="48"></canvas>
+                        <span class="tiempo">0:00 / ${fmtTiempo(p.duracion_seg)}</span>
+                    </div>
+                </div>
+                <div class="datos">${datos.join('')}</div>
+            `;
+
+            // Player
+            const audio = new Audio();
+            audio.preload = 'none';
+            audio.src = `${API}/comunidad/audio/${p.id}`;
+            const btn = card.querySelector('.play-btn');
+            const canvas = card.querySelector('.wave');
+            const tiempo = card.querySelector('.tiempo');
+            const peaks = (p.waveform && p.waveform.length) ? p.waveform : new Array(120).fill(0.15);
+
+            const dibujar = () => {
+                const w = canvas.clientWidth || 600, h = 48;
+                if (canvas.width !== w) canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, w, h);
+                const n = peaks.length, bw = w / n, prog = audio.duration ? audio.currentTime / audio.duration : 0;
+                for (let i = 0; i < n; i++) {
+                    const bh = Math.max(2, peaks[i] * h * 0.92);
+                    ctx.fillStyle = (i / n) <= prog ? '#25F464' : 'rgba(255,255,255,0.18)';
+                    ctx.fillRect(i * bw, (h - bh) / 2, Math.max(1, bw - 1), bh);
+                }
+            };
+            const ro = new ResizeObserver(dibujar); ro.observe(canvas);
+            setTimeout(dibujar, 30);
+
+            btn.onclick = () => {
+                if (audio.paused) {
+                    if (audioActual && audioActual !== audio) audioActual.pause();
+                    audioActual = audio;
+                    audio.play().catch(() => {});
+                } else { audio.pause(); }
+            };
+            const setIcon = (playing) => {
+                btn.innerHTML = playing
+                    ? '<svg viewBox="0 0 24 24" width="18" height="18"><rect x="6" y="5" width="4" height="14" fill="#0a0a0a"/><rect x="14" y="5" width="4" height="14" fill="#0a0a0a"/></svg>'
+                    : '<svg viewBox="0 0 24 24" width="18" height="18"><path d="M8 5v14l11-7z" fill="#0a0a0a"/></svg>';
+            };
+            audio.onplay = () => { setIcon(true); gtag('event', 'comunidad_play', { post: p.id }); };
+            audio.onpause = () => setIcon(false);
+            audio.onended = () => { setIcon(false); dibujar(); };
+            audio.ontimeupdate = () => {
+                dibujar();
+                tiempo.textContent = fmtTiempo(audio.currentTime) + ' / ' + fmtTiempo(audio.duration || p.duracion_seg);
+            };
+            canvas.onclick = (e) => {
+                if (!audio.duration) return;
+                const rect = canvas.getBoundingClientRect();
+                audio.currentTime = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * audio.duration;
+            };
+            return card;
+        }
+
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
