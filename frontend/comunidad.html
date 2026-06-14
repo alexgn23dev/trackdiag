@@ -358,7 +358,8 @@
             if (audioActual) { audioActual.pause(); audioActual = null; }
             try {
                 const url = `${API}/comunidad/posts` + (filtroActual ? `?estilo=${encodeURIComponent(filtroActual)}` : '');
-                const data = await fetch(url).then(r => r.json());
+                // con auth: el endpoint está gateado por la allowlist de la beta
+                const data = await fetch(url, { headers: authHdrs() }).then(r => r.json());
                 const posts = data.posts || [];
                 loading.style.display = 'none';
                 if (posts.length === 0) { empty.style.display = 'block'; return; }
