@@ -1130,6 +1130,94 @@
     }
 
 
+    // =====================================================================
+    // CTA in-app de la encuesta de comunidad — visible tras un análisis y en
+    // el panel, para no depender solo de quien recibió el email. Se oculta a
+    // quien ya respondió (email o app) o cierra el aviso.
+    // =====================================================================
+    function EncuestaCTA({ origen }) {
+        const [estado, setEstado] = useState('check'); // check | mostrar | votado | oculto
+        const [opciones, setOpciones] = useState({});
+        const [intro, setIntro] = useState('');
+        const [comentario, setComentario] = useState('');
+        const [comOk, setComOk] = useState(false);
+
+        useEffect(() => {
+            try { if (localStorage.getItem('mt_encuesta_cerrada')) { setEstado('oculto'); return; } } catch (e) {}
+            const { token } = getAuth();
+            if (!token) { setEstado('oculto'); return; }
+            let vivo = true;
+            fetch(`${API_URL}/api/encuesta/estado`, { headers: authHeaders() })
+                .then(r => r.ok ? r.json() : null)
+                .then(d => {
+                    if (!vivo) return;
+                    if (d && d.mostrar) { setOpciones(d.opciones || {}); setIntro(d.intro || ''); setEstado('mostrar'); }
+                    else setEstado('oculto');
+                })
+                .catch(() => { if (vivo) setEstado('oculto'); });
+            return () => { vivo = false; };
+        }, []);
+
+        const votar = (op) => {
+            setEstado('votado');
+            trackEvent('encuesta_voto_inapp', { opcion: op, origen: origen || '' });
+            fetch(`${API_URL}/api/encuesta/voto-auth`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ o: op }) }).catch(() => {});
+        };
+        const enviarComentario = () => {
+            const c = comentario.trim(); if (!c) return;
+            fetch(`${API_URL}/api/encuesta/comentario-auth`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ comentario: c }) })
+                .then(r => { if (r.ok) setComOk(true); }).catch(() => {});
+        };
+        const cerrar = () => { try { localStorage.setItem('mt_encuesta_cerrada', '1'); } catch (e) {} setEstado('oculto'); };
+
+        if (estado === 'check' || estado === 'oculto') return null;
+
+        return (
+            <div className="card p-5 mb-4" style={{borderLeft: '3px solid var(--po-purple)'}}>
+                <div className="flex items-start justify-between gap-3">
+                    <p className="text-xs accent-purple font-medium uppercase tracking-wider mb-1">Una pregunta rápida 🎧</p>
+                    {estado === 'mostrar' && (
+                        <button onClick={cerrar} title="Cerrar" className="text-gray-600 hover:text-gray-400 text-sm leading-none">✕</button>
+                    )}
+                </div>
+
+                {estado === 'mostrar' && (
+                    <div>
+                        <p className="text-white text-sm leading-relaxed mb-3">{intro}</p>
+                        <div className="flex flex-col gap-2">
+                            {Object.entries(opciones).map(([val, txt]) => (
+                                <button key={val} onClick={() => votar(val)}
+                                    className="px-4 py-2.5 rounded-lg text-xs text-left transition-colors"
+                                    style={{background: 'rgba(168,85,247,0.06)', border: '1px solid rgba(168,85,247,0.25)', color: 'var(--po-light)'}}
+                                    onMouseOver={e => e.currentTarget.style.background = 'rgba(168,85,247,0.16)'}
+                                    onMouseOut={e => e.currentTarget.style.background = 'rgba(168,85,247,0.06)'}>
+                                    {txt}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {estado === 'votado' && (
+                    <div>
+                        <p className="text-white text-sm mb-2" style={{color: 'var(--po-green)'}}>✓ ¡Gracias! Tu respuesta nos ayuda a decidir qué construir.</p>
+                        {!comOk ? (
+                            <div className="mt-2">
+                                <textarea value={comentario} onChange={e => setComentario(e.target.value)} maxLength={2000} rows={2}
+                                    placeholder="¿Quieres añadir algo? Qué te animaría o te frenaría… (opcional)"
+                                    className="w-full px-3 py-2 rounded-lg text-sm input-field" style={{resize: 'vertical'}} />
+                                <button onClick={enviarComentario} className="mt-2 px-4 py-2 btn-secondary rounded-lg text-xs">Enviar comentario</button>
+                            </div>
+                        ) : (
+                            <p className="text-xs text-gray-500">✓ Comentario guardado. ¡Gracias!</p>
+                        )}
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+
     function DiagnosticoScreen({ resultado, onReset, contexto, userEmail, file, opciones, nombreProyecto, onIrAPerfil, comunidadOk }) {
         const r = resultado;
         const d = r.datos_audio;
@@ -1893,6 +1981,9 @@
                     {diagId !== 'sin_diagnostico' && diagId !== 'track_verde' && (
                         <CTAAuditoria diagId={diagId} userEmail={userEmail} />
                     )}
+
+                    {/* CTA de la encuesta de comunidad (tras el análisis) */}
+                    <EncuestaCTA origen="diagnostico" />
 
                     {/* Acciones */}
                     <div className="text-center mt-4 mb-4 flex flex-col items-center gap-3">
@@ -3922,6 +4013,9 @@
                                     </button>
                                 </div>
                             </div>
+
+                            {/* CTA de la encuesta de comunidad (en el panel) */}
+                            {panelView === 'proyectos' && <EncuestaCTA origen="panel" />}
 
                             {/* === VISTA DE PERFIL DE COMUNIDAD === */}
                             {panelView === 'perfil' && (

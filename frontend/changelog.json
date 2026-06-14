@@ -1,6 +1,14 @@
 {
   "entries": [
     {
+      "version": "0.5.51",
+      "date": "2026-06-14",
+      "title": "Encuesta de comunidad también dentro de la app",
+      "changes": [
+        "El aviso de la encuesta ('¿quieres una comunidad de feedback entre productores?') aparece ahora tras un análisis y en tu panel, no solo por email — para que todos puedan opinar. Se vota con un clic y desaparece en cuanto respondes o lo cierras."
+      ]
+    },
+    {
       "version": "0.5.50",
       "date": "2026-06-14",
       "title": "Calidad de audio por tier: FLAC (Pro) vs MP3 (gratis)",

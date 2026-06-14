@@ -1337,6 +1337,21 @@ async def stats_reporte_mensual(pool: asyncpg.Pool, year: int, month: int) -> di
 
 
 @with_retry()
+async def tiene_respuesta_encuesta(pool: asyncpg.Pool, encuesta: str, email: str) -> bool:
+    """¿Ya respondió este usuario a la encuesta? (para no mostrarle el CTA in-app
+    si ya votó por email o dentro de la app)."""
+    email = (email or "").strip().lower()
+    if not email:
+        return False
+    async with pool.acquire() as conn:
+        v = await conn.fetchval(
+            "SELECT 1 FROM encuesta_respuestas WHERE encuesta = $1 AND email = $2",
+            encuesta, email,
+        )
+    return v is not None
+
+
+@with_retry()
 async def upsert_encuesta_respuesta(
     pool: asyncpg.Pool, encuesta: str, email: str, opcion: str
 ) -> None:

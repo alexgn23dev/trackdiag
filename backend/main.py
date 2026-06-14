@@ -51,7 +51,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.50")
+app = FastAPI(title="Mentotrack API", version="0.5.51")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -225,7 +225,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.50"}
+    return {"status": "ok", "version": "0.5.51"}
 
 
 # Validación compartida de uploads de audio (track principal y referencia)
@@ -3642,6 +3642,14 @@ async def _task_envio_encuesta():
 # =========================================================================
 
 ENCUESTA_ACTUAL = "comunidad-2026-06"
+# CTA in-app de la encuesta. Pon ENCUESTA_CTA_ACTIVA=0 en Railway para apagarlo
+# (cuando ya no quieras recoger más respuestas) sin tocar código.
+_ENCUESTA_CTA_ACTIVA = os.environ.get("ENCUESTA_CTA_ACTIVA", "1") not in ("0", "false", "no", "")
+_ENCUESTA_INTRO = (
+    "Estamos pensando en una zona de comunidad donde compartas tu idea o track "
+    "—con tu nombre— junto a otros productores, para daros feedback entre vosotros. "
+    "¿Te interesaría?"
+)
 _ENCUESTA_OPCIONES = {
     "todo": "Sí — compartiría mis tracks y comentaría los de otros",
     "solo_compartir": "Compartiría mis tracks, pero no me veo comentando los de otros",
@@ -3769,6 +3777,66 @@ async def encuesta_comentario(request: Request, data: dict):
     comentario = _sanitize(data.get("comentario", ""), 2000)
     if not email or not comentario:
         return JSONResponse(status_code=400, content={"error": "Token o comentario no válidos"})
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "DB no disponible"})
+    from db import get_pool
+    import repositories as repo
+    ok = await repo.set_encuesta_comentario(get_pool(), ENCUESTA_ACTUAL, email, comentario)
+    if not ok:
+        return JSONResponse(status_code=400, content={"error": "Elige primero una opción"})
+    return {"ok": True}
+
+
+# ---- CTA in-app de la encuesta (usuario logueado, vota con su sesión) --------
+
+@app.get("/api/encuesta/estado")
+@limiter.limit("30/minute")
+async def encuesta_estado(request: Request):
+    """¿Debe mostrarse el CTA de la encuesta al usuario logueado? Activo + no
+    ha respondido todavía (ni por email ni in-app)."""
+    email, err = _require_auth_user(request)
+    if err:
+        return err
+    if not _ENCUESTA_CTA_ACTIVA or not _pg_available():
+        return {"mostrar": False}
+    from db import get_pool
+    import repositories as repo
+    ya = await repo.tiene_respuesta_encuesta(get_pool(), ENCUESTA_ACTUAL, email)
+    return {
+        "mostrar": not ya,
+        "intro": _ENCUESTA_INTRO,
+        "opciones": _ENCUESTA_OPCIONES,
+    }
+
+
+@app.post("/api/encuesta/voto-auth")
+@limiter.limit("15/minute")
+async def encuesta_voto_auth(request: Request, data: dict):
+    """Voto de la encuesta desde dentro de la app (sesión, sin token de email)."""
+    email, err = _require_auth_user(request)
+    if err:
+        return err
+    opcion = data.get("o", "")
+    if opcion not in _ENCUESTA_OPCIONES:
+        return JSONResponse(status_code=400, content={"error": "Opción no válida"})
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "DB no disponible"})
+    from db import get_pool
+    import repositories as repo
+    await repo.upsert_encuesta_respuesta(get_pool(), ENCUESTA_ACTUAL, email, opcion)
+    return {"ok": True}
+
+
+@app.post("/api/encuesta/comentario-auth")
+@limiter.limit("10/minute")
+async def encuesta_comentario_auth(request: Request, data: dict):
+    """Comentario opcional de la encuesta desde la app (sesión)."""
+    email, err = _require_auth_user(request)
+    if err:
+        return err
+    comentario = _sanitize(data.get("comentario", ""), 2000)
+    if not comentario:
+        return JSONResponse(status_code=400, content={"error": "Comentario vacío"})
     if not _pg_available():
         return JSONResponse(status_code=503, content={"error": "DB no disponible"})
     from db import get_pool
