@@ -1,6 +1,14 @@
 {
   "entries": [
     {
+      "version": "0.5.52",
+      "date": "2026-06-14",
+      "title": "Limpieza visual: textos en blanco y sin emojis",
+      "changes": [
+        "Pasados a blanco los textos que estaban en morado (se leían peor) y quitados los emojis de la interfaz, para un look más limpio y sobrio."
+      ]
+    },
+    {
       "version": "0.5.51",
       "date": "2026-06-14",
       "title": "Encuesta de comunidad también dentro de la app",
