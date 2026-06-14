@@ -195,7 +195,7 @@
         // Mapas de labels que no cambian (los géneros se cargan de /api/opciones)
         const LBL_EXP = { menos_6m: 'Menos de 6 meses', '6m_2a': '6 meses–2 años', '2a_5a': '2–5 años', mas_5a: '+5 años produciendo' };
         const LBL_PUB = { no: '', autoeditado: 'Autoeditado', plataformas: 'En plataformas', sellos: 'Editado en sellos' };
-        const LBL_EST = { verde: 'Fase temprana', en_desarrollo: 'En desarrollo', avanzado: 'Puliendo' };
+        const LBL_EST = { verde: '🌱 Fase temprana', en_desarrollo: '🟡 En desarrollo', avanzado: '🔵 Puliendo' };
         let LBL_GEN = {}, LBL_OBJ = {};
         let filtroActual = '';
         let audioActual = null;
@@ -234,7 +234,7 @@
         function renderComentario(c, postId, puedoUtil) {
             const el = document.createElement('div');
             el.className = 'com';
-            const repBadge = (c.autor && c.autor.utiles) ? `<span class="badge-rep" style="font-size:.65rem" title="${c.autor.utiles} feedback(s) útiles">${c.autor.utiles}</span>` : '';
+            const repBadge = (c.autor && c.autor.utiles) ? `<span class="badge-rep" style="font-size:.65rem" title="${c.autor.utiles} feedback(s) útiles">⭐ ${c.autor.utiles}</span>` : '';
             const badges = repBadge + distintivoCom(c.autor).map(d => `<span class="com-badge">${esc(d)}</span>`).join('');
             let acciones = '';
             if (puedoUtil) acciones += `<button class="com-accion util-toggle ${c.util ? 'util-on' : ''}">${c.util ? '✓ Útil' : 'Marcar útil'}</button>`;
@@ -384,7 +384,7 @@
         function badgeUtiles(a) {
             const n = a && a.utiles ? a.utiles : 0;
             if (!n) return '';
-            return `<span class="badge-rep" title="${n} feedback(s) que otros marcaron como útiles">${n} útil${n === 1 ? '' : 'es'}</span>`;
+            return `<span class="badge-rep" title="${n} feedback(s) que otros marcaron como útiles">⭐ ${n} útil${n === 1 ? '' : 'es'}</span>`;
         }
 
         function renderPost(p) {
@@ -425,7 +425,7 @@
                     </div>
                 </div>
                 <div class="datos">${datos.join('')}</div>
-                <button class="com-toggle"><span class="com-count">${p.n_comentarios || 0}</span> ${(p.n_comentarios === 1) ? 'comentario' : 'comentarios'}</button>
+                <button class="com-toggle">💬 <span class="com-count">${p.n_comentarios || 0}</span> ${(p.n_comentarios === 1) ? 'comentario' : 'comentarios'}</button>
                 <div class="com-seccion">
                     <div class="com-lista"></div>
                     <div class="com-composer"></div>

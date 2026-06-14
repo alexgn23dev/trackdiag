@@ -491,7 +491,7 @@
                             )}
                         </div>
                         <p className="text-xs mt-3 text-center" style={{color: 'var(--po-medium)'}}>
-                            Mentotrack no guarda el archivo de tu canción
+                            🔒 Mentotrack no guarda el archivo de tu canción
                         </p>
                     </div>
                 </div>
@@ -1113,7 +1113,8 @@
 
                             {estado === 'ok' && (
                                 <div className="text-center py-6">
-                                                    <p className="text-white text-sm font-medium mb-2">¡Track publicado en la comunidad!</p>
+                                    <div className="text-3xl mb-3">🤝</div>
+                                    <p className="text-white text-sm font-medium mb-2">¡Track publicado en la comunidad!</p>
                                     <p className="text-gray-400 text-xs mb-5">Ya está en el muro para que otros productores lo escuchen. Pásate a escuchar los suyos y devuélveles el feedback.</p>
                                     <div className="flex gap-3 justify-center">
                                         <a href="/comunidad" className="px-5 py-2.5 btn-primary rounded-lg text-sm font-semibold">Ver en la comunidad</a>
@@ -1276,10 +1277,10 @@
         });
 
         const semaforoConfig = r.estado_track === 'verde'
-            ? { color: '#f87171', bg: 'rgba(248,113,113,0.10)', border: '#7f1d1d', label: 'Fase temprana' }
+            ? { color: '#f87171', bg: 'rgba(248,113,113,0.10)', border: '#7f1d1d', label: 'Fase temprana', icon: '🔴' }
             : r.estado_track === 'avanzado'
-            ? { color: '#60a5fa', bg: 'rgba(96,165,250,0.10)', border: '#1e3a5f', label: 'Listo para pulir' }
-            : { color: '#facc15', bg: 'rgba(250,204,21,0.10)', border: '#713f12', label: 'En desarrollo' };
+            ? { color: '#60a5fa', bg: 'rgba(96,165,250,0.10)', border: '#1e3a5f', label: 'Listo para pulir', icon: '🔵' }
+            : { color: '#facc15', bg: 'rgba(250,204,21,0.10)', border: '#713f12', label: 'En desarrollo', icon: '🟡' };
 
         return (
             <div className="min-h-screen py-12 px-6 fade-in">
@@ -1287,6 +1288,7 @@
 
                     {/* ===== RESUMEN VISUAL ===== */}
                     <div className="card p-8 mb-6 text-center" style={{borderTop: `3px solid ${semaforoConfig.color}`}}>
+                        <div className="text-2xl mb-2">{semaforoConfig.icon}</div>
                         <p className="text-sm font-medium uppercase tracking-wider mb-2" style={{color: semaforoConfig.color}}>
                             {semaforoConfig.label}
                         </p>
@@ -2388,14 +2390,14 @@
                     <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-semibold text-white">{username ? '@' + username : 'tu_usuario'}</span>
                         {utilesRecibidos > 0 && (
-                            <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{background: 'rgba(250,204,21,0.12)', color: '#fbbf24', border: '1px solid rgba(250,204,21,0.25)'}} title="Feedbacks que otros marcaron como útiles">{utilesRecibidos} {utilesRecibidos === 1 ? 'útil' : 'útiles'}</span>
+                            <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{background: 'rgba(250,204,21,0.12)', color: '#fbbf24', border: '1px solid rgba(250,204,21,0.25)'}} title="Feedbacks que otros marcaron como útiles">⭐ {utilesRecibidos} {utilesRecibidos === 1 ? 'útil' : 'útiles'}</span>
                         )}
                         {distintivo.length > 0 ? distintivo.map((d, i) => (
                             <span key={i} className="text-xs px-2 py-0.5 rounded-full" style={{background: 'rgba(37,244,100,0.1)', color: 'var(--po-green)', border: '1px solid rgba(37,244,100,0.2)'}}>{d}</span>
                         )) : <span className="text-xs text-gray-600">— completa los campos para ver tu distintivo —</span>}
                     </div>
                     {utilesRecibidos === 0 && (
-                        <p className="text-xs text-gray-600 mt-2">Deja feedback útil en tracks de otros y tu reputación irá subiendo en la comunidad.</p>
+                        <p className="text-xs text-gray-600 mt-2">Deja feedback útil en tracks de otros y tu ⭐ irá subiendo — es tu reputación en la comunidad.</p>
                     )}
                 </div>
 
@@ -2771,10 +2773,10 @@
             const enlace = row.feedback_real || row.enlace_feedback_real || '';
             const est = estado.toLowerCase();
             const semaforo = est.includes('temprana') || est.includes('verde')
-                ? { color: '#f87171', bg: 'rgba(248,113,113,0.08)', border: '#7f1d1d', label: 'Fase temprana' }
+                ? { emoji: '🔴', color: '#f87171', bg: 'rgba(248,113,113,0.08)', border: '#7f1d1d', label: 'Fase temprana' }
                 : est.includes('pulir') || est.includes('avanzado') || est.includes('azul')
-                ? { color: '#60a5fa', bg: 'rgba(96,165,250,0.08)', border: '#1e3a5f', label: 'Listo para pulir' }
-                : { color: '#facc15', bg: 'rgba(250,204,21,0.08)', border: '#713f12', label: 'En desarrollo' };
+                ? { emoji: '🔵', color: '#60a5fa', bg: 'rgba(96,165,250,0.08)', border: '#1e3a5f', label: 'Listo para pulir' }
+                : { emoji: '🟡', color: '#facc15', bg: 'rgba(250,204,21,0.08)', border: '#713f12', label: 'En desarrollo' };
             return {
                 diag, genero, fase, objetivo, estado, diagPrincipal, explicacion, prioridades,
                 bpm, duracion, lufs, fueUtil, comentario, enlace, semaforo,
@@ -2807,6 +2809,7 @@
                         <div className="rounded-lg px-4 py-3"
                              style={{ background: semaforo.bg, border: `1px solid ${semaforo.border}` }}>
                             <div className="flex items-center gap-2">
+                                <span>{semaforo.emoji}</span>
                                 <span className="text-sm" style={{ color: semaforo.color }}>{estado}</span>
                             </div>
                         </div>
@@ -3979,6 +3982,7 @@
                                         className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-xs transition-colors inline-flex items-center gap-1.5"
                                         title="Tu perfil de productor para la comunidad"
                                     >
+                                        <span>👤</span>
                                         <span>Mi perfil</span>
                                     </button>
                                     {comunidadOk && (
@@ -3997,6 +4001,7 @@
                                         className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-xs transition-colors inline-flex items-center gap-1.5"
                                         title="Propón mejoras y vota ideas de la comunidad"
                                     >
+                                        <span>💡</span>
                                         <span>Propón ideas</span>
                                     </a>
                                     <button
@@ -4191,6 +4196,7 @@
                                                             >
                                                                 <div className="flex items-center justify-between">
                                                                     <div className="flex items-center gap-3 min-w-0">
+                                                                        <span className="text-lg">{parsed.semaforo.emoji}</span>
                                                                         <div className="min-w-0">
                                                                             <div className="flex items-center gap-2">
                                                                                 <span className="text-white font-medium text-sm">v{v.version_num}</span>
@@ -4203,10 +4209,10 @@
                                                                     <div className="flex items-center gap-3 whitespace-nowrap">
                                                                         {parsed.fueUtil && (
                                                                             <span className={parsed.fueUtil === 'Sí' ? 'accent-green text-xs' : 'text-red-400 text-xs'}>
-                                                                                {parsed.fueUtil === 'Sí' ? 'Útil' : 'No útil'}
+                                                                                {parsed.fueUtil === 'Sí' ? '👍' : '👎'}
                                                                             </span>
                                                                         )}
-                                                                        <span className="text-gray-600 text-xs">
+                                                                                                                                                <span className="text-gray-600 text-xs">
                                                                             {v.timestamp ? new Date(v.timestamp).toLocaleDateString('es-ES', {day:'numeric',month:'short'}) : ''}
                                                                         </span>
                                                                         <span className="text-gray-600 text-xs">{isOpen ? '▲' : '▼'}</span>
@@ -4274,10 +4280,10 @@
                                         const estado = estadoMatch ? estadoMatch[1].trim() : '';
                                         const est = estado.toLowerCase();
                                         const semaforo = est.includes('temprana') || est.includes('verde')
-                                            ? { color: '#f87171', bg: 'rgba(248,113,113,0.08)', border: '#7f1d1d', label: 'Fase temprana' }
+                                            ? { emoji: '🔴', color: '#f87171', bg: 'rgba(248,113,113,0.08)', border: '#7f1d1d', label: 'Fase temprana' }
                                             : est.includes('pulir') || est.includes('avanzado') || est.includes('azul')
-                                            ? { color: '#60a5fa', bg: 'rgba(96,165,250,0.08)', border: '#1e3a5f', label: 'Listo para pulir' }
-                                            : { color: '#facc15', bg: 'rgba(250,204,21,0.08)', border: '#713f12', label: 'En desarrollo' };
+                                            ? { emoji: '🔵', color: '#60a5fa', bg: 'rgba(96,165,250,0.08)', border: '#1e3a5f', label: 'Listo para pulir' }
+                                            : { emoji: '🟡', color: '#facc15', bg: 'rgba(250,204,21,0.08)', border: '#713f12', label: 'En desarrollo' };
 
                                         // Diagnóstico principal
                                         const dpMatch = diag.match(/DIAGNÓSTICO PRINCIPAL:\s*(.+)/i);
@@ -4314,6 +4320,7 @@
                                                 >
                                                     <div className="flex items-center justify-between">
                                                         <div className="flex items-center gap-3">
+                                                            <span className="text-lg">{semaforo.emoji}</span>
                                                             <div>
                                                                 <div className="flex items-center gap-2">
                                                                     <span className="text-white text-sm font-medium">{genero || 'Sin género'}</span>
@@ -4325,10 +4332,10 @@
                                                         <div className="flex items-center gap-3">
                                                             {fueUtil && (
                                                                 <span className={fueUtil === 'Sí' ? 'accent-green text-xs' : 'text-red-400 text-xs'}>
-                                                                    {fueUtil === 'Sí' ? 'Útil' : 'No útil'}
+                                                                    {fueUtil === 'Sí' ? '👍' : '👎'}
                                                                 </span>
                                                             )}
-                                                            <span className="text-gray-600 text-xs">
+                                                                                                                        <span className="text-gray-600 text-xs">
                                                                 {date ? date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
                                                             </span>
                                                             <span className="text-gray-600 text-xs">{isExpanded ? '▲' : '▼'}</span>
@@ -4344,7 +4351,8 @@
                                                             style={{background: 'rgba(168,85,247,0.18)', color: '#ffffff', border: '1px solid rgba(168,85,247,0.4)'}}
                                                             title={rowProyectoNombre}
                                                         >
-                                                                        <span className="truncate" style={{maxWidth: '180px'}}>{rowProyectoNombre}</span>
+                                                            <span>📁</span>
+                                                            <span className="truncate" style={{maxWidth: '180px'}}>{rowProyectoNombre}</span>
                                                             {versionNum != null && <span style={{opacity: 0.8}}>· v{versionNum}</span>}
                                                             {versionEtq && <span style={{opacity: 0.7}} className="truncate" title={versionEtq}>· {versionEtq}</span>}
                                                         </span>

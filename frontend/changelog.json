@@ -1,11 +1,11 @@
 {
   "entries": [
     {
-      "version": "0.5.52",
+      "version": "0.5.53",
       "date": "2026-06-14",
-      "title": "Limpieza visual: textos en blanco y sin emojis",
+      "title": "Limpieza visual: textos en blanco",
       "changes": [
-        "Pasados a blanco los textos que estaban en morado (se leían peor) y quitados los emojis de la interfaz, para un look más limpio y sobrio."
+        "Pasados a blanco los textos que estaban en morado (se leían peor). Quitado el emoji de auriculares de la interfaz; el resto se mantienen."
       ]
     },
     {
