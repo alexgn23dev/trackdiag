@@ -1759,3 +1759,16 @@ async def reciprocidad_stats(pool: asyncpg.Pool, usuario_id) -> dict:
             usuario_id,
         )
     return {"activos": int(activos or 0), "comentados": int(comentados or 0)}
+
+
+@with_retry()
+async def is_comunidad_beta(pool: asyncpg.Pool, email: str) -> bool:
+    """¿Está este usuario habilitado a la comunidad por flag de DB (beta)?"""
+    email = (email or "").strip().lower()
+    if not email:
+        return False
+    async with pool.acquire() as conn:
+        v = await conn.fetchval(
+            "SELECT comunidad_beta FROM usuarios WHERE LOWER(email) = $1", email
+        )
+    return bool(v)

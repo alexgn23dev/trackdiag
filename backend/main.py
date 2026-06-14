@@ -51,7 +51,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.46")
+app = FastAPI(title="Mentotrack API", version="0.5.47")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -225,7 +225,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.46"}
+    return {"status": "ok", "version": "0.5.47"}
 
 
 # Validación compartida de uploads de audio (track principal y referencia)
@@ -3920,19 +3920,34 @@ _COMUNIDAD_EMAILS = {
 }
 
 
-def _comunidad_habilitada(email: str | None) -> bool:
+async def _comunidad_habilitada(email: str | None) -> bool:
+    """¿Puede este email usar la comunidad? True si: la env la abre a todos
+    ('*'), el email está en COMUNIDAD_EMAILS, o el usuario tiene el flag
+    comunidad_beta en la DB (habilitación individual sin tocar env ni redeploy)."""
     if "*" in _COMUNIDAD_EMAILS:
         return True
-    return bool(email) and email.strip().lower() in _COMUNIDAD_EMAILS
+    if not email:
+        return False
+    if email.strip().lower() in _COMUNIDAD_EMAILS:
+        return True
+    if not _pg_available():
+        return False
+    try:
+        from db import get_pool
+        import repositories as repo
+        return await repo.is_comunidad_beta(get_pool(), email)
+    except Exception as e:
+        print(f"[COMUNIDAD] check beta falló: {e}")
+        return False
 
 
-def _require_comunidad(request: Request) -> tuple[str | None, JSONResponse | None]:
+async def _require_comunidad(request: Request) -> tuple[str | None, JSONResponse | None]:
     """Auth + allowlist de la comunidad. Mientras esté en pruebas privadas,
     solo los emails permitidos pasan; el resto recibe 403 'comunidad_oculta'."""
     email, err = _require_auth_user(request)
     if err:
         return None, err
-    if not _comunidad_habilitada(email):
+    if not await _comunidad_habilitada(email):
         return None, JSONResponse(
             status_code=403,
             content={"error": "La comunidad está en pruebas privadas todavía.", "codigo": "comunidad_oculta"},
@@ -4065,7 +4080,7 @@ async def comunidad_habilitada_endpoint(request: Request):
     """¿Puede el usuario actual ver/usar la comunidad? (pruebas privadas).
     El frontend oculta toda la UI de comunidad si devuelve false."""
     email = _optional_auth_user(request)
-    return {"habilitada": _comunidad_habilitada(email)}
+    return {"habilitada": await _comunidad_habilitada(email)}
 
 
 @app.post("/api/comunidad/compartir")
@@ -4088,7 +4103,7 @@ async def comunidad_compartir(
     """Comparte un track con la comunidad. Requiere sesión + perfil completo
     + aceptar el descargo de autoría. El audio queda en el volumen y los
     datos objetivos del análisis acompañan al post."""
-    email, err = _require_comunidad(request)
+    email, err = await _require_comunidad(request)
     if err:
         return err
     if descargo not in ("si", "true", "1"):
@@ -4264,7 +4279,7 @@ async def comunidad_compartir(
 async def comunidad_posts(request: Request, estilo: str = "", limit: int = 50):
     """Muro de la comunidad: posts activos con el distintivo del autor.
     En pruebas privadas: solo la allowlist (el resto, lista vacía)."""
-    if not _comunidad_habilitada(_optional_auth_user(request)):
+    if not await _comunidad_habilitada(_optional_auth_user(request)):
         return {"posts": [], "oculta": True}
     if not _pg_available():
         return JSONResponse(status_code=503, content={"error": "Base de datos no disponible"})
@@ -4378,7 +4393,7 @@ async def comunidad_audio(request: Request, post_id: str):
 @limiter.limit("10/minute")
 async def comunidad_borrar(request: Request, post_id: str):
     """El autor retira su track de la comunidad (soft-delete + borra el audio)."""
-    email, err = _require_comunidad(request)
+    email, err = await _require_comunidad(request)
     if err:
         return err
     if not _pg_available():
@@ -4430,7 +4445,7 @@ def _comentario_autor_dict(r: dict, viewer_id=None, post_owner_id=None) -> dict:
 async def comunidad_listar_comentarios(request: Request, post_id: str):
     """Comentarios de un track. En pruebas privadas: solo la allowlist.
     Con sesión, marca cuáles son tuyos y si eres el dueño del track."""
-    if not _comunidad_habilitada(_optional_auth_user(request)):
+    if not await _comunidad_habilitada(_optional_auth_user(request)):
         return JSONResponse(status_code=403, content={"error": "La comunidad está en pruebas privadas.", "codigo": "comunidad_oculta"})
     if not _pg_available():
         return JSONResponse(status_code=503, content={"error": "Base de datos no disponible"})
@@ -4463,7 +4478,7 @@ async def comunidad_listar_comentarios(request: Request, post_id: str):
 async def comunidad_crear_comentario(request: Request, post_id: str, data: dict):
     """Deja feedback en un track. Requiere sesión + perfil completo (tu
     distintivo da credibilidad). No puedes comentar tu propio track."""
-    email, err = _require_comunidad(request)
+    email, err = await _require_comunidad(request)
     if err:
         return err
     texto = _sanitize(data.get("texto", ""), 1500)
@@ -4515,7 +4530,7 @@ async def comunidad_crear_comentario(request: Request, post_id: str, data: dict)
 @limiter.limit("20/minute")
 async def comunidad_borrar_comentario(request: Request, comentario_id: str):
     """El autor borra su comentario."""
-    email, err = _require_comunidad(request)
+    email, err = await _require_comunidad(request)
     if err:
         return err
     if not _pg_available():
@@ -4540,7 +4555,7 @@ async def comunidad_borrar_comentario(request: Request, comentario_id: str):
 @limiter.limit("60/minute")
 async def comunidad_marcar_util(request: Request, comentario_id: str):
     """El dueño del track marca/desmarca un comentario como 'me ayudó'."""
-    email, err = _require_comunidad(request)
+    email, err = await _require_comunidad(request)
     if err:
         return err
     if not _pg_available():
