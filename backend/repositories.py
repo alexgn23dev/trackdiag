@@ -1591,7 +1591,7 @@ async def list_comunidad_posts(
         rows = await conn.fetch(
             f"""SELECT p.id, p.timestamp, p.titulo, p.mensaje, p.estilo, p.estilo_custom,
                        p.bpm, p.objetivo, p.lufs, p.balance, p.mono_correlacion,
-                       p.mono_nivel, p.estado_track, p.duracion_seg, p.waveform,
+                       p.mono_nivel, p.estado_track, p.duracion_seg, p.waveform, p.audio_mime,
                        u.username,
                        u.perfil_experiencia, u.perfil_estilos,
                        u.perfil_publicado, u.perfil_donde, u.perfil_bio,
@@ -1770,5 +1770,18 @@ async def is_comunidad_beta(pool: asyncpg.Pool, email: str) -> bool:
     async with pool.acquire() as conn:
         v = await conn.fetchval(
             "SELECT comunidad_beta FROM usuarios WHERE LOWER(email) = $1", email
+        )
+    return bool(v)
+
+
+@with_retry()
+async def is_pro(pool: asyncpg.Pool, email: str) -> bool:
+    """¿Es el usuario Pro? (tier de pago: FLAC sin pérdida vs MP3)."""
+    email = (email or "").strip().lower()
+    if not email:
+        return False
+    async with pool.acquire() as conn:
+        v = await conn.fetchval(
+            "SELECT pro FROM usuarios WHERE LOWER(email) = $1", email
         )
     return bool(v)

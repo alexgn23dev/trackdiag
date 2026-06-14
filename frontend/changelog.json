@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "version": "0.5.50",
+      "date": "2026-06-14",
+      "title": "Calidad de audio por tier: FLAC (Pro) vs MP3 (gratis)",
+      "changes": [
+        "Base del modelo Pro: los usuarios Pro comparten en FLAC sin pérdida (calidad de estudio, badge ✦ FLAC en el muro); los gratuitos, en MP3 320. Los archivos ya en MP3 se conservan tal cual en ambos casos.",
+        "El tier Pro aún se activa manualmente (sin pagos todavía) — queda listo para enganchar Stripe cuando lo decidamos."
+      ]
+    },
+    {
       "version": "0.5.49",
       "date": "2026-06-14",
       "title": "Audio de la comunidad en calidad sin pérdida (FLAC)",

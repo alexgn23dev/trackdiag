@@ -51,7 +51,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.49")
+app = FastAPI(title="Mentotrack API", version="0.5.50")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -225,7 +225,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.49"}
+    return {"status": "ok", "version": "0.5.50"}
 
 
 # Validación compartida de uploads de audio (track principal y referencia)
@@ -4038,12 +4038,12 @@ def _calcular_waveform(path: str, n_picos: int = 240):
     return [round(p / mx, 3) for p in picos], dur
 
 
-# Formatos sin pérdida que se almacenan como FLAC (idéntico al original,
-# ~mitad del peso de un WAV). FLAC ya subido y los lossy (MP3/OGG) se guardan
-# tal cual: re-codificar un lossy a FLAC no recupera calidad y solo infla peso.
-_AUDIO_LOSSLESS_A_FLAC = {".wav", ".aiff", ".aif"}
-# (conservado para el futuro tier "Pro vs MP3" de monetización)
-_MP3_PASSTHROUGH_MAX = 30 * 1024 * 1024
+# Formatos de subida SIN PÉRDIDA. La calidad final depende del tier:
+#   Pro    → FLAC sin pérdida (idéntico al máster)
+#   Gratis → MP3 320 (con pérdida)
+# Los lossy (MP3/OGG) se guardan tal cual para todos: re-codificar no recupera
+# calidad y solo gasta espacio.
+_AUDIO_LOSSLESS = {".wav", ".aiff", ".aif", ".flac"}
 
 
 def _transcodificar_flac(origen: str, destino: str) -> bool:
@@ -4144,6 +4144,7 @@ async def comunidad_compartir(
             status_code=403,
             content={"error": "Completa tu perfil de productor antes de compartir — es lo que da credibilidad a tu track y a tu feedback.", "codigo": "perfil_incompleto"},
         )
+    user_pro = await repo.is_pro(pool, email)
 
     # Reciprocidad + cuota: 1 track gratis siempre; para tener 2-3 a la vez
     # hay que haber dado feedback en tantos tracks de otros como tracks tengas
@@ -4230,26 +4231,44 @@ async def comunidad_compartir(
             audio_bytes = fpath.stat().st_size
 
         fname = fpath = None
-        if extension in _AUDIO_LOSSLESS_A_FLAC:
-            # WAV/AIFF → FLAC: SIN PÉRDIDA (idéntico al original) y ~mitad de
-            # tamaño que el WAV. Calidad de estudio para la comunidad.
-            fname = f"{uuid.uuid4().hex}.flac"
+        es_lossless = extension in _AUDIO_LOSSLESS
+        if es_lossless and user_pro:
+            # PRO + fuente sin pérdida → FLAC sin pérdida (idéntico al máster).
+            # Si ya sube un FLAC, se conserva tal cual (ya es lossless).
+            if extension == ".flac":
+                _guardar_original()
+            else:
+                fname = f"{uuid.uuid4().hex}.flac"
+                fpath = destino / fname
+                ok = await asyncio.wait_for(
+                    loop.run_in_executor(None, lambda: _transcodificar_flac(tmp_orig, str(fpath))),
+                    timeout=200,
+                )
+                if ok:
+                    audio_mime = "audio/flac"
+                    audio_bytes = fpath.stat().st_size
+                else:
+                    print(f"[COMUNIDAD] encode FLAC falló, guardando original ({extension})")
+                    fpath.unlink(missing_ok=True)
+                    _guardar_original()
+        elif es_lossless and not user_pro:
+            # GRATIS + fuente sin pérdida → MP3 320 (con pérdida, menos peso).
+            fname = f"{uuid.uuid4().hex}.mp3"
             fpath = destino / fname
             ok = await asyncio.wait_for(
-                loop.run_in_executor(None, lambda: _transcodificar_flac(tmp_orig, str(fpath))),
+                loop.run_in_executor(None, lambda: _transcodificar_mp3(tmp_orig, str(fpath))),
                 timeout=200,
             )
             if ok:
-                audio_mime = "audio/flac"
+                audio_mime = "audio/mpeg"
                 audio_bytes = fpath.stat().st_size
             else:
-                # Fallback: guardar el original (su extensión real) si ffmpeg falla
-                print(f"[COMUNIDAD] encode FLAC falló, guardando original ({extension})")
+                print(f"[COMUNIDAD] encode MP3 falló, guardando original ({extension})")
                 fpath.unlink(missing_ok=True)
                 _guardar_original()
         else:
-            # FLAC (ya sin pérdida) o lossy (MP3/OGG): se guarda TAL CUAL —
-            # re-codificar un lossy a FLAC no recupera calidad y solo infla el peso.
+            # Fuente lossy (MP3/OGG): se guarda TAL CUAL para todos —
+            # re-codificar no recupera calidad y solo gasta espacio.
             _guardar_original()
     except asyncio.TimeoutError:
         print("[COMUNIDAD] transcode timeout")
@@ -4332,6 +4351,7 @@ async def comunidad_posts(request: Request, estilo: str = "", limit: int = 50):
             "estado_track": r.get("estado_track"),
             "duracion_seg": r.get("duracion_seg"),
             "waveform": r.get("waveform") or [],
+            "lossless": (r.get("audio_mime") == "audio/flac"),
             "n_comentarios": int(r.get("n_comentarios") or 0),
             "autor": {
                 "username": r.get("username") or "productor",

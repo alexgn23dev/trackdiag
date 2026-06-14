@@ -111,6 +111,7 @@
         .datos { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .4rem; }
         .dato { font-size: .73rem; padding: .25rem .6rem; border-radius: 6px; background: rgba(255,255,255,.04); color: var(--text-gray-400); }
         .dato b { color: #d1d5db; font-weight: 600; }
+        .dato-flac { background: rgba(34,211,238,.12); color: var(--cyan); font-weight: 600; }
         /* Comentarios */
         .com-toggle {
             margin-top: 1rem; background: none; border: none; color: var(--text-gray-400);
@@ -399,6 +400,7 @@
             if (p.lufs != null) datos.push(`<span class="dato"><b>${Number(p.lufs).toFixed(1)}</b> LUFS</span>`);
             if (p.balance) datos.push(`<span class="dato">balance: ${esc(p.balance)}</span>`);
             if (p.mono_nivel) datos.push(`<span class="dato">mono: ${esc(p.mono_nivel)}</span>`);
+            if (p.lossless) datos.push(`<span class="dato dato-flac" title="Audio sin pérdida, calidad de estudio">✦ FLAC</span>`);
 
             const estClass = ['verde', 'en_desarrollo', 'avanzado'].includes(p.estado_track) ? p.estado_track : '';
             const estLbl = LBL_EST[p.estado_track] || '';
