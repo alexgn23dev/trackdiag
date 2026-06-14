@@ -51,7 +51,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.47")
+app = FastAPI(title="Mentotrack API", version="0.5.48")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -225,7 +225,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.47"}
+    return {"status": "ok", "version": "0.5.48"}
 
 
 # Validación compartida de uploads de audio (track principal y referencia)
@@ -4089,6 +4089,7 @@ async def comunidad_compartir(
     request: Request,
     audio: UploadFile = File(...),
     titulo: str = Form(...),
+    mensaje: str = Form(""),
     estilo: str = Form(""),
     estilo_custom: str = Form(""),
     bpm: str = Form(""),
@@ -4248,6 +4249,7 @@ async def comunidad_compartir(
     datos = {
         "usuario_id": user["id"],
         "titulo": titulo,
+        "mensaje": _sanitize(mensaje, 300) or None,
         "estilo": _sanitize(estilo, 40) or None,
         "estilo_custom": _sanitize(estilo_custom, 60) or None,
         "bpm": int(bpm_v) if bpm_v else None,
@@ -4292,6 +4294,7 @@ async def comunidad_posts(request: Request, estilo: str = "", limit: int = 50):
             "id": str(r["id"]),
             "timestamp": r["timestamp"].isoformat() if r.get("timestamp") else None,
             "titulo": r["titulo"],
+            "mensaje": r.get("mensaje"),
             "estilo": r.get("estilo"),
             "estilo_custom": r.get("estilo_custom"),
             "bpm": r.get("bpm"),

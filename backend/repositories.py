@@ -1556,13 +1556,13 @@ async def crear_comunidad_post(pool: asyncpg.Pool, datos: dict) -> dict:
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """INSERT INTO comunidad_posts
-                 (usuario_id, titulo, estilo, estilo_custom, bpm, objetivo,
+                 (usuario_id, titulo, mensaje, estilo, estilo_custom, bpm, objetivo,
                   lufs, balance, mono_correlacion, mono_nivel, estado_track,
                   duracion_seg, waveform, audio_file, audio_mime, audio_bytes,
                   descargo_aceptado, analisis_id)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14,$15,$16,$17,$18)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15,$16,$17,$18,$19)
                RETURNING id, timestamp""",
-            datos["usuario_id"], datos["titulo"],
+            datos["usuario_id"], datos["titulo"], datos.get("mensaje"),
             datos.get("estilo"), datos.get("estilo_custom"),
             datos.get("bpm"), datos.get("objetivo"),
             datos.get("lufs"), datos.get("balance"),
@@ -1589,7 +1589,7 @@ async def list_comunidad_posts(
     args.append(min(limit, 100))
     async with pool.acquire() as conn:
         rows = await conn.fetch(
-            f"""SELECT p.id, p.timestamp, p.titulo, p.estilo, p.estilo_custom,
+            f"""SELECT p.id, p.timestamp, p.titulo, p.mensaje, p.estilo, p.estilo_custom,
                        p.bpm, p.objetivo, p.lufs, p.balance, p.mono_correlacion,
                        p.mono_nivel, p.estado_track, p.duracion_seg, p.waveform,
                        u.username,

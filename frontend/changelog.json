@@ -1,6 +1,14 @@
 {
   "entries": [
     {
+      "version": "0.5.48",
+      "date": "2026-06-14",
+      "title": "Mensaje de presentación al compartir un track",
+      "changes": [
+        "Al compartir un track con la comunidad puedes añadir un mensaje breve para dar contexto o decir en qué quieres feedback (p. ej. 'WIP, no sé si el break es muy largo'). Aparece junto al reproductor en el muro."
+      ]
+    },
+    {
       "version": "0.5.46",
       "date": "2026-06-14",
       "title": "Avisos por email y reputación visible en la comunidad",

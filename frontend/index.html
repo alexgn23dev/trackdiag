@@ -925,6 +925,7 @@
         const [estado, setEstado] = useState('form'); // form | cargando | sin_perfil | enviando | ok
         const [error, setError] = useState('');
         const [titulo, setTitulo] = useState('');
+        const [mensaje, setMensaje] = useState('');
         const [bpmEdit, setBpmEdit] = useState('');
         const [aceptado, setAceptado] = useState(false);
 
@@ -972,6 +973,7 @@
             const fd = new FormData();
             fd.append('audio', file);
             fd.append('titulo', titulo.trim());
+            fd.append('mensaje', mensaje.trim());
             fd.append('estilo', contexto.genero || '');
             fd.append('estilo_custom', contexto.genero === 'otro' ? (contexto.genero_custom || '') : '');
             fd.append('bpm', bpmEdit || '');
@@ -1054,6 +1056,13 @@
                                     <label className="block text-xs font-medium mb-1.5" style={{color: 'var(--po-light)'}}>Título</label>
                                     <input type="text" value={titulo} onChange={e => setTitulo(e.target.value)} maxLength={120}
                                         className="w-full px-4 py-3 rounded-lg text-sm input-field mb-4" placeholder="Nombre del track" />
+
+                                    <label className="block text-xs font-medium mb-1.5" style={{color: 'var(--po-light)'}}>
+                                        Mensaje <span style={{color: 'var(--po-medium)'}}>(opcional) — presenta tu idea o di en qué quieres feedback</span>
+                                    </label>
+                                    <textarea value={mensaje} onChange={e => setMensaje(e.target.value)} maxLength={300} rows={2}
+                                        className="w-full px-4 py-3 rounded-lg text-sm input-field mb-4" style={{resize: 'vertical'}}
+                                        placeholder="Ej: WIP de melodic techno. No sé si el break es muy largo ni si el bajo pega en el drop." />
 
                                     <div className="flex gap-3 mb-4">
                                         <div className="flex-1">
