@@ -51,7 +51,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.48")
+app = FastAPI(title="Mentotrack API", version="0.5.49")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -225,7 +225,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.48"}
+    return {"status": "ok", "version": "0.5.49"}
 
 
 # Validación compartida de uploads de audio (track principal y referencia)
@@ -4038,15 +4038,32 @@ def _calcular_waveform(path: str, n_picos: int = 240):
     return [round(p / mx, 3) for p in picos], dur
 
 
-# Un MP3 ya pequeño se guarda tal cual (no re-comprimir lossy→lossy);
-# todo lo demás (WAV/FLAC/AIFF/OGG o MP3 enorme) se transcodifica a MP3 320,
-# ~10x menos peso en el volumen y mejor streaming. Umbral: 30 MB.
+# Formatos sin pérdida que se almacenan como FLAC (idéntico al original,
+# ~mitad del peso de un WAV). FLAC ya subido y los lossy (MP3/OGG) se guardan
+# tal cual: re-codificar un lossy a FLAC no recupera calidad y solo infla peso.
+_AUDIO_LOSSLESS_A_FLAC = {".wav", ".aiff", ".aif"}
+# (conservado para el futuro tier "Pro vs MP3" de monetización)
 _MP3_PASSTHROUGH_MAX = 30 * 1024 * 1024
 
 
+def _transcodificar_flac(origen: str, destino: str) -> bool:
+    """Convierte `origen` a FLAC SIN PÉRDIDA en `destino` (compression_level 8
+    = máxima compresión, sigue siendo bit-perfect). Devuelve True si OK."""
+    import subprocess
+    try:
+        r = subprocess.run(
+            ["ffmpeg", "-y", "-i", origen, "-vn", "-map", "a:0",
+             "-codec:a", "flac", "-compression_level", "8", destino],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=180,
+        )
+        return r.returncode == 0 and os.path.isfile(destino) and os.path.getsize(destino) > 0
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return False
+
+
 def _transcodificar_mp3(origen: str, destino: str) -> bool:
-    """Convierte `origen` a MP3 320 kbps en `destino` con ffmpeg (ya está en
-    el contenedor para librosa). Devuelve True si generó un MP3 válido."""
+    """Convierte `origen` a MP3 320 kbps en `destino` con ffmpeg. Conservado
+    para el futuro tier gratis (MP3) vs Pro (FLAC) de monetización."""
     import subprocess
     try:
         r = subprocess.run(
@@ -4154,7 +4171,7 @@ async def comunidad_compartir(
     if len(content) > _AUDIO_COMUNIDAD_MAX:
         return JSONResponse(
             status_code=413,
-            content={"error": f"Para compartir, el archivo puede pesar máximo 80 MB (el tuyo: {len(content) // (1024*1024)} MB). Expórtalo en MP3 320 y listo."},
+            content={"error": f"Para compartir, el archivo puede pesar máximo 80 MB (el tuyo: {len(content) // (1024*1024)} MB). Si es un WAV largo, expórtalo en FLAC o MP3 para reducir el tamaño."},
         )
 
     # Directorio del volumen: si no está disponible (permisos/montaje),
@@ -4202,29 +4219,38 @@ async def comunidad_compartir(
             )
 
         loop = asyncio.get_event_loop()
-        fname = f"{uuid.uuid4().hex}.mp3"
-        fpath = destino / fname
-        # MP3 ya pequeño → tal cual. Resto → transcode a MP3 320.
-        if extension == ".mp3" and orig_bytes <= _MP3_PASSTHROUGH_MAX:
+
+        def _guardar_original():
+            """Guarda el archivo subido tal cual en el volumen (su extensión real)."""
+            nonlocal fname, fpath, audio_mime, audio_bytes
+            fname = f"{uuid.uuid4().hex}{extension}"
+            fpath = destino / fname
             shutil.move(tmp_orig, fpath)
-            audio_mime = "audio/mpeg"
-        else:
+            audio_mime = _MIME_AUDIO.get(extension, "application/octet-stream")
+            audio_bytes = fpath.stat().st_size
+
+        fname = fpath = None
+        if extension in _AUDIO_LOSSLESS_A_FLAC:
+            # WAV/AIFF → FLAC: SIN PÉRDIDA (idéntico al original) y ~mitad de
+            # tamaño que el WAV. Calidad de estudio para la comunidad.
+            fname = f"{uuid.uuid4().hex}.flac"
+            fpath = destino / fname
             ok = await asyncio.wait_for(
-                loop.run_in_executor(None, lambda: _transcodificar_mp3(tmp_orig, str(fpath))),
+                loop.run_in_executor(None, lambda: _transcodificar_flac(tmp_orig, str(fpath))),
                 timeout=200,
             )
             if ok:
-                audio_mime = "audio/mpeg"
+                audio_mime = "audio/flac"
                 audio_bytes = fpath.stat().st_size
             else:
-                # Fallback: guardar el original (su extensión real) para no
-                # bloquear al usuario por un fallo de ffmpeg (raro)
-                print(f"[COMUNIDAD] transcode falló, guardando original ({extension})")
-                fname = f"{uuid.uuid4().hex}{extension}"
-                fpath = destino / fname
-                shutil.move(tmp_orig, fpath)
-                audio_mime = _MIME_AUDIO.get(extension, "application/octet-stream")
-                audio_bytes = fpath.stat().st_size
+                # Fallback: guardar el original (su extensión real) si ffmpeg falla
+                print(f"[COMUNIDAD] encode FLAC falló, guardando original ({extension})")
+                fpath.unlink(missing_ok=True)
+                _guardar_original()
+        else:
+            # FLAC (ya sin pérdida) o lossy (MP3/OGG): se guarda TAL CUAL —
+            # re-codificar un lossy a FLAC no recupera calidad y solo infla el peso.
+            _guardar_original()
     except asyncio.TimeoutError:
         print("[COMUNIDAD] transcode timeout")
         return JSONResponse(status_code=400, content={"error": "El audio tardó demasiado en procesarse. Prueba con un archivo más corto o ya en MP3."})

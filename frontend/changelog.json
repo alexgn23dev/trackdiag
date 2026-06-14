@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "version": "0.5.49",
+      "date": "2026-06-14",
+      "title": "Audio de la comunidad en calidad sin pérdida (FLAC)",
+      "changes": [
+        "Los tracks que compartes en calidad WAV/AIFF se guardan ahora en FLAC sin pérdida: idénticos a tu máster, sin la pérdida de brillo que metía el MP3. Si subes un MP3, se conserva tal cual.",
+        "El reproductor del muro reproduce el FLAC directamente en el navegador."
+      ]
+    },
+    {
       "version": "0.5.48",
       "date": "2026-06-14",
       "title": "Mensaje de presentación al compartir un track",
