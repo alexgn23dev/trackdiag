@@ -51,7 +51,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.55")
+app = FastAPI(title="Mentotrack API", version="0.5.56")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -225,7 +225,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.55"}
+    return {"status": "ok", "version": "0.5.56"}
 
 
 # Validación compartida de uploads de audio (track principal y referencia)
@@ -3987,6 +3987,19 @@ _COMUNIDAD_EMAILS = {
     if e.strip()
 }
 
+# Moderadores: pueden retirar CUALQUIER track/comentario de la comunidad (no solo
+# los suyos). Imprescindible al abrir la beta a desconocidos — y respaldado por el
+# aviso legal (§5.5). Por defecto, la cuenta del fundador.
+_MODERADORES = {
+    e.strip().lower()
+    for e in os.environ.get("COMUNIDAD_MODERADORES", "alexgn23@gmail.com").split(",")
+    if e.strip()
+}
+
+
+def _es_moderador(email: str | None) -> bool:
+    return bool(email) and email.strip().lower() in _MODERADORES
+
 
 async def _comunidad_habilitada(email: str | None) -> bool:
     """¿Puede este email usar la comunidad? True si: la env la abre a todos
@@ -4396,7 +4409,8 @@ async def comunidad_compartir(
 async def comunidad_posts(request: Request, estilo: str = "", limit: int = 50):
     """Muro de la comunidad: posts activos con el distintivo del autor.
     En pruebas privadas: solo la allowlist (el resto, lista vacía)."""
-    if not await _comunidad_habilitada(_optional_auth_user(request)):
+    viewer = _optional_auth_user(request)
+    if not await _comunidad_habilitada(viewer):
         return {"posts": [], "oculta": True}
     if not _pg_available():
         return JSONResponse(status_code=503, content={"error": "Base de datos no disponible"})
@@ -4433,7 +4447,7 @@ async def comunidad_posts(request: Request, estilo: str = "", limit: int = 50):
                 "utiles": int(r.get("autor_utiles") or 0),
             },
         })
-    return {"posts": posts}
+    return {"posts": posts, "moderador": _es_moderador(viewer)}
 
 
 @app.get("/api/comunidad/audio/{post_id}")
@@ -4527,7 +4541,11 @@ async def comunidad_borrar(request: Request, post_id: str):
     user = await repo.get_user_by_email(pool, email)
     if not user:
         return JSONResponse(status_code=404, content={"error": "Usuario no encontrado"})
-    audio_file = await repo.desactivar_comunidad_post(pool, pid, user["id"])
+    # Moderador: retira cualquier track; autor: solo el suyo.
+    if _es_moderador(email):
+        audio_file = await repo.desactivar_comunidad_post_mod(pool, pid)
+    else:
+        audio_file = await repo.desactivar_comunidad_post(pool, pid, user["id"])
     if audio_file is None:
         return JSONResponse(status_code=404, content={"error": "No encontrado o no es tuyo"})
     try:
@@ -4648,7 +4666,7 @@ async def comunidad_crear_comentario(request: Request, post_id: str, data: dict)
 @app.delete("/api/comunidad/comentarios/{comentario_id}")
 @limiter.limit("20/minute")
 async def comunidad_borrar_comentario(request: Request, comentario_id: str):
-    """El autor borra su comentario."""
+    """El autor borra su comentario; un moderador puede borrar cualquiera."""
     email, err = await _require_comunidad(request)
     if err:
         return err
@@ -4664,7 +4682,11 @@ async def comunidad_borrar_comentario(request: Request, comentario_id: str):
     user = await repo.get_user_by_email(pool, email)
     if not user:
         return JSONResponse(status_code=404, content={"error": "Usuario no encontrado"})
-    ok = await repo.borrar_comentario(pool, cid, user["id"])
+    # Moderador: borra cualquier comentario; autor: solo el suyo.
+    if _es_moderador(email):
+        ok = await repo.borrar_comentario_mod(pool, cid)
+    else:
+        ok = await repo.borrar_comentario(pool, cid, user["id"])
     if not ok:
         return JSONResponse(status_code=404, content={"error": "No encontrado o no es tuyo"})
     return {"ok": True}

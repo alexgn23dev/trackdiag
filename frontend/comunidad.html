@@ -96,6 +96,13 @@
         .badge { font-size: .7rem; padding: .15rem .55rem; border-radius: 999px; background: rgba(37,244,100,.1); color: var(--green); border: 1px solid rgba(37,244,100,.2); }
         .badge-rep { font-size: .7rem; padding: .15rem .55rem; border-radius: 999px; background: rgba(250,204,21,.12); color: #fbbf24; border: 1px solid rgba(250,204,21,.25); font-weight: 600; }
         .post-mensaje { font-size: .9rem; color: #d1d5db; line-height: 1.5; margin: .2rem 0 .2rem; padding-left: .8rem; border-left: 2px solid rgba(37,244,100,.35); font-style: italic; }
+        .mod-retirar {
+            margin-left: auto; background: rgba(239,68,68,.12); color: #f87171;
+            border: 1px solid rgba(239,68,68,.3); border-radius: 6px; padding: .2rem .6rem;
+            font-size: .72rem; cursor: pointer; transition: background .15s; flex-shrink: 0;
+        }
+        .mod-retirar:hover { background: rgba(239,68,68,.22); }
+        .mod-retirar:disabled { opacity: .6; cursor: default; }
         /* Player */
         .player { display: flex; align-items: center; gap: .9rem; margin: 1rem 0; }
         .play-btn {
@@ -201,6 +208,7 @@
         let LBL_GEN = {}, LBL_OBJ = {};
         let filtroActual = '';
         let audioActual = null;
+        let esModerador = false;   // el backend marca si el viewer puede retirar cualquier contenido
 
         const esc = (s) => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; };
         const fmtTiempo = (s) => { if (s == null || isNaN(s)) return '0:00'; const m = Math.floor(s / 60), sec = Math.floor(s % 60); return m + ':' + String(sec).padStart(2, '0'); };
@@ -240,7 +248,7 @@
             const badges = repBadge + distintivoCom(c.autor).map(d => `<span class="com-badge">${esc(d)}</span>`).join('');
             let acciones = '';
             if (puedoUtil) acciones += `<button class="com-accion util-toggle ${c.util ? 'util-on' : ''}">${c.util ? '✓ Útil' : 'Marcar útil'}</button>`;
-            if (c.es_autor) acciones += `<button class="com-accion borrar">Borrar</button>`;
+            if (c.es_autor || esModerador) acciones += `<button class="com-accion borrar">${c.es_autor ? 'Borrar' : 'Retirar (mod)'}</button>`;
             el.innerHTML = `
                 <div class="com-head">
                     <span class="com-autor">@${esc(c.autor.username)}</span>
@@ -365,6 +373,7 @@
                 // con auth: el endpoint está gateado por la allowlist de la beta
                 const data = await fetch(url, { headers: authHdrs() }).then(r => r.json());
                 const posts = data.posts || [];
+                esModerador = !!data.moderador;
                 loading.style.display = 'none';
                 if (posts.length === 0) { empty.style.display = 'block'; return; }
                 posts.forEach(p => cont.appendChild(renderPost(p)));
@@ -411,6 +420,7 @@
                 <div class="post-top">
                     <div class="post-titulo">${esc(p.titulo)}</div>
                     ${estLbl ? `<span class="estado ${estClass}">${esc(estLbl)}</span>` : ''}
+                    ${esModerador ? `<button class="mod-retirar" title="Retirar este track (moderación)">Retirar</button>` : ''}
                 </div>
                 <div class="autor">
                     <span class="autor-nombre">@${esc(p.autor.username)}</span>
@@ -433,6 +443,18 @@
                     <div class="com-composer"></div>
                 </div>
             `;
+
+            // Moderación: retirar el track (solo moderadores)
+            const modBtn = card.querySelector('.mod-retirar');
+            if (modBtn) modBtn.onclick = async () => {
+                if (!confirm(`¿Retirar "${p.titulo}" de la comunidad? Esta acción no se puede deshacer.`)) return;
+                modBtn.disabled = true; modBtn.textContent = 'Retirando…';
+                try {
+                    const r = await fetch(`${API}/comunidad/posts/${p.id}`, { method: 'DELETE', headers: authHdrs() });
+                    if (r.ok) { card.remove(); }
+                    else { modBtn.disabled = false; modBtn.textContent = 'Retirar'; alert('No se pudo retirar.'); }
+                } catch (e) { modBtn.disabled = false; modBtn.textContent = 'Retirar'; alert('No se pudo retirar.'); }
+            };
 
             // Comentarios: toggle + composer
             const toggle = card.querySelector('.com-toggle');

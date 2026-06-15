@@ -1,6 +1,14 @@
 {
   "entries": [
     {
+      "version": "0.5.56",
+      "date": "2026-06-15",
+      "title": "Comunidad: herramientas de moderación",
+      "changes": [
+        "Preparando la apertura de la beta: ahora se puede retirar cualquier track o comentario que infrinja las normas, para mantener la comunidad sana y respetuosa con la autoría."
+      ]
+    },
+    {
       "version": "0.5.55",
       "date": "2026-06-15",
       "title": "Comunidad: forma de onda con más detalle, flujo de compartir más claro y aviso legal actualizado",

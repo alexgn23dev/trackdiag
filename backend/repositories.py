@@ -1658,6 +1658,21 @@ async def desactivar_comunidad_post(pool: asyncpg.Pool, post_id, usuario_id) -> 
 
 
 @with_retry()
+async def desactivar_comunidad_post_mod(pool: asyncpg.Pool, post_id) -> Optional[str]:
+    """Moderación: retira un post sea de quien sea (sin comprobar propiedad).
+    Solo lo invoca el backend tras verificar que el solicitante es moderador.
+    Devuelve el audio_file para borrar el archivo, o None si no existía."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """UPDATE comunidad_posts SET activo = FALSE
+               WHERE id = $1 AND activo
+               RETURNING audio_file""",
+            post_id,
+        )
+    return row["audio_file"] if row else None
+
+
+@with_retry()
 async def contar_posts_activos(pool: asyncpg.Pool, usuario_id) -> int:
     """Posts activos de un usuario (cuota: máx 3 para cuidar el volumen)."""
     async with pool.acquire() as conn:
@@ -1730,6 +1745,19 @@ async def borrar_comentario(pool: asyncpg.Pool, comentario_id, usuario_id) -> bo
             """UPDATE comunidad_comentarios SET activo = FALSE
                WHERE id = $1 AND usuario_id = $2 AND activo""",
             comentario_id, usuario_id,
+        )
+    return res.endswith(" 1")
+
+
+@with_retry()
+async def borrar_comentario_mod(pool: asyncpg.Pool, comentario_id) -> bool:
+    """Moderación: borra un comentario sea de quien sea (sin comprobar autoría).
+    Solo lo invoca el backend tras verificar que el solicitante es moderador."""
+    async with pool.acquire() as conn:
+        res = await conn.execute(
+            """UPDATE comunidad_comentarios SET activo = FALSE
+               WHERE id = $1 AND activo""",
+            comentario_id,
         )
     return res.endswith(" 1")
 
