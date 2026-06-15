@@ -51,7 +51,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.56")
+app = FastAPI(title="Mentotrack API", version="0.5.57")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -225,7 +225,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.56"}
+    return {"status": "ok", "version": "0.5.57"}
 
 
 # Validación compartida de uploads de audio (track principal y referencia)
@@ -4003,10 +4003,15 @@ def _es_moderador(email: str | None) -> bool:
 
 async def _comunidad_habilitada(email: str | None) -> bool:
     """¿Puede este email usar la comunidad? True si: la env la abre a todos
-    ('*'), el email está en COMUNIDAD_EMAILS, o el usuario tiene el flag
-    comunidad_beta en la DB (habilitación individual sin tocar env ni redeploy)."""
+    los usuarios logueados ('*'), el email está en COMUNIDAD_EMAILS, o el
+    usuario tiene el flag comunidad_beta en la DB (habilitación individual sin
+    tocar env ni redeploy).
+
+    Nota: '*' = cualquier usuario LOGUEADO, pero NO anónimos. Los tracks son
+    bocetos sin terminar; no deben quedar expuestos en la web pública, solo a
+    miembros con cuenta. Por eso exigimos email aunque la beta esté abierta."""
     if "*" in _COMUNIDAD_EMAILS:
-        return True
+        return bool(email)
     if not email:
         return False
     if email.strip().lower() in _COMUNIDAD_EMAILS:
@@ -4180,7 +4185,11 @@ async def comunidad_habilitada_endpoint(request: Request):
     """¿Puede el usuario actual ver/usar la comunidad? (pruebas privadas).
     El frontend oculta toda la UI de comunidad si devuelve false."""
     email = _optional_auth_user(request)
-    return {"habilitada": await _comunidad_habilitada(email)}
+    habil = await _comunidad_habilitada(email)
+    # Si la comunidad está abierta a todos ('*') pero el visitante no está
+    # logueado, el front muestra "inicia sesión" en vez de "en camino".
+    requiere_login = ("*" in _COMUNIDAD_EMAILS) and not email
+    return {"habilitada": habil, "requiere_login": requiere_login}
 
 
 @app.post("/api/comunidad/compartir")

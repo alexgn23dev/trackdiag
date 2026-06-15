@@ -328,7 +328,7 @@
             // Pruebas privadas: si el usuario no está habilitado, no mostramos nada
             try {
                 const h = await fetch(`${API}/comunidad/habilitada`, { headers: authHdrs() }).then(r => r.json());
-                if (!h.habilitada) { mostrarOculta(); return; }
+                if (!h.habilitada) { h.requiere_login ? mostrarLogin() : mostrarOculta(); return; }
             } catch (e) { mostrarOculta(); return; }
             try {
                 const opt = await fetch(`${API}/opciones`).then(r => r.json());
@@ -346,6 +346,16 @@
                     <h1 style="font-size:1.5rem; color:#fff; margin-bottom:.6rem;">La comunidad está en camino</h1>
                     <p style="max-width:440px; margin:0 auto;">Estamos puliendo la zona de comunidad para productores. Muy pronto podrás compartir tus tracks y dar feedback a otros. ¡Vuelve en breve!</p>
                     <a href="/" style="display:inline-block; margin-top:1.5rem; color:var(--green);">← Volver a Mentotrack</a>
+                </div>`;
+        }
+
+        function mostrarLogin() {
+            const main = document.querySelector('main');
+            main.innerHTML = `
+                <div style="text-align:center; padding:5rem 1rem; color:var(--text-gray-400);">
+                    <h1 style="font-size:1.5rem; color:#fff; margin-bottom:.6rem;">Entra para ver la comunidad</h1>
+                    <p style="max-width:440px; margin:0 auto;">Los tracks de la comunidad solo son visibles para productores con cuenta. Inicia sesión (o crea una cuenta gratis) en Mentotrack y vuelve aquí.</p>
+                    <a href="/" style="display:inline-block; margin-top:1.5rem; color:var(--green);">← Iniciar sesión en Mentotrack</a>
                 </div>`;
         }
 
