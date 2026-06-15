@@ -51,7 +51,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.53")
+app = FastAPI(title="Mentotrack API", version="0.5.54")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -225,7 +225,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.53"}
+    return {"status": "ok", "version": "0.5.54"}
 
 
 # Validación compartida de uploads de audio (track principal y referencia)
@@ -4065,10 +4065,10 @@ async def _notificar_comentario(dueno_email: str, autor_username: str, titulo: s
         print(f"[COMUNIDAD] aviso de comentario falló: {type(e).__name__}: {e}")
 
 
-# Cap propio para audio compartido: 80 MB cabe un WAV 16-bit de ~7,5 min y
-# cualquier MP3. (El análisis admite 150 MB, pero el audio compartido se
-# almacena en el volumen de 5 GB — el cap cuida el espacio.)
-_AUDIO_COMUNIDAD_MAX = 80 * 1024 * 1024
+# Cap del audio compartido: 150 MB (mismo que el análisis). Cubre un WAV
+# 16-bit de ~14 min. El WAV/AIFF se almacena en FLAC (~mitad de peso) y la
+# cuota de 3 tracks/usuario acota el uso del volumen.
+_AUDIO_COMUNIDAD_MAX = 150 * 1024 * 1024
 _MIME_AUDIO = {
     ".mp3": "audio/mpeg", ".wav": "audio/wav", ".flac": "audio/flac",
     ".aiff": "audio/aiff", ".aif": "audio/aiff", ".ogg": "audio/ogg",
@@ -4240,7 +4240,7 @@ async def comunidad_compartir(
     if len(content) > _AUDIO_COMUNIDAD_MAX:
         return JSONResponse(
             status_code=413,
-            content={"error": f"Para compartir, el archivo puede pesar máximo 80 MB (el tuyo: {len(content) // (1024*1024)} MB). Si es un WAV largo, expórtalo en FLAC o MP3 para reducir el tamaño."},
+            content={"error": f"Para compartir, el archivo puede pesar máximo 150 MB (el tuyo: {len(content) // (1024*1024)} MB). Si es un WAV muy largo, expórtalo en FLAC o MP3 para reducir el tamaño."},
         )
 
     # Directorio del volumen: si no está disponible (permisos/montaje),

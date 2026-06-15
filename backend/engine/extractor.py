@@ -680,14 +680,14 @@ def _analizar_distribucion(bloques_rms: list) -> dict:
     distribucion["max_seccion_alta"] = max_alta
     distribucion["ratio_bajo_alto"] = round(n_bloques_bajos / (n_bloques_altos + 1e-10), 2)
 
-    # Inicio abrupto: solo si arranca con ≥3 bloques altos seguidos (≥24 compases)
-    # En electrónica, 2 bloques altos al inicio (~16 compases) es una intro
-    # normal con kick/hats para mezcla DJ, no un "inicio abrupto".
-    if len(secciones) >= 2 and secciones[0][0] == "alto" and secciones[0][1] >= 3:
-        distribucion["inicio_abrupto"] = True
-    # Sin outro: ≥3 bloques altos al final sin caída
-    if len(secciones) >= 2 and secciones[-1][0] == "alto" and secciones[-1][1] >= 3:
-        distribucion["sin_outro"] = True
+    # inicio_abrupto / sin_outro: DESACTIVADOS (2026-06-15, insight de Alex).
+    # La energía RMS no distingue un intro/outro de groove (percusión+bajo, que
+    # ya está por encima de la media del track) de "empezar/terminar en el drop".
+    # Un track bien estructurado que construye por adición (perc+bajo → +hook →
+    # +vocal) tiene energía alta desde el inicio y el motor lo leía como "sin
+    # intro/outro para pinchar" → falso positivo sistemático en tracks acabados.
+    # Se quedan en False: la "idea incompleta" de verdad se detecta por duración
+    # corta + pocos bloques + falta de desarrollo, no por esta heurística.
     if max_baja > total_bloques * 0.35:
         distribucion["break_desproporcionado"] = True
     if max_alta > 0 and max_alta < total_bloques * 0.20 and max_baja > max_alta * 1.5:

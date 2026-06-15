@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "version": "0.5.54",
+      "date": "2026-06-15",
+      "title": "Motor: fin de los falsos 'falta intro/outro' + límite de subida a 150 MB",
+      "changes": [
+        "El motor ya no marca falsamente 'falta intro/outro / no es DJ friendly' en tracks bien estructurados. La energía del bajo/percusión desde el inicio confundía un intro de groove con empezar en el drop — esa detección se ha quitado. El aviso de estructura queda reservado para casos claros de idea incompleta.",
+        "Subido el límite de los tracks que compartes en la comunidad de 80 MB a 150 MB (igual que el análisis)."
+      ]
+    },
+    {
       "version": "0.5.53",
       "date": "2026-06-14",
       "title": "Limpieza visual: textos en blanco",
