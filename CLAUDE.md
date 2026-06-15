@@ -213,6 +213,10 @@ Auditoría V-01 a V-10 cerrada (ver `MENTOTRACK.md §7.3`). Reglas vivas:
 
 El motor de diagnóstico **no detecta problemas armónicos/melódicos** (disonancias, tonalidad incorrecta). Asumido como limitación del análisis de señal básico — no proponer "fix" para esto sin un cambio de stack (ML/embeddings).
 
+**Aviso "DJ-friendly / falta intro-outro" — DESCARTADO (jun-2026).** La heurística vieja (energía RMS por bloque: marcar si los primeros/últimos bloques están sobre la media) daba el resultado **al revés** y se retiró (`inicio_abrupto`/`sin_outro` quedan en `False` en `extractor.py:_analizar_distribucion`). Evaluado adversarialmente sobre 2 pares reales etiquetados (Julio Navas = full, no-marcar / Die Gondel = radio edit, marcar): **ninguna feature de señal básica** (RMS, centroide, rolloff, ratio agudos, flatness, HPSS, chroma) separa intro **y** outro de ambos a la vez. Por energía, el track completo parece radio edit (arranca a energía plena) y el radio edit parece tener intro de DJ (fade-in) — inversión estructural, no de calibración. El discriminante real es la **presencia/ausencia del hook melódico**, que cae en el punto ciego armónico de arriba. Además hay confound de codec (FLAC vs MP3 infla los agudos). **No reabrir sin ML/embeddings** y ≥15-20 pares por género en el mismo formato. La "idea incompleta" de verdad se detecta por duración corta + pocos bloques + falta de desarrollo, no por intro/outro.
+
+El aviso `break_sin_payoff` (insight 4 de Alex) está **gateado** (jun-2026): no se dispara si el track ya tiene desarrollo + contraste medio/alto (mismo criterio que el descuento de `problema_arreglo`). Se reserva para bocetos sin desarrollo (drop + parón y poco más).
+
 ---
 
 ## Cómo mantener este archivo

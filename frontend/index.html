@@ -392,7 +392,7 @@
         );
     }
 
-    function LandingScreen({ onFileSelected, onHistorial, historialCount }) {
+    function LandingScreen({ onFileSelected, onHistorial, historialCount, intencionCompartir }) {
         const [isDragging, setIsDragging] = useState(false);
         const [file, setFile] = useState(null);
         const inputRef = useRef(null);
@@ -414,6 +414,17 @@
                 <div className="max-w-5xl w-full grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-16 items-center">
                     {/* Left column — branding + text */}
                     <div>
+                        {intencionCompartir && (
+                            <div className="mb-6 p-4 rounded-xl fade-in" style={{background: 'rgba(37,244,100,0.08)', border: '1px solid rgba(37,244,100,0.28)'}}>
+                                <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{color: 'var(--po-green)'}}>
+                                    Compartir en la comunidad
+                                </p>
+                                <p className="text-sm" style={{color: 'var(--po-white)', lineHeight: '1.55'}}>
+                                    Para compartir un track primero tienes que <strong>analizarlo</strong>. Sube tu bounce aquí,
+                                    completa el cuestionario y, al terminar el análisis, verás el botón <strong>"Compartir con la comunidad"</strong>.
+                                </p>
+                            </div>
+                        )}
                         <div className="mb-6">
                             <MentoLogo size={72} />
                         </div>
@@ -2554,6 +2565,23 @@
         const [resultado, setResultado] = useState(null);
         const [error, setError] = useState(null);
         const [historialCount, setHistorialCount] = useState(obtenerHistorial().length);
+        // Intención "compartir": el usuario llega desde el muro de la comunidad
+        // (/?compartir=1) queriendo publicar un track. Mostramos un aviso de que
+        // primero hay que analizarlo (si no, la home parece no tener que ver).
+        const [intencionCompartir, setIntencionCompartir] = useState(false);
+
+        // Detecta ?compartir=1 al cargar y limpia el parámetro de la URL.
+        useEffect(() => {
+            try {
+                const params = new URLSearchParams(window.location.search);
+                if (params.get('compartir') === '1') {
+                    setIntencionCompartir(true);
+                    params.delete('compartir');
+                    const qs = params.toString();
+                    window.history.replaceState({}, '', window.location.pathname + (qs ? '?' + qs : ''));
+                }
+            } catch (e) { /* noop */ }
+        }, []);
 
         // Cargar opciones al inicio
         useEffect(() => {
@@ -3683,6 +3711,7 @@
                         onFileSelected={handleFileSelected}
                         onHistorial={() => setScreen('historial')}
                         historialCount={historialCount}
+                        intencionCompartir={intencionCompartir}
                     />
                 )}
                 {screen === 'historial' && (

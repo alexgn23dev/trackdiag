@@ -51,7 +51,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.54")
+app = FastAPI(title="Mentotrack API", version="0.5.55")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -225,7 +225,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.54"}
+    return {"status": "ok", "version": "0.5.55"}
 
 
 # Validación compartida de uploads de audio (track principal y referencia)
@@ -4084,9 +4084,11 @@ def _audio_comunidad_dir() -> Path:
     return d
 
 
-def _calcular_waveform(path: str, n_picos: int = 240):
+def _calcular_waveform(path: str, n_picos: int = 400):
     """Picos RMS normalizados 0-1 (para pintar la forma de onda en cliente)
-    + duración en segundos. Carga a 11 kHz mono — rápido y suficiente."""
+    + duración en segundos. Carga a 11 kHz mono — rápido y suficiente.
+    Resolución 400: en electrónica el RMS (no el peak, que el kick 4/4 deja
+    plano) refleja la dinámica del arreglo; más puntos = más detalle del muro."""
     import librosa as _lr
     import numpy as _np
     y, sr = _lr.load(path, sr=11025, mono=True)

@@ -1,6 +1,17 @@
 {
   "entries": [
     {
+      "version": "0.5.55",
+      "date": "2026-06-15",
+      "title": "Comunidad: forma de onda con más detalle, flujo de compartir más claro y aviso legal actualizado",
+      "changes": [
+        "Nueva forma de onda en el muro: simétrica, más nítida (alta densidad de píxel) y con la dinámica del arreglo mucho más visible. Cabezal de reproducción y degradado en la parte ya escuchada.",
+        "Al pulsar 'compartir' desde el muro ahora se explica que primero hay que analizar el track: un aviso en la home deja claro que el botón de compartir aparece al terminar el análisis (antes podía parecer que no funcionaba).",
+        "Aviso legal ampliado con una sección de comunidad: autoría y titularidad de los tracks compartidos, licencia limitada al uso dentro de la comunidad, respeto a la autoría de los demás y naturaleza orientativa del feedback.",
+        "Motor: el aviso de 'break sin payoff' ya no salta en tracks que tienen desarrollo y contraste claros (se reserva para bocetos sin desarrollar)."
+      ]
+    },
+    {
       "version": "0.5.54",
       "date": "2026-06-15",
       "title": "Motor: fin de los falsos 'falta intro/outro' + límite de subida a 150 MB",

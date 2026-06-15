@@ -190,7 +190,11 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None,
         armonia = _analizar_armonia(y, sr, hop_length, bloques_rms, frames_por_bloque)
 
     # === Distribución de secciones ===
-    distribucion = _analizar_distribucion(bloques_rms)
+    # desarrollo_ok: mismo criterio que el descuento de problema_arreglo —
+    # un track con desarrollo y contraste medio/alto no debe marcarse por
+    # "break sin payoff" (se reserva para bocetos sin desarrollo).
+    desarrollo_ok = tiene_desarrollo and contraste_energetico in ["medio", "alto"]
+    distribucion = _analizar_distribucion(bloques_rms, desarrollo_ok=desarrollo_ok)
 
     # Carencia espectral — umbrales recalibrados con 38 sesiones reales
     # En electrónica el kick domina graves, así que medios y agudos siempre están
@@ -627,7 +631,7 @@ def _analizar_loudness(audio_path: str, y_preloaded=None, sr_preloaded=None,
     return resultado
 
 
-def _analizar_distribucion(bloques_rms: list) -> dict:
+def _analizar_distribucion(bloques_rms: list, desarrollo_ok: bool = False) -> dict:
     distribucion = {
         "inicio_abrupto": False,
         "sin_outro": False,
@@ -727,7 +731,14 @@ def _analizar_distribucion(bloques_rms: list) -> dict:
                 # Margen pequeño porque la diferencia de "subir energía después
                 # del break" en electrónica suele ser audible incluso con ratios
                 # de 1.05-1.15.
-                if ratio < 1.05:
+                # GATE (2026-06-15, insight de Alex): si el track YA tiene
+                # desarrollo + contraste claros (los mismos que dan el descuento
+                # en problema_arreglo), no lo marcamos: un track acabado con
+                # arreglo desarrollado puede tener un break "plano" en RMS sin que
+                # sea un defecto, y la energía media por bloque no basta para
+                # afirmar que "no paga". Reservamos el aviso para bocetos sin
+                # desarrollo (drop + parón y poco más), que es el caso de insight 4.
+                if ratio < 1.05 and not desarrollo_ok:
                     distribucion["break_sin_payoff"] = True
 
     # Estructura problemática: distribución real (break largo o drop corto, o
