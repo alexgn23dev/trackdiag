@@ -1985,13 +1985,13 @@
                     )}
                     </div>
 
-                    {/* ===== CTA Sesión 1:1 con Alex (consultoría) =====
-                        Regla MVP: no aparece si el motor cree que el track está
-                        bien (sin_diagnostico) o todavía en boceto (track_verde).
-                        En el resto de casos siempre se muestra. */}
-                    {diagId !== 'sin_diagnostico' && diagId !== 'track_verde' && (
-                        <CTAAuditoria diagId={diagId} userEmail={userEmail} />
-                    )}
+                    {/* ===== CTA Sesión 1:1 con Alex (consultoría) — DESACTIVADO (jun-2026) =====
+                        Quitado por baja conversión (no entraban ni las llamadas gratis).
+                        El componente <CTAAuditoria/> sigue definido arriba; para
+                        reactivarlo, restaurar este bloque:
+                          {diagId !== 'sin_diagnostico' && diagId !== 'track_verde' && (
+                            <CTAAuditoria diagId={diagId} userEmail={userEmail} />
+                          )} */}
 
                     {/* CTA de la encuesta de comunidad (tras el análisis) */}
                     <EncuestaCTA origen="diagnostico" />
