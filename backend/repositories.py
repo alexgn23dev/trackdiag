@@ -1621,7 +1621,7 @@ async def list_comunidad_posts(
     args.append(min(limit, 100))
     async with pool.acquire() as conn:
         rows = await conn.fetch(
-            f"""SELECT p.id, p.timestamp, p.titulo, p.mensaje, p.estilo, p.estilo_custom,
+            f"""SELECT p.id, p.usuario_id, p.timestamp, p.titulo, p.mensaje, p.estilo, p.estilo_custom,
                        p.bpm, p.objetivo, p.lufs, p.balance, p.mono_correlacion,
                        p.mono_nivel, p.estado_track, p.duracion_seg, p.waveform, p.audio_mime,
                        u.username, u.perfil_foto,
@@ -1658,6 +1658,31 @@ async def get_comunidad_post(pool: asyncpg.Pool, post_id) -> Optional[dict]:
             "SELECT * FROM comunidad_posts WHERE id = $1 AND activo", post_id
         )
     return dict(row) if row else None
+
+
+@with_retry()
+async def editar_comunidad_post(pool: asyncpg.Pool, post_id, usuario_id, titulo: str, mensaje) -> bool:
+    """Edita título y mensaje de un post (solo el dueño). El audio NO se toca."""
+    async with pool.acquire() as conn:
+        res = await conn.execute(
+            """UPDATE comunidad_posts SET titulo = $3, mensaje = $4
+               WHERE id = $1 AND usuario_id = $2 AND activo""",
+            post_id, usuario_id, titulo, mensaje,
+        )
+    return res.endswith(" 1")
+
+
+@with_retry()
+async def editar_comunidad_post_mod(pool: asyncpg.Pool, post_id, titulo: str, mensaje) -> bool:
+    """Moderación: edita título y mensaje de cualquier post (sin check de dueño).
+    Solo lo invoca el backend tras verificar que el solicitante es moderador."""
+    async with pool.acquire() as conn:
+        res = await conn.execute(
+            """UPDATE comunidad_posts SET titulo = $2, mensaje = $3
+               WHERE id = $1 AND activo""",
+            post_id, titulo, mensaje,
+        )
+    return res.endswith(" 1")
 
 
 @with_retry()

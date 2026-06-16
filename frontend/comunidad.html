@@ -99,13 +99,31 @@
         .badge { font-size: .7rem; padding: .15rem .55rem; border-radius: 999px; background: rgba(37,244,100,.1); color: var(--green); border: 1px solid rgba(37,244,100,.2); }
         .badge-rep { font-size: .7rem; padding: .15rem .55rem; border-radius: 999px; background: rgba(250,204,21,.12); color: #fbbf24; border: 1px solid rgba(250,204,21,.25); font-weight: 600; }
         .post-mensaje { font-size: .9rem; color: #d1d5db; line-height: 1.5; margin: .2rem 0 .2rem; padding-left: .8rem; border-left: 2px solid rgba(37,244,100,.35); font-style: italic; }
+        .post-acciones { margin-left: auto; display: flex; gap: .5rem; flex-shrink: 0; align-items: center; }
+        .post-editar {
+            background: rgba(255,255,255,.06); color: #d1d5db; border: 1px solid rgba(255,255,255,.14);
+            border-radius: 6px; padding: .2rem .6rem; font-size: .72rem; cursor: pointer; transition: background .15s;
+        }
+        .post-editar:hover { background: rgba(255,255,255,.12); color: #fff; }
         .mod-retirar {
-            margin-left: auto; background: rgba(239,68,68,.12); color: #f87171;
+            background: rgba(239,68,68,.12); color: #f87171;
             border: 1px solid rgba(239,68,68,.3); border-radius: 6px; padding: .2rem .6rem;
             font-size: .72rem; cursor: pointer; transition: background .15s; flex-shrink: 0;
         }
         .mod-retirar:hover { background: rgba(239,68,68,.22); }
         .mod-retirar:disabled { opacity: .6; cursor: default; }
+        .edit-form { display: flex; flex-direction: column; gap: .5rem; margin: 0 0 1rem; }
+        .edit-form .edit-titulo, .edit-form .edit-mensaje {
+            width: 100%; box-sizing: border-box; background: rgba(255,255,255,0.03); border: 1px solid #2e2e33;
+            color: #e5e5e5; border-radius: 8px; padding: .55rem .7rem; font-size: .9rem; font-family: inherit;
+        }
+        .edit-form .edit-mensaje { resize: vertical; min-height: 48px; }
+        .edit-acciones { display: flex; gap: .6rem; align-items: center; }
+        .edit-guardar { background: var(--green); color: #0a0a0a; border: none; border-radius: 8px; padding: .4rem 1rem; font-weight: 600; font-size: .8rem; cursor: pointer; }
+        .edit-guardar:disabled { opacity: .5; cursor: default; }
+        .edit-cancelar { background: none; border: none; color: var(--text-gray-500); font-size: .8rem; cursor: pointer; }
+        .edit-cancelar:hover { color: #fff; }
+        .edit-err { font-size: .75rem; color: #f87171; }
         /* Player */
         .player { display: flex; align-items: center; gap: .9rem; margin: 1rem 0; }
         .play-btn {
@@ -408,6 +426,55 @@
             return `<span class="avatar avatar-ini" style="width:${s}px;height:${s}px;font-size:${Math.round(s * 0.42)}px;">${ini}</span>`;
         }
 
+        function abrirEdicionPost(card, p, btn) {
+            if (card.querySelector('.edit-form')) return;   // ya abierto
+            btn.style.visibility = 'hidden';
+            const form = document.createElement('div');
+            form.className = 'edit-form';
+            form.innerHTML = `
+                <input class="edit-titulo" type="text" maxlength="120" placeholder="Título del track">
+                <textarea class="edit-mensaje" maxlength="300" rows="2" placeholder="Descripción / contexto (opcional)"></textarea>
+                <div class="edit-acciones">
+                    <button class="edit-guardar">Guardar</button>
+                    <button class="edit-cancelar">Cancelar</button>
+                    <span class="edit-err"></span>
+                </div>`;
+            form.querySelector('.edit-titulo').value = p.titulo || '';
+            form.querySelector('.edit-mensaje').value = p.mensaje || '';
+            card.querySelector('.post-top').insertAdjacentElement('afterend', form);
+
+            const cerrar = () => { form.remove(); btn.style.visibility = ''; };
+            form.querySelector('.edit-cancelar').onclick = cerrar;
+            form.querySelector('.edit-guardar').onclick = async () => {
+                const titulo = form.querySelector('.edit-titulo').value.trim();
+                const mensaje = form.querySelector('.edit-mensaje').value.trim();
+                const err = form.querySelector('.edit-err');
+                if (titulo.length < 2) { err.textContent = 'Título mínimo 2 caracteres.'; return; }
+                const g = form.querySelector('.edit-guardar');
+                g.disabled = true; g.textContent = 'Guardando…'; err.textContent = '';
+                try {
+                    const r = await fetch(`${API}/comunidad/posts/${p.id}`, {
+                        method: 'PATCH', headers: authHdrs(), body: JSON.stringify({ titulo, mensaje })
+                    });
+                    const d = await r.json().catch(() => ({}));
+                    if (!r.ok) throw new Error(d.error || 'No se pudo guardar');
+                    p.titulo = d.titulo; p.mensaje = d.mensaje;
+                    card.querySelector('.post-titulo').textContent = d.titulo;
+                    let mEl = card.querySelector('.post-mensaje');
+                    if (d.mensaje) {
+                        if (!mEl) {
+                            mEl = document.createElement('p'); mEl.className = 'post-mensaje';
+                            card.querySelector('.autor').insertAdjacentElement('afterend', mEl);
+                        }
+                        mEl.textContent = d.mensaje;
+                    } else if (mEl) { mEl.remove(); }
+                    cerrar();
+                } catch (e) {
+                    err.textContent = e.message || 'Error'; g.disabled = false; g.textContent = 'Guardar';
+                }
+            };
+        }
+
         function distintivo(a) {
             const partes = [];
             if (a.experiencia && LBL_EXP[a.experiencia]) partes.push(LBL_EXP[a.experiencia]);
@@ -440,11 +507,16 @@
             const estClass = ['verde', 'en_desarrollo', 'avanzado'].includes(p.estado_track) ? p.estado_track : '';
             const estLbl = LBL_EST[p.estado_track] || '';
 
+            const acciones = [];
+            if (p.es_propietario || esModerador) acciones.push(`<button class="post-editar" title="Editar título y descripción">Editar</button>`);
+            if (esModerador) acciones.push(`<button class="mod-retirar" title="Retirar este track (moderación)">Retirar</button>`);
+            const accionesHTML = acciones.length ? `<div class="post-acciones">${acciones.join('')}</div>` : '';
+
             card.innerHTML = `
                 <div class="post-top">
                     <div class="post-titulo">${esc(p.titulo)}</div>
                     ${estLbl ? `<span class="estado ${estClass}">${esc(estLbl)}</span>` : ''}
-                    ${esModerador ? `<button class="mod-retirar" title="Retirar este track (moderación)">Retirar</button>` : ''}
+                    ${accionesHTML}
                 </div>
                 <div class="autor">
                     ${avatarHTML(p.autor, 38)}
@@ -468,6 +540,10 @@
                     <div class="com-composer"></div>
                 </div>
             `;
+
+            // Editar título y descripción (dueño o moderador)
+            const editBtn = card.querySelector('.post-editar');
+            if (editBtn) editBtn.onclick = () => abrirEdicionPost(card, p, editBtn);
 
             // Moderación: retirar el track (solo moderadores)
             const modBtn = card.querySelector('.mod-retirar');

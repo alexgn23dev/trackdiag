@@ -1,6 +1,14 @@
 {
   "entries": [
     {
+      "version": "0.5.60",
+      "date": "2026-06-16",
+      "title": "Comunidad: editar el título y la descripción de tu track",
+      "changes": [
+        "Ya puedes editar el título y la descripción de un track que has compartido en la comunidad, sin tener que volver a subirlo. El audio no se toca."
+      ]
+    },
+    {
       "version": "0.5.59",
       "date": "2026-06-16",
       "title": "Refuerzo de seguridad en la subida de fotos y los nombres de usuario",

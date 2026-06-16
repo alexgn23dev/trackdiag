@@ -51,7 +51,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.59")
+app = FastAPI(title="Mentotrack API", version="0.5.60")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -134,7 +134,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "DELETE"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "Authorization"],
 )
 
@@ -225,7 +225,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.59"}
+    return {"status": "ok", "version": "0.5.60"}
 
 
 # Validación compartida de uploads de audio (track principal y referencia)
@@ -4565,11 +4565,18 @@ async def comunidad_posts(request: Request, estilo: str = "", limit: int = 50):
         return JSONResponse(status_code=503, content={"error": "Base de datos no disponible"})
     from db import get_pool
     import repositories as repo
-    rows = await repo.list_comunidad_posts(get_pool(), estilo.strip() or None, max(1, min(limit, 100)))
+    pool = get_pool()
+    rows = await repo.list_comunidad_posts(pool, estilo.strip() or None, max(1, min(limit, 100)))
+    # Id del viewer para marcar sus propios posts (poder editar). No se expone.
+    viewer_id = None
+    if viewer:
+        vu = await repo.get_user_by_email(pool, viewer)
+        viewer_id = vu["id"] if vu else None
     posts = []
     for r in rows:
         posts.append({
             "id": str(r["id"]),
+            "es_propietario": (viewer_id is not None and r.get("usuario_id") == viewer_id),
             "timestamp": r["timestamp"].isoformat() if r.get("timestamp") else None,
             "titulo": r["titulo"],
             "mensaje": r.get("mensaje"),
@@ -4670,6 +4677,40 @@ async def comunidad_audio(request: Request, post_id: str):
     if status == 206:
         headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"
     return StreamingResponse(iterfile(), status_code=status, media_type=media_type, headers=headers)
+
+
+@app.patch("/api/comunidad/posts/{post_id}")
+@limiter.limit("20/minute")
+async def comunidad_editar(request: Request, post_id: str, data: dict):
+    """Edita el título y la descripción de un track (el dueño, o un moderador).
+    El audio NO se puede cambiar — solo los textos."""
+    email, err = await _require_comunidad(request)
+    if err:
+        return err
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Base de datos no disponible"})
+    try:
+        pid = uuid.UUID(post_id)
+    except ValueError:
+        return JSONResponse(status_code=404, content={"error": "No encontrado"})
+    titulo = _sanitize(data.get("titulo", ""), 120)
+    if len(titulo) < 2:
+        return JSONResponse(status_code=400, content={"error": "Ponle un título al track (mínimo 2 caracteres)."})
+    mensaje = _sanitize(data.get("mensaje", ""), 300) or None
+    from db import get_pool
+    import repositories as repo
+    pool = get_pool()
+    user = await repo.get_user_by_email(pool, email)
+    if not user:
+        return JSONResponse(status_code=404, content={"error": "Usuario no encontrado"})
+    # Moderador: edita cualquier track; autor: solo el suyo.
+    if _es_moderador(email):
+        ok = await repo.editar_comunidad_post_mod(pool, pid, titulo, mensaje)
+    else:
+        ok = await repo.editar_comunidad_post(pool, pid, user["id"], titulo, mensaje)
+    if not ok:
+        return JSONResponse(status_code=404, content={"error": "No encontrado o no es tuyo"})
+    return {"ok": True, "titulo": titulo, "mensaje": mensaje}
 
 
 @app.delete("/api/comunidad/posts/{post_id}")
