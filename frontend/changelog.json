@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "version": "0.5.61",
+      "date": "2026-06-17",
+      "title": "Comunidad: distintivo PRO y perfiles de productor",
+      "changes": [
+        "Los productores Pro lucen un distintivo PRO junto a su nombre en la comunidad.",
+        "Ahora puedes pulsar el nombre o la foto de cualquier productor para ver su perfil: su bio, su trayectoria y, si edita en sellos, en cuáles.",
+        "En perfiles autoeditados se muestra simplemente 'Autoeditado', sin listar las plataformas."
+      ]
+    },
+    {
       "version": "0.5.60",
       "date": "2026-06-16",
       "title": "Comunidad: editar el título y la descripción de tu track",

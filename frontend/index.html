@@ -2316,6 +2316,7 @@
         const [nombreUsuario, setNombreUsuario] = useState(username || '');
         const [userSaving, setUserSaving] = useState(false);
         const [userMsg, setUserMsg] = useState(null);    // {ok:bool, text:string}
+        const [esPro, setEsPro] = useState(false);
         // null = sin responder | true = "Sí" (despliega autoeditado/sellos) | false = "No"
         const [haPublicado, setHaPublicado] = useState(null);
         const [form, setForm] = useState({
@@ -2334,6 +2335,7 @@
                     const p = data.perfil || {};
                     setUtilesRecibidos(p.utiles_recibidos || 0);
                     setFoto(p.perfil_foto || null);
+                    setEsPro(!!p.pro);
                     if (p.username) setNombreUsuario(p.username);
                     const pre = data.prefill || {};
                     setForm({
@@ -2503,6 +2505,7 @@
                     <p className="text-xs text-gray-500 mb-1.5">Así se verá tu distintivo:</p>
                     <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-semibold text-white">{(nombreUsuario || username) ? '@' + (nombreUsuario || username) : 'tu_usuario'}</span>
+                        {esPro && <span className="text-xs font-extrabold px-1.5 py-0.5 rounded" style={{background: 'linear-gradient(135deg, #6d10ff, #9a5bff)', color: '#fff', letterSpacing: '.03em'}}>PRO</span>}
                         {utilesRecibidos > 0 && (
                             <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{background: 'rgba(250,204,21,0.12)', color: '#fbbf24', border: '1px solid rgba(250,204,21,0.25)'}} title="Feedbacks que otros marcaron como útiles">⭐ {utilesRecibidos} {utilesRecibidos === 1 ? 'útil' : 'útiles'}</span>
                         )}

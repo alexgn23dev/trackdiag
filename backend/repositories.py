@@ -1500,11 +1500,43 @@ async def get_perfil(pool: asyncpg.Pool, email: str) -> Optional[dict]:
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """SELECT u.username, u.perfil_experiencia, u.perfil_estilos, u.perfil_publicado,
-                      u.perfil_donde, u.perfil_bio, u.perfil_completo, u.perfil_foto,
+                      u.perfil_donde, u.perfil_bio, u.perfil_completo, u.perfil_foto, u.pro,
                       (SELECT COUNT(*) FROM comunidad_comentarios cc
                          WHERE cc.usuario_id = u.id AND cc.util AND cc.activo) AS utiles_recibidos
                FROM usuarios u WHERE LOWER(u.email) = $1""",
             email,
+        )
+    if not row:
+        return None
+    d = dict(row)
+    estilos = d.get("perfil_estilos")
+    if isinstance(estilos, str):
+        try:
+            estilos = json.loads(estilos)
+        except (ValueError, TypeError):
+            estilos = []
+    d["perfil_estilos"] = estilos or []
+    return d
+
+
+@with_retry()
+async def get_perfil_publico(pool: asyncpg.Pool, username: str) -> Optional[dict]:
+    """Perfil PÚBLICO de un usuario por su username (para verlo en la comunidad).
+    Solo campos públicos — NUNCA email ni hash. Incluye reputación y flag pro."""
+    username = (username or "").strip().lstrip("@")
+    if not username:
+        return None
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """SELECT u.username, u.perfil_foto, u.pro,
+                      u.perfil_experiencia, u.perfil_estilos, u.perfil_publicado,
+                      u.perfil_donde, u.perfil_bio,
+                      (SELECT COUNT(*) FROM comunidad_comentarios cc
+                         WHERE cc.usuario_id = u.id AND cc.util AND cc.activo) AS utiles_recibidos,
+                      (SELECT COUNT(*) FROM comunidad_posts p
+                         WHERE p.usuario_id = u.id AND p.activo) AS n_tracks
+               FROM usuarios u WHERE LOWER(u.username) = LOWER($1)""",
+            username,
         )
     if not row:
         return None
@@ -1624,7 +1656,7 @@ async def list_comunidad_posts(
             f"""SELECT p.id, p.usuario_id, p.timestamp, p.titulo, p.mensaje, p.estilo, p.estilo_custom,
                        p.bpm, p.objetivo, p.lufs, p.balance, p.mono_correlacion,
                        p.mono_nivel, p.estado_track, p.duracion_seg, p.waveform, p.audio_mime,
-                       u.username, u.perfil_foto,
+                       u.username, u.perfil_foto, u.pro,
                        u.perfil_experiencia, u.perfil_estilos,
                        u.perfil_publicado, u.perfil_donde, u.perfil_bio,
                        (SELECT COUNT(*) FROM comunidad_comentarios c
@@ -1755,7 +1787,7 @@ async def list_comentarios(pool: asyncpg.Pool, post_id) -> list[dict]:
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """SELECT c.id, c.timestamp, c.texto, c.util, c.usuario_id,
-                      u.username, u.perfil_foto, u.perfil_experiencia, u.perfil_estilos,
+                      u.username, u.perfil_foto, u.pro, u.perfil_experiencia, u.perfil_estilos,
                       u.perfil_publicado,
                       (SELECT COUNT(*) FROM comunidad_comentarios cc
                          WHERE cc.usuario_id = c.usuario_id AND cc.util AND cc.activo) AS autor_utiles

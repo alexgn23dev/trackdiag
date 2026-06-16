@@ -51,7 +51,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.60")
+app = FastAPI(title="Mentotrack API", version="0.5.61")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -225,7 +225,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.60"}
+    return {"status": "ok", "version": "0.5.61"}
 
 
 # Validación compartida de uploads de audio (track principal y referencia)
@@ -4596,6 +4596,7 @@ async def comunidad_posts(request: Request, estilo: str = "", limit: int = 50):
             "autor": {
                 "username": r.get("username") or "productor",
                 "foto": r.get("perfil_foto"),
+                "pro": bool(r.get("pro")),
                 "experiencia": r.get("perfil_experiencia"),
                 "estilos": r.get("perfil_estilos") or [],
                 "publicado": r.get("perfil_publicado"),
@@ -4605,6 +4606,35 @@ async def comunidad_posts(request: Request, estilo: str = "", limit: int = 50):
             },
         })
     return {"posts": posts, "moderador": _es_moderador(viewer)}
+
+
+@app.get("/api/comunidad/perfil/{username}")
+@limiter.limit("60/minute")
+async def comunidad_perfil_publico(request: Request, username: str):
+    """Perfil público de un productor (para verlo desde el muro). Solo miembros
+    de la comunidad; solo campos públicos (jamás el email)."""
+    email, err = await _require_comunidad(request)
+    if err:
+        return err
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Base de datos no disponible"})
+    from db import get_pool
+    import repositories as repo
+    p = await repo.get_perfil_publico(get_pool(), username)
+    if not p:
+        return JSONResponse(status_code=404, content={"error": "Perfil no encontrado"})
+    return {
+        "username": p.get("username"),
+        "foto": p.get("perfil_foto"),
+        "pro": bool(p.get("pro")),
+        "experiencia": p.get("perfil_experiencia"),
+        "estilos": p.get("perfil_estilos") or [],
+        "publicado": p.get("perfil_publicado"),
+        "donde": p.get("perfil_donde"),
+        "bio": p.get("perfil_bio"),
+        "utiles": int(p.get("utiles_recibidos") or 0),
+        "n_tracks": int(p.get("n_tracks") or 0),
+    }
 
 
 @app.get("/api/comunidad/audio/{post_id}")
@@ -4761,6 +4791,7 @@ def _comentario_autor_dict(r: dict, viewer_id=None, post_owner_id=None) -> dict:
         "autor": {
             "username": r.get("username") or "productor",
             "foto": r.get("perfil_foto"),
+            "pro": bool(r.get("pro")),
             "experiencia": r.get("perfil_experiencia"),
             "estilos": r.get("perfil_estilos") or [],
             "publicado": r.get("perfil_publicado"),

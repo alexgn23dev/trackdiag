@@ -96,6 +96,32 @@
         .avatar { border-radius: 50%; object-fit: cover; flex-shrink: 0; display: inline-block; }
         .avatar-ini { background: rgba(109,16,255,.3); color: #fff; font-weight: 700;
             display: inline-flex; align-items: center; justify-content: center; text-transform: uppercase; }
+        .perfil-link { cursor: pointer; }
+        .perfil-link:hover { opacity: .85; }
+        .autor-nombre.perfil-link:hover, .com-autor.perfil-link:hover { text-decoration: underline; }
+        .badge-pro {
+            font-size: .62rem; font-weight: 800; letter-spacing: .03em; padding: .12rem .4rem;
+            border-radius: 5px; background: linear-gradient(135deg, #6d10ff, #9a5bff); color: #fff;
+            border: none; flex-shrink: 0;
+        }
+        /* Modal de perfil público */
+        .perfil-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.72); backdrop-filter: blur(4px);
+            display: flex; align-items: center; justify-content: center; padding: 1rem; z-index: 100; }
+        .perfil-modal { background: #141417; border: 1px solid var(--card-border); border-radius: 16px;
+            padding: 1.6rem; width: 100%; max-width: 440px; position: relative; }
+        .perfil-cerrar { position: absolute; top: .8rem; right: .9rem; background: none; border: none;
+            color: var(--text-gray-500); font-size: 1.1rem; cursor: pointer; }
+        .perfil-cerrar:hover { color: #fff; }
+        .perfil-cab { display: flex; gap: 1rem; align-items: center; }
+        .perfil-cab .avatar { width: 72px; height: 72px; }
+        .perfil-nombre { font-size: 1.15rem; font-weight: 700; display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+        .perfil-meta { color: var(--text-gray-400); font-size: .85rem; margin-top: .2rem; }
+        .perfil-rep { color: #fbbf24; font-size: .8rem; margin-top: .35rem; }
+        .perfil-bio { color: #d1d5db; font-size: .92rem; line-height: 1.55; margin: 1.1rem 0 0; white-space: pre-wrap; }
+        .perfil-pub { margin-top: 1rem; font-size: .85rem; color: var(--text-gray-400); }
+        .perfil-pub .perfil-donde { color: #fff; }
+        .perfil-tracks { margin-top: 1rem; font-size: .78rem; color: var(--text-gray-500);
+            border-top: 1px solid rgba(255,255,255,.06); padding-top: .8rem; }
         .badge { font-size: .7rem; padding: .15rem .55rem; border-radius: 999px; background: rgba(37,244,100,.1); color: var(--green); border: 1px solid rgba(37,244,100,.2); }
         .badge-rep { font-size: .7rem; padding: .15rem .55rem; border-radius: 999px; background: rgba(250,204,21,.12); color: #fbbf24; border: 1px solid rgba(250,204,21,.25); font-weight: 600; }
         .post-mensaje { font-size: .9rem; color: #d1d5db; line-height: 1.5; margin: .2rem 0 .2rem; padding-left: .8rem; border-left: 2px solid rgba(37,244,100,.35); font-style: italic; }
@@ -273,7 +299,8 @@
             el.innerHTML = `
                 <div class="com-head">
                     ${avatarHTML(c.autor, 26)}
-                    <span class="com-autor">@${esc(c.autor.username)}</span>
+                    <span class="com-autor perfil-link" data-user="${esc(c.autor.username)}">@${esc(c.autor.username)}</span>
+                    ${proBadge(c.autor)}
                     ${badges}
                     <span class="com-fecha">${fechaCorta(c.timestamp)}</span>
                     ${c.util ? '<span class="com-util-badge">✓ le ayudó</span>' : ''}
@@ -357,6 +384,11 @@
                 (opt.generos || []).forEach(g => LBL_GEN[g.value] = g.label);
                 (opt.objetivos || []).forEach(o => LBL_OBJ[o.value] = o.label);
             } catch (e) { /* sin labels, se muestran los values */ }
+            // Clic en cualquier @nombre o avatar → abre el perfil público
+            document.addEventListener('click', (e) => {
+                const el = e.target.closest('.perfil-link');
+                if (el && el.dataset.user) abrirPerfil(el.dataset.user);
+            });
             renderFiltros();
             cargarPosts();
         }
@@ -416,14 +448,65 @@
             }
         }
 
-        function avatarHTML(autor, size) {
+        function avatarHTML(autor, size, link) {
             const s = size || 36;
             const u = (autor && autor.username) || 'productor';
+            const cls = (link === false) ? 'avatar' : 'avatar perfil-link';
+            const attr = (link === false) ? '' : ` data-user="${esc(u)}"`;
             if (autor && autor.foto) {
-                return `<img class="avatar" src="${API}/comunidad/foto/${esc(autor.foto)}" alt="" loading="lazy" style="width:${s}px;height:${s}px;">`;
+                return `<img class="${cls}"${attr} src="${API}/comunidad/foto/${esc(autor.foto)}" alt="" loading="lazy" style="width:${s}px;height:${s}px;">`;
             }
             const ini = esc((u.charAt(0) || '?'));
-            return `<span class="avatar avatar-ini" style="width:${s}px;height:${s}px;font-size:${Math.round(s * 0.42)}px;">${ini}</span>`;
+            return `<span class="${cls} avatar-ini"${attr} style="width:${s}px;height:${s}px;font-size:${Math.round(s * 0.42)}px;">${ini}</span>`;
+        }
+
+        // Badge PRO (tier de pago)
+        function proBadge(a) {
+            return (a && a.pro) ? `<span class="badge-pro" title="Productor Pro">PRO</span>` : '';
+        }
+
+        // Línea "publicado": en autoeditado solo "Autoeditado" (sin plataformas);
+        // en sellos/plataformas, el detalle de dónde.
+        function perfilPublicadoLinea(d) {
+            if (!d.publicado || d.publicado === 'no') return '';
+            if (d.publicado === 'autoeditado') return 'Autoeditado';
+            const lbl = LBL_PUB[d.publicado] || '';
+            if (d.donde) return `${esc(lbl)}: <span class="perfil-donde">${esc(d.donde)}</span>`;
+            return esc(lbl);
+        }
+
+        async function abrirPerfil(username) {
+            if (!username) return;
+            let d;
+            try {
+                const r = await fetch(`${API}/comunidad/perfil/${encodeURIComponent(username)}`, { headers: authHdrs() });
+                if (!r.ok) return;
+                d = await r.json();
+            } catch (e) { return; }
+            const estilosTxt = (d.estilos || []).map(e => LBL_GEN[e] || e).join(', ');
+            const meta = [d.experiencia && LBL_EXP[d.experiencia], estilosTxt].filter(Boolean).map(esc).join(' · ');
+            const pub = perfilPublicadoLinea(d);
+            const ov = document.createElement('div');
+            ov.className = 'perfil-overlay';
+            ov.innerHTML = `
+                <div class="perfil-modal">
+                    <button class="perfil-cerrar" aria-label="Cerrar">✕</button>
+                    <div class="perfil-cab">
+                        ${avatarHTML(d, 72, false)}
+                        <div class="perfil-cab-txt">
+                            <div class="perfil-nombre">@${esc(d.username)} ${proBadge(d)}</div>
+                            ${meta ? `<div class="perfil-meta">${meta}</div>` : ''}
+                            ${d.utiles ? `<div class="perfil-rep">⭐ ${d.utiles} feedback${d.utiles === 1 ? '' : 's'} útil${d.utiles === 1 ? '' : 'es'}</div>` : ''}
+                        </div>
+                    </div>
+                    ${d.bio ? `<p class="perfil-bio">${esc(d.bio)}</p>` : ''}
+                    ${pub ? `<div class="perfil-pub">${pub}</div>` : ''}
+                    <div class="perfil-tracks">${d.n_tracks || 0} track${(d.n_tracks === 1) ? '' : 's'} en la comunidad</div>
+                </div>`;
+            document.body.appendChild(ov);
+            const cerrar = () => ov.remove();
+            ov.querySelector('.perfil-cerrar').onclick = cerrar;
+            ov.onclick = (e) => { if (e.target === ov) cerrar(); };
         }
 
         function abrirEdicionPost(card, p, btn) {
@@ -520,7 +603,8 @@
                 </div>
                 <div class="autor">
                     ${avatarHTML(p.autor, 38)}
-                    <span class="autor-nombre">@${esc(p.autor.username)}</span>
+                    <span class="autor-nombre perfil-link" data-user="${esc(p.autor.username)}">@${esc(p.autor.username)}</span>
+                    ${proBadge(p.autor)}
                     ${badges}
                 </div>
                 ${p.mensaje ? `<p class="post-mensaje">${esc(p.mensaje)}</p>` : ''}
