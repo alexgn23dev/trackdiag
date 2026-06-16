@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "version": "0.5.58",
+      "date": "2026-06-16",
+      "title": "Perfil: foto y nombre de usuario editables",
+      "changes": [
+        "Ya puedes ponerte una foto de perfil: aparece junto a tus tracks y comentarios en la comunidad. Se recorta a cuadrado automáticamente (JPG, PNG o WebP).",
+        "Ahora puedes editar tu nombre de usuario desde tu perfil, cuando quieras (antes solo se elegía al registrarse)."
+      ]
+    },
+    {
       "version": "0.5.57",
       "date": "2026-06-15",
       "title": "Comunidad: apertura de la beta a todos los miembros",

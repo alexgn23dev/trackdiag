@@ -2302,13 +2302,20 @@
     // Perfil de comunidad — el usuario rellena quién es (da credibilidad
     // al feedback que dará y recibirá en la futura comunidad).
     // =====================================================================
-    function PerfilView({ opciones, onClose, username }) {
+    function PerfilView({ opciones, onClose, username, onUsernameChange }) {
         const [loading, setLoading] = useState(true);
         const [saving, setSaving] = useState(false);
         const [saved, setSaved] = useState(false);
         const [error, setError] = useState('');
         const [publicadoOpts, setPublicadoOpts] = useState({});
         const [utilesRecibidos, setUtilesRecibidos] = useState(0);
+        // Identidad: foto de perfil + nombre de usuario editable
+        const fotoInputRef = useRef(null);
+        const [foto, setFoto] = useState(null);          // nombre de archivo del avatar
+        const [subiendoFoto, setSubiendoFoto] = useState(false);
+        const [nombreUsuario, setNombreUsuario] = useState(username || '');
+        const [userSaving, setUserSaving] = useState(false);
+        const [userMsg, setUserMsg] = useState(null);    // {ok:bool, text:string}
         // null = sin responder | true = "Sí" (despliega autoeditado/sellos) | false = "No"
         const [haPublicado, setHaPublicado] = useState(null);
         const [form, setForm] = useState({
@@ -2326,6 +2333,8 @@
                     setPublicadoOpts(data.publicado_opciones || {});
                     const p = data.perfil || {};
                     setUtilesRecibidos(p.utiles_recibidos || 0);
+                    setFoto(p.perfil_foto || null);
+                    if (p.username) setNombreUsuario(p.username);
                     const pre = data.prefill || {};
                     setForm({
                         perfil_experiencia: p.perfil_experiencia || pre.perfil_experiencia || '',
@@ -2374,6 +2383,60 @@
             }
         };
 
+        const subirFoto = async (e) => {
+            const f = e.target.files && e.target.files[0];
+            if (!f) return;
+            setSubiendoFoto(true); setError('');
+            try {
+                const fd = new FormData(); fd.append('foto', f);
+                const { token } = getAuth();
+                const resp = await fetch(`${API_URL}/api/perfil/foto`, {
+                    method: 'POST',
+                    headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+                    body: fd,
+                });
+                const data = await resp.json().catch(() => ({}));
+                if (!resp.ok) throw new Error(data.error || 'No se pudo subir la imagen');
+                setFoto(data.foto);
+            } catch (err) {
+                setError(err.message || 'No se pudo subir la imagen');
+            } finally {
+                setSubiendoFoto(false);
+                if (fotoInputRef.current) fotoInputRef.current.value = '';
+            }
+        };
+
+        const quitarFoto = async () => {
+            setSubiendoFoto(true); setError('');
+            try {
+                const resp = await fetch(`${API_URL}/api/perfil/foto`, { method: 'DELETE', headers: authHeaders() });
+                if (resp.ok) setFoto(null);
+            } catch (err) { /* noop */ }
+            finally { setSubiendoFoto(false); }
+        };
+
+        const guardarUsuario = async () => {
+            const u = (nombreUsuario || '').trim();
+            if (!/^[a-zA-Z0-9_-]{3,20}$/.test(u)) {
+                setUserMsg({ ok: false, text: '3-20 caracteres: letras, números, guion bajo o guion.' });
+                return;
+            }
+            setUserSaving(true); setUserMsg(null);
+            try {
+                const resp = await fetch(`${API_URL}/api/auth/set_username`, {
+                    method: 'POST', headers: authHeaders(), body: JSON.stringify({ username: u }),
+                });
+                const data = await resp.json().catch(() => ({}));
+                if (!resp.ok) throw new Error(data.error || 'No se pudo guardar');
+                setUserMsg({ ok: true, text: 'Nombre de usuario actualizado.' });
+                onUsernameChange && onUsernameChange(data.username || u);
+            } catch (err) {
+                setUserMsg({ ok: false, text: err.message || 'No se pudo guardar' });
+            } finally {
+                setUserSaving(false);
+            }
+        };
+
         // Distintivo: cómo se verá junto a sus comentarios en la comunidad
         const distintivo = [
             form.perfil_experiencia ? labelExp(form.perfil_experiencia) : null,
@@ -2395,11 +2458,51 @@
                     Esto es lo que verán otros productores junto a tus comentarios y tus tracks compartidos. Da credibilidad a tu feedback — y te ayuda a saber con quién hablas.
                 </p>
 
+                {/* Identidad: foto de perfil + nombre de usuario */}
+                <div className="card p-4 mb-5">
+                    <div className="flex items-center gap-4">
+                        {foto ? (
+                            <img src={`${API_URL}/api/comunidad/foto/${foto}`} alt="Tu foto de perfil"
+                                 style={{width: '64px', height: '64px', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.12)', flexShrink: 0}} />
+                        ) : (
+                            <div style={{width: '64px', height: '64px', borderRadius: '50%', background: 'rgba(109,16,255,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: '1.5rem', flexShrink: 0}}>
+                                {((nombreUsuario || username || '?').charAt(0) || '?').toUpperCase()}
+                            </div>
+                        )}
+                        <div className="flex-1">
+                            <input ref={fotoInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={subirFoto} />
+                            <div className="flex items-center gap-3">
+                                <button onClick={() => fotoInputRef.current && fotoInputRef.current.click()} disabled={subiendoFoto}
+                                    className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.12)'}}>
+                                    {subiendoFoto ? 'Subiendo…' : (foto ? 'Cambiar foto' : 'Subir foto')}
+                                </button>
+                                {foto && <button onClick={quitarFoto} disabled={subiendoFoto} className="text-xs text-gray-500 hover:text-gray-300">Quitar</button>}
+                            </div>
+                            <p className="text-xs text-gray-600 mt-1.5">JPG, PNG o WebP. Se recorta a cuadrado.</p>
+                        </div>
+                    </div>
+                    <div className="mt-4">
+                        <label className="block text-xs font-medium mb-1.5" style={{color: 'var(--po-light)'}}>Nombre de usuario</label>
+                        <div className="flex items-center gap-2">
+                            <span className="text-gray-500 text-sm">@</span>
+                            <input value={nombreUsuario} onChange={e => { setNombreUsuario(e.target.value.replace(/^@+/, '')); setUserMsg(null); }}
+                                maxLength={20} placeholder="tu_usuario"
+                                className="flex-1 px-3 py-2 rounded-lg text-sm input-field" />
+                            <button onClick={guardarUsuario} disabled={userSaving || !nombreUsuario.trim() || nombreUsuario.trim() === username}
+                                className="px-3 py-2 rounded-lg text-xs font-semibold btn-primary"
+                                style={{opacity: (userSaving || !nombreUsuario.trim() || nombreUsuario.trim() === username) ? 0.5 : 1}}>
+                                {userSaving ? '…' : 'Guardar'}
+                            </button>
+                        </div>
+                        {userMsg && <p className="text-xs mt-1.5" style={{color: userMsg.ok ? 'var(--po-green)' : '#f87171'}}>{userMsg.text}</p>}
+                    </div>
+                </div>
+
                 {/* Vista previa del distintivo */}
                 <div className="card p-4 mb-5" style={{borderLeft: '3px solid var(--po-green)'}}>
                     <p className="text-xs text-gray-500 mb-1.5">Así se verá tu distintivo:</p>
                     <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-semibold text-white">{username ? '@' + username : 'tu_usuario'}</span>
+                        <span className="text-sm font-semibold text-white">{(nombreUsuario || username) ? '@' + (nombreUsuario || username) : 'tu_usuario'}</span>
                         {utilesRecibidos > 0 && (
                             <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{background: 'rgba(250,204,21,0.12)', color: '#fbbf24', border: '1px solid rgba(250,204,21,0.25)'}} title="Feedbacks que otros marcaron como útiles">⭐ {utilesRecibidos} {utilesRecibidos === 1 ? 'útil' : 'útiles'}</span>
                         )}
@@ -4050,6 +4153,7 @@
                                 <PerfilView
                                     opciones={opciones}
                                     username={panelUsername}
+                                    onUsernameChange={(u) => setPanelUsername(u)}
                                     onClose={() => setPanelView('proyectos')}
                                 />
                             )}

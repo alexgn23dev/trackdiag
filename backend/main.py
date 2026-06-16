@@ -51,7 +51,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.57")
+app = FastAPI(title="Mentotrack API", version="0.5.58")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -225,7 +225,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.57"}
+    return {"status": "ok", "version": "0.5.58"}
 
 
 # Validación compartida de uploads de audio (track principal y referencia)
@@ -3974,6 +3974,86 @@ async def post_perfil(request: Request, data: dict):
         return JSONResponse(status_code=500, content={"error": "Error guardando el perfil"})
 
 
+@app.post("/api/perfil/foto")
+@limiter.limit("10/minute")
+async def perfil_subir_foto(request: Request, foto: UploadFile = File(...)):
+    """Sube/reemplaza el avatar del usuario. Se valida y recomprime a JPEG
+    256×256 (neutraliza payloads y acota el tamaño en disco)."""
+    email, err = _require_auth_user(request)
+    if err:
+        return err
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Base de datos no disponible"})
+    content = await foto.read()
+    if len(content) > _AVATAR_SUBIDA_MAX:
+        return JSONResponse(status_code=413, content={"error": "La imagen es demasiado grande (máximo 8 MB)."})
+    loop = asyncio.get_event_loop()
+    jpg = await loop.run_in_executor(None, _procesar_avatar, content)
+    if jpg is None:
+        return JSONResponse(status_code=415, content={"error": "No es una imagen válida. Usa JPG, PNG o WebP."})
+    fname = f"{uuid.uuid4().hex}.jpg"
+    try:
+        (_avatar_dir() / fname).write_bytes(jpg)
+    except OSError as e:
+        print(f"[PERFIL FOTO] no se pudo guardar: {e}")
+        return JSONResponse(status_code=503, content={"error": "No se pudo guardar la imagen."})
+    try:
+        from db import get_pool
+        import repositories as repo
+        antigua = await repo.update_user_foto(get_pool(), email, fname)
+    except Exception as e:
+        print(f"[PERFIL FOTO] DB falló: {e}")
+        try:
+            (_avatar_dir() / fname).unlink(missing_ok=True)
+        except OSError:
+            pass
+        return JSONResponse(status_code=503, content={"error": "No se pudo guardar la imagen."})
+    if antigua and antigua != fname:
+        try:
+            (_avatar_dir() / antigua).unlink(missing_ok=True)
+        except OSError:
+            pass
+    return {"ok": True, "foto": fname}
+
+
+@app.delete("/api/perfil/foto")
+@limiter.limit("10/minute")
+async def perfil_borrar_foto(request: Request):
+    """Quita el avatar del usuario."""
+    email, err = _require_auth_user(request)
+    if err:
+        return err
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Base de datos no disponible"})
+    try:
+        from db import get_pool
+        import repositories as repo
+        antigua = await repo.update_user_foto(get_pool(), email, None)
+    except Exception as e:
+        print(f"[PERFIL FOTO] DB falló (borrar): {e}")
+        return JSONResponse(status_code=503, content={"error": "No se pudo quitar la imagen."})
+    if antigua:
+        try:
+            (_avatar_dir() / antigua).unlink(missing_ok=True)
+        except OSError:
+            pass
+    return {"ok": True}
+
+
+@app.get("/api/comunidad/foto/{filename}")
+@limiter.limit("300/minute")
+async def comunidad_foto(request: Request, filename: str):
+    """Sirve un avatar por nombre de archivo. El nombre se valida con regex
+    (hex + .jpg) para descartar cualquier path traversal."""
+    if not _AVATAR_FILENAME_RE.match(filename or ""):
+        return JSONResponse(status_code=404, content={"error": "No encontrado"})
+    fpath = _avatar_dir() / filename
+    if not fpath.is_file():
+        return JSONResponse(status_code=404, content={"error": "No encontrado"})
+    return FileResponse(fpath, media_type="image/jpeg",
+                        headers={"Cache-Control": "public, max-age=86400"})
+
+
 # =========================================================================
 # Comunidad — compartir tracks para feedback entre productores (v0.5.41)
 # =========================================================================
@@ -4100,6 +4180,41 @@ def _audio_comunidad_dir() -> Path:
     d = Path(base) / "comunidad"
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+# Avatares de perfil: viven en el mismo volumen persistente, subcarpeta aparte.
+def _avatar_dir() -> Path:
+    base = os.environ.get("RAILWAY_VOLUME_MOUNT_PATH") or os.environ.get("AUDIO_DIR") or tempfile.gettempdir()
+    d = Path(base) / "avatars"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+_AVATAR_SUBIDA_MAX = 8 * 1024 * 1024  # 8 MB de subida (antes de recomprimir)
+_AVATAR_FILENAME_RE = re.compile(r"^[0-9a-f]{32}\.jpg$")
+
+
+def _procesar_avatar(content: bytes) -> bytes | None:
+    """Valida y normaliza una imagen de avatar. La abre con Pillow (descarta lo
+    que no sea imagen real), respeta la orientación EXIF, la recorta a cuadrado,
+    la escala a 256×256 y la re-codifica a JPEG. Re-codificar también NEUTRALIZA
+    cualquier payload malicioso embebido. Devuelve los bytes o None si no es una
+    imagen válida/soportada."""
+    from io import BytesIO
+    try:
+        from PIL import Image, ImageOps
+        # verify() detecta corrupción pero deja la imagen inutilizable → reabrir
+        Image.open(BytesIO(content)).verify()
+        im = Image.open(BytesIO(content))
+        if (im.format or "").upper() not in ("JPEG", "PNG", "WEBP"):
+            return None
+        im = ImageOps.exif_transpose(im).convert("RGB")
+        im = ImageOps.fit(im, (256, 256), Image.LANCZOS)
+        out = BytesIO()
+        im.save(out, format="JPEG", quality=85, optimize=True)
+        return out.getvalue()
+    except Exception:
+        return None
 
 
 def _calcular_waveform(path: str, n_picos: int = 400):
@@ -4448,6 +4563,7 @@ async def comunidad_posts(request: Request, estilo: str = "", limit: int = 50):
             "n_comentarios": int(r.get("n_comentarios") or 0),
             "autor": {
                 "username": r.get("username") or "productor",
+                "foto": r.get("perfil_foto"),
                 "experiencia": r.get("perfil_experiencia"),
                 "estilos": r.get("perfil_estilos") or [],
                 "publicado": r.get("perfil_publicado"),
@@ -4578,6 +4694,7 @@ def _comentario_autor_dict(r: dict, viewer_id=None, post_owner_id=None) -> dict:
         "es_autor": viewer_id is not None and r.get("usuario_id") == viewer_id,
         "autor": {
             "username": r.get("username") or "productor",
+            "foto": r.get("perfil_foto"),
             "experiencia": r.get("perfil_experiencia"),
             "estilos": r.get("perfil_estilos") or [],
             "publicado": r.get("perfil_publicado"),

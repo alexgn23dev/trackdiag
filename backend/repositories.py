@@ -158,6 +158,23 @@ async def update_user_username(
 
 
 @with_retry()
+async def update_user_foto(pool: asyncpg.Pool, email: str, filename: Optional[str]) -> Optional[str]:
+    """Fija (o limpia, con None) el avatar del usuario. Devuelve el nombre del
+    archivo ANTERIOR para poder borrarlo del volumen, o None si no había."""
+    email = (email or "").strip().lower()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            antigua = await conn.fetchval(
+                "SELECT perfil_foto FROM usuarios WHERE LOWER(email) = $1", email
+            )
+            await conn.execute(
+                "UPDATE usuarios SET perfil_foto = $2 WHERE LOWER(email) = $1",
+                email, filename,
+            )
+    return antigua
+
+
+@with_retry()
 async def is_username_available(pool: asyncpg.Pool, username: str) -> bool:
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
@@ -1483,7 +1500,7 @@ async def get_perfil(pool: asyncpg.Pool, email: str) -> Optional[dict]:
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """SELECT u.username, u.perfil_experiencia, u.perfil_estilos, u.perfil_publicado,
-                      u.perfil_donde, u.perfil_bio, u.perfil_completo,
+                      u.perfil_donde, u.perfil_bio, u.perfil_completo, u.perfil_foto,
                       (SELECT COUNT(*) FROM comunidad_comentarios cc
                          WHERE cc.usuario_id = u.id AND cc.util AND cc.activo) AS utiles_recibidos
                FROM usuarios u WHERE LOWER(u.email) = $1""",
@@ -1607,7 +1624,7 @@ async def list_comunidad_posts(
             f"""SELECT p.id, p.timestamp, p.titulo, p.mensaje, p.estilo, p.estilo_custom,
                        p.bpm, p.objetivo, p.lufs, p.balance, p.mono_correlacion,
                        p.mono_nivel, p.estado_track, p.duracion_seg, p.waveform, p.audio_mime,
-                       u.username,
+                       u.username, u.perfil_foto,
                        u.perfil_experiencia, u.perfil_estilos,
                        u.perfil_publicado, u.perfil_donde, u.perfil_bio,
                        (SELECT COUNT(*) FROM comunidad_comentarios c
@@ -1713,7 +1730,7 @@ async def list_comentarios(pool: asyncpg.Pool, post_id) -> list[dict]:
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """SELECT c.id, c.timestamp, c.texto, c.util, c.usuario_id,
-                      u.username, u.perfil_experiencia, u.perfil_estilos,
+                      u.username, u.perfil_foto, u.perfil_experiencia, u.perfil_estilos,
                       u.perfil_publicado,
                       (SELECT COUNT(*) FROM comunidad_comentarios cc
                          WHERE cc.usuario_id = c.usuario_id AND cc.util AND cc.activo) AS autor_utiles
