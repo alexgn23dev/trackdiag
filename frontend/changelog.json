@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "version": "0.5.59",
+      "date": "2026-06-16",
+      "title": "Refuerzo de seguridad en la subida de fotos y los nombres de usuario",
+      "changes": [
+        "Endurecida la subida de fotos de perfil frente a imágenes maliciosas (animadas o de dimensiones absurdas que buscaban saturar memoria).",
+        "Los nombres de usuario ahora son únicos sin importar mayúsculas/minúsculas (no puede haber un @Alex y un @alex distintos), y los conflictos se avisan con claridad."
+      ]
+    },
+    {
       "version": "0.5.58",
       "date": "2026-06-16",
       "title": "Perfil: foto y nombre de usuario editables",

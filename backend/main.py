@@ -51,7 +51,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.58")
+app = FastAPI(title="Mentotrack API", version="0.5.59")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -225,7 +225,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.58"}
+    return {"status": "ok", "version": "0.5.59"}
 
 
 # Validación compartida de uploads de audio (track principal y referencia)
@@ -1482,11 +1482,19 @@ async def auth_set_username(request: Request, data: dict):
                 # Fallback: usuario no está en Postgres todavía. Caer a Sheets.
                 pass
             else:
-                # Comprobar disponibilidad del username
+                # Comprobar disponibilidad del username (case-insensitive)
                 otro = await repo.get_user_by_username(pool, username)
                 if otro and otro["id"] != user["id"]:
                     return JSONResponse(status_code=409, content={"error": "Ese nombre de usuario ya está cogido."})
-                await repo.update_user_username(pool, user["id"], username)
+                try:
+                    await repo.update_user_username(pool, user["id"], username)
+                except Exception as ue:
+                    # Carrera: otra petición cogió el mismo username entre la
+                    # comprobación y el UPDATE; el índice único de la DB lo rechaza.
+                    # Es 409 (cogido), no 503 (caída de servicio).
+                    if ue.__class__.__name__ == "UniqueViolationError":
+                        return JSONResponse(status_code=409, content={"error": "Ese nombre de usuario ya está cogido."})
+                    raise
                 return {"ok": True, "username": username}
         except Exception as e:
             print(f"[SET_USERNAME] Postgres falló: {e}")
@@ -4208,11 +4216,23 @@ def _procesar_avatar(content: bytes) -> bytes | None:
         im = Image.open(BytesIO(content))
         if (im.format or "").upper() not in ("JPEG", "PNG", "WEBP"):
             return None
-        # Guard anti "decompression bomb": un archivo pequeño puede declarar
-        # dimensiones enormes y reventar memoria al decodificar/redimensionar.
-        w, h = im.size
-        if w <= 0 or h <= 0 or w > 12000 or h > 12000 or (w * h) > 40_000_000:
+        # Imágenes animadas (WebP/PNG multiframe): PIL cargaría TODOS los frames
+        # en memoria aunque solo usemos el primero → DoS por RAM. Las rechazamos.
+        if getattr(im, "is_animated", False):
             return None
+        # Guard anti "decompression bomb": la decodificación reserva ~w*h*3 bytes
+        # en RAM. Un archivo pequeño puede declarar dimensiones enormes (el header
+        # JPEG/PNG no tiene por qué coincidir con los datos). Cap estricto: 24 MP
+        # (~72 MB) y lado máx 8000 — de sobra para un avatar.
+        w, h = im.size
+        if w <= 0 or h <= 0 or w > 8000 or h > 8000 or (w * h) > 24_000_000:
+            return None
+        # draft() decodifica el JPEG a escala reducida (1/2, 1/4, 1/8) → mucha
+        # menos memoria en imágenes grandes. No-op para PNG/WebP.
+        try:
+            im.draft("RGB", (512, 512))
+        except Exception:
+            pass
         im = ImageOps.exif_transpose(im).convert("RGB")
         im = ImageOps.fit(im, (256, 256), Image.LANCZOS)
         out = BytesIO()
