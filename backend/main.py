@@ -4208,6 +4208,11 @@ def _procesar_avatar(content: bytes) -> bytes | None:
         im = Image.open(BytesIO(content))
         if (im.format or "").upper() not in ("JPEG", "PNG", "WEBP"):
             return None
+        # Guard anti "decompression bomb": un archivo pequeño puede declarar
+        # dimensiones enormes y reventar memoria al decodificar/redimensionar.
+        w, h = im.size
+        if w <= 0 or h <= 0 or w > 12000 or h > 12000 or (w * h) > 40_000_000:
+            return None
         im = ImageOps.exif_transpose(im).convert("RGB")
         im = ImageOps.fit(im, (256, 256), Image.LANCZOS)
         out = BytesIO()
