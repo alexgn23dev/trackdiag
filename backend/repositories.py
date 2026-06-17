@@ -1837,6 +1837,17 @@ async def borrar_comentario_mod(pool: asyncpg.Pool, comentario_id) -> bool:
 
 
 @with_retry()
+async def crear_reporte(pool: asyncpg.Pool, post_id, reporter_id, motivo) -> bool:
+    """Registra un reporte de un track por parte de un usuario (para moderación)."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO comunidad_reportes (post_id, reporter_id, motivo) VALUES ($1, $2, $3)",
+            post_id, reporter_id, motivo,
+        )
+    return True
+
+
+@with_retry()
 async def marcar_comentario_util(pool: asyncpg.Pool, comentario_id, owner_id) -> Optional[bool]:
     """El DUEÑO del post marca/desmarca un comentario como útil (toggle).
     Verifica que `owner_id` es dueño del post del comentario. Devuelve el nuevo

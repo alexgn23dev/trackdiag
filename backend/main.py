@@ -9,6 +9,8 @@ import asyncio
 import signal
 import uuid
 import json
+import hmac
+import hashlib
 import secrets
 import shutil
 import tempfile
@@ -51,7 +53,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.61")
+app = FastAPI(title="Mentotrack API", version="0.5.62")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -225,7 +227,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.61"}
+    return {"status": "ok", "version": "0.5.62"}
 
 
 # Validación compartida de uploads de audio (track principal y referencia)
@@ -4171,6 +4173,42 @@ async def _notificar_comentario(dueno_email: str, autor_username: str, titulo: s
         print(f"[COMUNIDAD] aviso de comentario falló: {type(e).__name__}: {e}")
 
 
+async def _notificar_reporte(post_titulo: str, post_id: str, reporter: str, motivo: str) -> None:
+    """Avisa a los moderadores de un reporte de contenido. Fire-and-forget."""
+    if not _resend_disponible() or not _MODERADORES:
+        return
+    try:
+        import resend
+        import html as _html
+        resend.api_key = RESEND_API_KEY
+        titulo_s = _html.escape(_sanitize(post_titulo, 120))
+        rep = _html.escape(_sanitize(reporter, 60))
+        mot = _html.escape(_sanitize(motivo or "(sin motivo)", 300))
+        url = f"{APP_BASE_URL}/comunidad"
+        html = f"""<!DOCTYPE html><html lang="es"><body style="margin:0;background:#f4f4f5;padding:24px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+<table role="presentation" width="540" style="max-width:540px;background:#fff;border-radius:14px;padding:30px 28px" cellpadding="0" cellspacing="0"><tr><td>
+  <p style="margin:0 0 14px;font-size:16px;color:#18181b">⚠️ <strong>Reporte de contenido</strong> en la comunidad</p>
+  <p style="margin:0 0 6px;font-size:14px;color:#71717a">Track: <strong style="color:#3f3f46">{titulo_s}</strong></p>
+  <p style="margin:0 0 6px;font-size:14px;color:#71717a">Reportado por: <strong style="color:#3f3f46">{rep}</strong></p>
+  <div style="margin:14px 0;padding:14px 16px;border-left:3px solid #ef4444;background:#fafafa;border-radius:8px;font-size:15px;color:#3f3f46;line-height:1.55;white-space:pre-wrap">{mot}</div>
+  <p style="margin:0 0 14px;font-size:12px;color:#a1a1aa">post_id: {post_id}</p>
+  <a href="{url}" style="display:inline-block;padding:11px 20px;background:#18181b;color:#fff;border-radius:10px;text-decoration:none;font-size:14px;font-weight:600">Revisar en la comunidad</a>
+</td></tr></table></td></tr></table></body></html>"""
+        text = (f"Reporte de contenido en la comunidad de Mentotrack.\n"
+                f"Track: {titulo_s}\nReportado por: {rep}\nMotivo: {mot}\npost_id: {post_id}\n\nRevisar: {url}\n")
+        await asyncio.to_thread(resend.Emails.send, {
+            "from": RESEND_FROM,
+            "to": list(_MODERADORES),
+            "subject": f"⚠️ Reporte de contenido: {titulo_s}",
+            "html": html,
+            "text": text,
+        })
+        print("[COMUNIDAD] aviso de reporte enviado a moderadores")
+    except Exception as e:
+        print(f"[COMUNIDAD] aviso de reporte falló: {type(e).__name__}: {e}")
+
+
 # Cap del audio compartido: 150 MB (mismo que el análisis). Cubre un WAV
 # 16-bit de ~14 min. El WAV/AIFF se almacena en FLAC (~mitad de peso) y la
 # cuota de 3 tracks/usuario acota el uso del volumen.
@@ -4188,6 +4226,32 @@ def _audio_comunidad_dir() -> Path:
     d = Path(base) / "comunidad"
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+# --- URL firmada para el audio de comunidad -------------------------------
+# El <audio> no puede mandar cabeceras de sesión, así que no podemos gatear el
+# audio con el JWT. En su lugar, el muro (ya gateado a miembros) entrega una URL
+# FIRMADA y temporal por track; el endpoint de audio solo sirve si la firma es
+# válida y no ha caducado. Así un anónimo (o un no-miembro) no puede acceder al
+# audio sin haber pasado antes por el muro.
+_AUDIO_URL_TTL = 12 * 3600  # 12 h: de sobra para una sesión de escucha
+
+
+def _firmar_audio_url(post_id: str) -> str:
+    exp = int(datetime.now(timezone.utc).timestamp()) + _AUDIO_URL_TTL
+    sig = hmac.new(JWT_SECRET.encode(), f"{post_id}:{exp}".encode(), hashlib.sha256).hexdigest()[:32]
+    return f"/api/comunidad/audio/{post_id}?exp={exp}&sig={sig}"
+
+
+def _audio_sig_valida(post_id: str, exp: str, sig: str) -> bool:
+    try:
+        exp_i = int(exp)
+    except (TypeError, ValueError):
+        return False
+    if exp_i < int(datetime.now(timezone.utc).timestamp()):
+        return False
+    esperado = hmac.new(JWT_SECRET.encode(), f"{post_id}:{exp_i}".encode(), hashlib.sha256).hexdigest()[:32]
+    return hmac.compare_digest(esperado, sig or "")
 
 
 # Avatares de perfil: viven en el mismo volumen persistente, subcarpeta aparte.
@@ -4576,6 +4640,7 @@ async def comunidad_posts(request: Request, estilo: str = "", limit: int = 50):
     for r in rows:
         posts.append({
             "id": str(r["id"]),
+            "audio_url": _firmar_audio_url(str(r["id"])),
             "es_propietario": (viewer_id is not None and r.get("usuario_id") == viewer_id),
             "timestamp": r["timestamp"].isoformat() if r.get("timestamp") else None,
             "titulo": r["titulo"],
@@ -4641,7 +4706,11 @@ async def comunidad_perfil_publico(request: Request, username: str):
 @limiter.limit("120/minute")
 async def comunidad_audio(request: Request, post_id: str):
     """Sirve el audio de un post con soporte de rangos HTTP (Safari/iOS lo
-    exigen para reproducir, y permite hacer seek sin descargar todo)."""
+    exigen para reproducir, y permite hacer seek sin descargar todo).
+    Requiere una firma válida y vigente — la entrega el muro (ya gateado a
+    miembros), así que un anónimo/no-miembro no puede acceder al audio."""
+    if not _audio_sig_valida(post_id, request.query_params.get("exp"), request.query_params.get("sig")):
+        return JSONResponse(status_code=403, content={"error": "Enlace de audio caducado o no válido. Recarga la comunidad."})
     if not _pg_available():
         return JSONResponse(status_code=503, content={"error": "Base de datos no disponible"})
     try:
@@ -4707,6 +4776,40 @@ async def comunidad_audio(request: Request, post_id: str):
     if status == 206:
         headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"
     return StreamingResponse(iterfile(), status_code=status, media_type=media_type, headers=headers)
+
+
+@app.post("/api/comunidad/posts/{post_id}/reportar")
+@limiter.limit("10/hour")
+async def comunidad_reportar(request: Request, post_id: str, data: dict):
+    """Un miembro reporta un track (contenido inapropiado/infractor). Se guarda
+    y se avisa a los moderadores por email."""
+    email, err = await _require_comunidad(request)
+    if err:
+        return err
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Base de datos no disponible"})
+    try:
+        pid = uuid.UUID(post_id)
+    except ValueError:
+        return JSONResponse(status_code=404, content={"error": "No encontrado"})
+    motivo = _sanitize(data.get("motivo", ""), 300) or None
+    from db import get_pool
+    import repositories as repo
+    pool = get_pool()
+    post = await repo.get_comunidad_post(pool, pid)
+    if not post:
+        return JSONResponse(status_code=404, content={"error": "Este track ya no está disponible."})
+    user = await repo.get_user_by_email(pool, email)
+    await repo.crear_reporte(pool, pid, user["id"] if user else None, motivo)
+    try:
+        _t = asyncio.create_task(_notificar_reporte(
+            post.get("titulo") or "track", str(pid),
+            (user.get("username") if user else None) or email, motivo or ""))
+        _AVISO_TASKS.add(_t)
+        _t.add_done_callback(_AVISO_TASKS.discard)
+    except Exception as e:
+        print(f"[COMUNIDAD] no se pudo programar el aviso de reporte: {e}")
+    return {"ok": True}
 
 
 @app.patch("/api/comunidad/posts/{post_id}")

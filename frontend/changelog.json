@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "version": "0.5.62",
+      "date": "2026-06-17",
+      "title": "Comunidad: audio protegido y botón de reportar",
+      "changes": [
+        "El audio de la comunidad ahora se sirve con enlaces firmados y temporales: solo se puede reproducir desde dentro de la comunidad, no con un enlace suelto.",
+        "Nuevo botón 'Reportar' en cada track para avisar de contenido inapropiado; el aviso llega a moderación."
+      ]
+    },
+    {
       "version": "0.5.61",
       "date": "2026-06-17",
       "title": "Comunidad: distintivo PRO y perfiles de productor",
