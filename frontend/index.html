@@ -2747,12 +2747,14 @@
                 });
         }, []);
 
-        // Comunidad en pruebas privadas: comprobar si esta cuenta está habilitada
-        // (allowlist server-side). Si no, toda la UI de comunidad queda oculta.
+        // ¿Mostramos el CTA/menú de comunidad EN LA APP? Solo si el backend nos lo
+        // dice (mostrar_cta): pre-lanzamiento, únicamente insiders (tú/moderadores/
+        // cuentas beta); tras COMUNIDAD_LANZADA=1, todos los habilitados. El acceso
+        // a /comunidad NO depende de esto — sigue abierto server-side.
         const comprobarComunidad = () => {
             fetch(`${API_URL}/api/comunidad/habilitada`, { headers: authHeaders() })
-                .then(r => r.ok ? r.json() : { habilitada: false })
-                .then(d => setComunidadOk(!!(d && d.habilitada)))
+                .then(r => r.ok ? r.json() : { mostrar_cta: false })
+                .then(d => setComunidadOk(!!(d && d.mostrar_cta)))
                 .catch(() => setComunidadOk(false));
         };
         useEffect(() => { comprobarComunidad(); }, [panelAuth]);

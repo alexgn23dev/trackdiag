@@ -53,7 +53,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.62")
+app = FastAPI(title="Mentotrack API", version="0.5.63")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -227,7 +227,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.62"}
+    return {"status": "ok", "version": "0.5.63"}
 
 
 # Validación compartida de uploads de audio (track principal y referencia)
@@ -4091,6 +4091,34 @@ def _es_moderador(email: str | None) -> bool:
     return bool(email) and email.strip().lower() in _MODERADORES
 
 
+# ¿La comunidad está LANZADA públicamente? Controla solo si la ANUNCIAMOS en la
+# app (CTA tras el análisis + enlace del menú). El ACCESO a /comunidad y el
+# backend NO dependen de esto. Pre-lanzamiento (off): solo los insiders ven el
+# anuncio; en el lanzamiento se pone COMUNIDAD_LANZADA=1 y se anuncia a todos.
+_COMUNIDAD_LANZADA = os.environ.get("COMUNIDAD_LANZADA", "").strip().lower() in ("1", "true", "yes", "si", "sí")
+
+
+async def _es_insider_comunidad(email: str | None) -> bool:
+    """Insider: ve el CTA/menú de comunidad aunque aún no esté lanzada. Es decir,
+    moderador, email explícito en la allowlist (no el comodín '*'), o flag
+    comunidad_beta en la DB. Los usuarios habilitados solo por '*' NO son insiders."""
+    if not email:
+        return False
+    e = email.strip().lower()
+    if _es_moderador(e):
+        return True
+    if e in {x for x in _COMUNIDAD_EMAILS if x != "*"}:
+        return True
+    if _pg_available():
+        try:
+            from db import get_pool
+            import repositories as repo
+            return await repo.is_comunidad_beta(get_pool(), e)
+        except Exception:
+            return False
+    return False
+
+
 async def _comunidad_habilitada(email: str | None) -> bool:
     """¿Puede este email usar la comunidad? True si: la env la abre a todos
     los usuarios logueados ('*'), el email está en COMUNIDAD_EMAILS, o el
@@ -4393,7 +4421,10 @@ async def comunidad_habilitada_endpoint(request: Request):
     # Si la comunidad está abierta a todos ('*') pero el visitante no está
     # logueado, el front muestra "inicia sesión" en vez de "en camino".
     requiere_login = ("*" in _COMUNIDAD_EMAILS) and not email
-    return {"habilitada": habil, "requiere_login": requiere_login}
+    # mostrar_cta: ¿anunciamos la comunidad en la app (CTA + menú)? Antes del
+    # lanzamiento, solo a insiders; tras COMUNIDAD_LANZADA=1, a todos los habilitados.
+    mostrar_cta = habil and (_COMUNIDAD_LANZADA or await _es_insider_comunidad(email))
+    return {"habilitada": habil, "requiere_login": requiere_login, "mostrar_cta": mostrar_cta}
 
 
 @app.post("/api/comunidad/compartir")
