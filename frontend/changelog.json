@@ -1,6 +1,14 @@
 {
   "entries": [
     {
+      "version": "0.5.64",
+      "date": "2026-06-18",
+      "title": "Seguridad: las sesiones se cierran al cambiar la contraseña",
+      "changes": [
+        "Al restablecer tu contraseña se cierran automáticamente todas las sesiones abiertas con la contraseña anterior — si alguien tenía acceso, deja de tenerlo."
+      ]
+    },
+    {
       "version": "0.5.62",
       "date": "2026-06-17",
       "title": "Comunidad: audio protegido y botón de reportar",

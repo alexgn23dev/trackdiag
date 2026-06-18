@@ -53,7 +53,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.63")
+app = FastAPI(title="Mentotrack API", version="0.5.64")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -170,6 +170,41 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
+# Invalidación de sesión por token_version: si el JWT trae un 'tv' que NO coincide
+# con el token_version actual del usuario en la DB (p.ej. tras un reset de
+# contraseña), rechaza la petición con 401 antes de llegar al endpoint. Esto
+# expulsa TODOS los tokens previos de ese usuario. Fail-open ante error de DB
+# (no rompe a usuarios legítimos durante un corte; el endpoint validará igual).
+# Tokens emitidos antes de existir esta feature no llevan 'tv' → se tratan como 0,
+# que es el default de la columna, así que siguen siendo válidos.
+class TokenVersionMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Bearer ") and _pg_available():
+            email = None
+            try:
+                payload = jwt.decode(auth[7:], JWT_SECRET, algorithms=["HS256"])
+                email = payload.get("sub")
+                tv = int(payload.get("tv", 0) or 0)
+            except Exception:
+                email = None  # firma inválida/caducada → lo gestiona el endpoint (401)
+            if email:
+                try:
+                    from db import get_pool
+                    import repositories as repo
+                    actual = await repo.get_token_version(get_pool(), email)
+                    if actual is not None and actual != tv:
+                        return JSONResponse(
+                            status_code=401,
+                            content={"error": "Tu sesión ha caducado. Inicia sesión de nuevo.",
+                                     "codigo": "sesion_invalidada"},
+                        )
+                except Exception as e:
+                    print(f"[TOKEN_VERSION] check fail-open: {type(e).__name__}: {e}")
+        return await call_next(request)
+
+
+app.add_middleware(TokenVersionMiddleware)     # inner (lo envuelve SecurityHeaders)
 app.add_middleware(SecurityHeadersMiddleware)
 
 # =========================================================================
@@ -183,14 +218,30 @@ if not JWT_SECRET:
 JWT_EXPIRY_DAYS = int(os.environ.get("JWT_EXPIRY_DAYS", "7"))
 
 
-def _create_token(email: str) -> str:
-    """Genera un JWT token para el usuario."""
+def _create_token(email: str, token_version: int = 0) -> str:
+    """Genera un JWT token para el usuario. Lleva 'tv' (token_version) para poder
+    invalidar todos los tokens al cambiar la contraseña."""
     payload = {
         "sub": email,
+        "tv": int(token_version or 0),
         "iat": datetime.now(timezone.utc),
         "exp": datetime.now(timezone.utc) + timedelta(days=JWT_EXPIRY_DAYS),
     }
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+
+
+async def _token_version_de(email: str) -> int:
+    """token_version actual del usuario (0 si no hay DB / no existe). Se usa al
+    emitir un token para que el 'tv' coincida con el de la DB."""
+    if not _pg_available():
+        return 0
+    try:
+        from db import get_pool
+        import repositories as repo
+        v = await repo.get_token_version(get_pool(), email)
+        return int(v) if v is not None else 0
+    except Exception:
+        return 0
 
 
 def _verify_token(token: str) -> str | None:
@@ -227,7 +278,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.63"}
+    return {"status": "ok", "version": "0.5.64"}
 
 
 # Validación compartida de uploads de audio (track principal y referencia)
@@ -1363,7 +1414,7 @@ async def auth_login(request: Request, data: dict):
     email = user_data.get("email", "").strip().lower()
     username = (user_data.get("username") or "").strip()
     historial = await _obtener_historial(email)
-    token = _create_token(email)
+    token = _create_token(email, await _token_version_de(email))
     return {
         "ok": True,
         "email": email,
@@ -1420,7 +1471,7 @@ async def auth_register(request: Request, data: dict):
             print(f"[REGISTER] Postgres falló: {e}")
             return JSONResponse(status_code=503, content={"error": "No se pudo conectar con la base de datos."})
 
-    token = _create_token(email)
+    token = _create_token(email, await _token_version_de(email))
     return {
         "ok": True,
         "email": email,
@@ -1606,6 +1657,8 @@ async def auth_reset(request: Request, data: dict):
         # para reintentar.
         new_hash = _hash_password(password)
         await repo.update_user_password(pool, token_row["usuario_id"], new_hash)
+        # Invalida TODOS los tokens previos del usuario (el reset expulsa sesiones).
+        await repo.bump_token_version(pool, token_row["usuario_id"])
         await repo.mark_password_reset_token_used(pool, token_row["id"])
     except Exception as e:
         print(f"[RESET] error: {type(e).__name__}: {e}")
@@ -1616,7 +1669,7 @@ async def auth_reset(request: Request, data: dict):
     # Login automático tras reset
     email = token_row["email"]
     historial = await _obtener_historial(email)
-    jwt_token = _create_token(email)
+    jwt_token = _create_token(email, await _token_version_de(email))
     return {"ok": True, "email": email, "token": jwt_token, "historial": historial}
 
 
@@ -1687,7 +1740,7 @@ async def acceder(request: Request, data: dict):
         if not _verify_password(password, user_data.get("password_hash", "")):
             return JSONResponse(status_code=401, content={"error": "Contraseña incorrecta"})
         historial = await _obtener_historial(email)
-        token = _create_token(email)
+        token = _create_token(email, await _token_version_de(email))
         return {"ok": True, "email": email, "token": token, "historial": historial, "nuevo": False}
 
     # Usuario nuevo → registrar en Postgres
@@ -1696,7 +1749,7 @@ async def acceder(request: Request, data: dict):
     if not ok and err == "El usuario ya existe":
         return JSONResponse(status_code=409, content={"error": "El email ya está registrado. Prueba con tu contraseña."})
     historial = await _obtener_historial(email)
-    token = _create_token(email)
+    token = _create_token(email, await _token_version_de(email))
     return {"ok": True, "email": email, "token": token, "historial": historial, "nuevo": True}
 
 

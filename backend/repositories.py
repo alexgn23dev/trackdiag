@@ -145,6 +145,32 @@ async def update_user_password(
 
 
 @with_retry()
+async def get_token_version(pool: asyncpg.Pool, email: str) -> Optional[int]:
+    """Versión de sesión actual del usuario (para validar el 'tv' del JWT)."""
+    email = (email or "").strip().lower()
+    if not email:
+        return None
+    async with pool.acquire() as conn:
+        v = await conn.fetchval(
+            "SELECT token_version FROM usuarios WHERE LOWER(email) = $1", email
+        )
+    return int(v) if v is not None else None
+
+
+@with_retry()
+async def bump_token_version(pool: asyncpg.Pool, user_id: UUID) -> Optional[int]:
+    """Incrementa la versión de sesión (invalida todos los tokens previos del
+    usuario). Devuelve el nuevo valor. Se llama al cambiar la contraseña."""
+    async with pool.acquire() as conn:
+        v = await conn.fetchval(
+            "UPDATE usuarios SET token_version = token_version + 1 WHERE id = $1 "
+            "RETURNING token_version",
+            user_id,
+        )
+    return int(v) if v is not None else None
+
+
+@with_retry()
 async def update_user_username(
     pool: asyncpg.Pool, user_id: UUID, username: str
 ) -> bool:
