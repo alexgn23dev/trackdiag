@@ -62,14 +62,51 @@
   Cada endpoint llama al helper del nivel que necesita; el control vive en un sitio.
 - **Unicidad de username case-insensitive** (anti-suplantación @Alex/@alex):
   índice único funcional `UNIQUE (LOWER(username))`, no `UNIQUE (username)`.
+- **Invalidación de sesión por `token_version` (revocación de JWT):** el JWT es
+  *stateless* → por defecto no se puede revocar antes de `exp`. Solución: una
+  columna `token_version INTEGER DEFAULT 0` por usuario; el token lleva el claim
+  `tv` con ese valor al emitirse. Al **cambiar la contraseña** (reset) se hace
+  `token_version += 1`, lo que **expulsa todos los tokens previos**. La comprobación
+  vive en UN **middleware global** (no se toca cada endpoint): si el `tv` del token
+  ≠ `token_version` de la DB → 401.
+  ```python
+  # al emitir: payload["tv"] = user.token_version
+  # middleware (una sola vez, global):
+  class TokenVersionMiddleware(BaseHTTPMiddleware):
+      async def dispatch(self, request, call_next):
+          auth = request.headers.get("Authorization", "")
+          if auth.startswith("Bearer ") and db_up():
+              try:
+                  p = jwt.decode(auth[7:], SECRET, algorithms=["HS256"])
+                  email, tv = p.get("sub"), int(p.get("tv", 0) or 0)
+              except Exception:
+                  email = None                      # firma mala → lo gestiona el endpoint
+              if email:
+                  try:
+                      actual = await get_token_version(email)
+                      if actual is not None and actual != tv:
+                          return JSONResponse(401, {"error": "sesión caducada"})
+                  except Exception:
+                      pass                          # FAIL-OPEN ante error de DB
+          return await call_next(request)
+  # al resetear contraseña: await bump_token_version(user_id)  # token_version += 1
+  ```
+  Claves de diseño: **fail-open** ante error de DB (no rompe a usuarios legítimos
+  en un corte; el endpoint validará igual); **retrocompatible** (tokens emitidos
+  antes de existir la feature no llevan `tv` → se tratan como 0 = default → siguen
+  válidos hasta el primer reset); **un solo punto de enforcement** (el middleware)
+  en vez de tocar los N call-sites de auth. Coste: una query pequeña e indexada por
+  request autenticada — asumible.
 
 **Cómo replicar:**
 1. `SECRET = secrets.token_hex(32)` desde env, con fallback aleatorio + warning si falta.
-2. JWT HS256 con `exp`. Verifica SIEMPRE con `algorithms=[...]` explícito (evita el
-   ataque `alg=none`).
+2. JWT HS256 con `exp` y `tv`. Verifica SIEMPRE con `algorithms=[...]` explícito
+   (evita el ataque `alg=none`).
 3. bcrypt para passwords, min 8. Rol admin con cookie HttpOnly/Secure/SameSite y
    secreto propio.
 4. Define 2-3 helpers de auth en capas y úsalos; no repitas la lógica por endpoint.
+5. `token_version` + middleware global para poder **revocar sesiones** al cambiar la
+   contraseña (o ante compromiso). Es la pieza que le falta a un JWT puro.
 
 ---
 
@@ -232,14 +269,74 @@ En entornos con proxy (Railway/Cloudflare), verifica que el límite usa la IP re
 
 ---
 
-## 7. CORS
+## 7. CORS y cabeceras de seguridad HTTP
 
+### 7.1 CORS
 **Patrón:** lista blanca de orígenes (`mentotrack.com`, `www.`, `localhost`),
 métodos EXPLÍCITOS (`GET, POST, PATCH, DELETE`), `allow_credentials=False`.
 Nunca `*` con credenciales. Si añades un método nuevo (p. ej. PATCH), recuerda
 añadirlo aquí (aunque mismo-origen no haga preflight, evita sorpresas).
 
-**Cómo replicar:** origins explícitos, métodos explícitos, sin comodín.
+### 7.2 Cabeceras de seguridad (un middleware, todas las respuestas)
+**Qué protege:** clickjacking, MIME-sniffing, downgrade a HTTP, fuga de referrer,
+inyección de recursos/scripts (XSS). Un solo middleware las pone en TODAS las
+respuestas:
+```python
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        r = await call_next(request)
+        r.headers["X-Content-Type-Options"] = "nosniff"          # no adivinar MIME
+        r.headers["X-Frame-Options"] = "DENY"                    # no embeder en iframe
+        r.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        r.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        r.headers["Content-Security-Policy"] = CSP               # ver abajo
+        if request.url.scheme == "https":                        # HSTS solo en https
+            r.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return r
+```
+- **`X-Content-Type-Options: nosniff`** — el navegador respeta el Content-Type, no
+  "adivina" (impide que un upload se ejecute como script).
+- **`X-Frame-Options: DENY`** + **CSP `frame-ancestors 'none'`** — anti-clickjacking
+  (las dos: la cabecera para navegadores viejos, `frame-ancestors` la moderna).
+- **`Referrer-Policy: strict-origin-when-cross-origin`** — no filtra la URL completa
+  (con tokens en query, etc.) a sitios externos.
+- **`Strict-Transport-Security` (HSTS)** — fuerza HTTPS en futuras visitas. Ponla
+  SOLO sobre https. `includeSubDomains` si controlas todos los subdominios. `preload`
+  es un compromiso fuerte y difícil de revertir → solo si estás seguro.
+- **`Permissions-Policy`** — desactiva APIs que no usas (cámara, micro, geo).
+
+**CSP (Content-Security-Policy) — la importante y la más delicada.** Restringe de
+DÓNDE se cargan scripts/estilos/imágenes/conexiones. Para una app que carga React,
+Tailwind y Babel por CDN y usa scripts inline:
+```
+default-src 'self';
+script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://www.googletagmanager.com;
+style-src  'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com;
+font-src   'self' https://fonts.gstatic.com;
+img-src    'self' data: <dominios de imágenes>;
+connect-src 'self' https://www.google-analytics.com https://*.google-analytics.com;
+frame-src  https://www.youtube.com https://w.soundcloud.com;
+frame-ancestors 'none';
+```
+- **El matiz honesto (deuda tightenable):** lleva `script-src 'unsafe-inline'`
+  porque hay JS inline en el HTML, y `'unsafe-eval'` porque Babel transforma JSX en
+  el cliente (usa `eval`/`Function`). Ambos **debilitan** la CSP frente a XSS. Para
+  endurecerla: pre-compilar el JSX (quitar Babel del navegador → fuera `'unsafe-eval'`)
+  y mover el JS inline a ficheros o firmarlo con **nonces/hashes** por script
+  (→ fuera `'unsafe-inline'`). Es la tarea pendiente nº1 de la CSP.
+- **Allowlist exacto, no a ojo:** antes de fijar la CSP, lista los recursos REALES
+  que carga la página (`<script src>`, `<link href>`, fuentes, analytics, iframes) y
+  permite SOLO esos. Una CSP de más rompe la app (pantalla en blanco si bloquea un
+  script crítico); de menos no protege.
+- **Despliegue seguro de CSP:** en apps complejas, arranca con
+  `Content-Security-Policy-Report-Only` (registra violaciones sin bloquear) y pasa a
+  enforcing cuando confirmes que no rompe nada. Verifica SIEMPRE en navegador real
+  tras desplegar (la consola muestra las violaciones).
+
+**Cómo replicar:** un `SecurityHeadersMiddleware` que ponga las 5-6 cabeceras en
+toda respuesta; HSTS solo en https; CSP con allowlist construido a partir de los
+recursos reales de la página, asumiendo (y documentando) la deuda de
+`unsafe-inline`/`unsafe-eval` si usas inline/Babel, con plan de endurecerla.
 
 ---
 
@@ -400,6 +497,7 @@ Cada cambio, antes de mergear:
 - [ ] Admin: cookie HttpOnly+Secure+SameSite, secreto propio, expiración corta.
 - [ ] Helpers de auth en capas (`optional` / `require` / `require_<recurso>`).
 - [ ] Username/identidad únicos case-insensitive (`LOWER()`).
+- [ ] `token_version` + middleware global para revocar sesiones al cambiar password.
 
 **Autorización**
 - [ ] Mutaciones con el dueño en el WHERE (404 si 0 filas).
@@ -422,6 +520,9 @@ Cada cambio, antes de mergear:
 **Transporte / infra**
 - [ ] Rate limit por ruta (ajustado al coste); IP real tras proxy.
 - [ ] CORS: origins y métodos explícitos, sin comodín con credenciales.
+- [ ] **Cabeceras de seguridad** en toda respuesta: nosniff, X-Frame-Options DENY,
+  Referrer-Policy, Permissions-Policy, HSTS (solo https), y **CSP** con allowlist real
+  (documenta la deuda de `unsafe-inline`/`unsafe-eval` si usas inline/Babel).
 - [ ] Secretos solo en env; `.gitignore` agresivo; rotación documentada.
 
 **Abuso / contenido**
