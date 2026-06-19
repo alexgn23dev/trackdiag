@@ -1,6 +1,14 @@
 {
   "entries": [
     {
+      "version": "0.5.65",
+      "date": "2026-06-18",
+      "title": "¿Track listo? Te ayudamos a buscar sello",
+      "changes": [
+        "Cuando un análisis sale limpio (track fino, sin bloqueos), te sugerimos buscar sellos donde encaje tu tema en Relesit — gratis."
+      ]
+    },
+    {
       "version": "0.5.64",
       "date": "2026-06-18",
       "title": "Seguridad: las sesiones se cierran al cambiar la contraseña",

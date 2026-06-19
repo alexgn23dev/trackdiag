@@ -921,6 +921,44 @@
     }
 
 
+    // CTA hacia Relesit (relesit.com) — solo tras un diagnóstico BUENO: el track
+    // está fino, así que invitamos a buscarle sello. Relesit es gratis.
+    function RelesitCTA({ diagId, estado }) {
+        useEffect(() => {
+            try { trackEvent('cta_relesit_visto', { diagnostico: diagId, estado }); } catch (e) {}
+        }, [diagId]);
+        return (
+            <a
+                href="https://relesit.com"
+                target="_blank"
+                rel="noopener"
+                onClick={() => { try { trackEvent('cta_relesit_clicked', { diagnostico: diagId }); } catch (e) {} }}
+                className="block card p-5 mb-6 transition-all"
+                style={{
+                    background: 'linear-gradient(135deg, rgba(37,244,100,0.08) 0%, rgba(34,211,238,0.06) 100%)',
+                    border: '1px solid rgba(37,244,100,0.28)',
+                    textDecoration: 'none',
+                    cursor: 'pointer',
+                }}
+            >
+                <p className="text-xs font-medium uppercase tracking-wider mb-2" style={{color: 'var(--po-green)'}}>
+                    Tu track está fino · busca sello
+                </p>
+                <p className="text-white text-sm leading-relaxed mb-1 font-medium">
+                    El análisis sale limpio: este tema está para enseñarlo. ¿Le buscamos sellos donde encaje?
+                </p>
+                <p className="text-gray-400 text-xs leading-relaxed mb-3">
+                    En <span className="text-white font-medium">Relesit</span> encuentras sellos que cuadran con tu estilo
+                    para mandarles tu track. Es <span className="text-white font-medium">gratis</span>.
+                </p>
+                <span className="inline-flex items-center gap-1.5 text-white text-sm font-medium">
+                    Buscar sellos en Relesit →
+                </span>
+            </a>
+        );
+    }
+
+
     // =====================================================================
     // Compartir con la comunidad — card + modal en la pantalla de diagnóstico.
     // Requiere: perfil completo, aceptar el descargo. El archivo se reutiliza
@@ -1992,6 +2030,11 @@
                           {diagId !== 'sin_diagnostico' && diagId !== 'track_verde' && (
                             <CTAAuditoria diagId={diagId} userEmail={userEmail} />
                           )} */}
+
+                    {/* CTA a Relesit: solo si el diagnóstico es bueno (track fino → busca sello) */}
+                    {(diagId === 'sin_diagnostico' || r.estado_track === 'avanzado') && r.estado_track !== 'verde' && (
+                        <RelesitCTA diagId={diagId} estado={r.estado_track} />
+                    )}
 
                     {/* CTA de la encuesta de comunidad (tras el análisis) */}
                     <EncuestaCTA origen="diagnostico" />
