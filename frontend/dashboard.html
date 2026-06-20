@@ -2045,6 +2045,37 @@
                     )}
                 </div>
 
+                {/* Relesit: cuánta gente va a relesit.com desde el CTA tras un diagnóstico bueno */}
+                {!loading && data && (() => {
+                    const rv = data.totales_recientes?.relesit_visto || {};
+                    const rc = data.totales_recientes?.relesit_clicked || {};
+                    const imp = rv.sesiones || 0, clk = rc.sesiones || 0;
+                    const ctr = imp > 0 ? (clk / imp * 100) : 0;
+                    return (
+                        <div className="card p-5 mb-2">
+                            <h3 className="text-sm font-semibold text-gray-300 mb-1">Relesit — "Busca sello" tras diagnóstico bueno</h3>
+                            <p className="text-xs text-gray-500 mb-3">Cuánta gente va a relesit.com desde el CTA de Mentotrack (sesiones únicas, últimos {dias} días).</p>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+                                <div className="bg-gray-900/40 rounded p-2.5">
+                                    <div className="text-gray-500 text-[10px] uppercase tracking-wide">CTA mostrado</div>
+                                    <div className="text-gray-200 text-lg font-semibold">{imp}</div>
+                                    <div className="text-gray-500 text-[10px] mt-0.5">sesiones que lo vieron</div>
+                                </div>
+                                <div className="bg-gray-900/40 rounded p-2.5" style={{ borderLeft: '3px solid #25F464' }}>
+                                    <div className="text-gray-500 text-[10px] uppercase tracking-wide">Fueron a Relesit</div>
+                                    <div className="text-green-400 text-lg font-semibold">{clk}</div>
+                                    <div className="text-gray-500 text-[10px] mt-0.5">clics en "Buscar sellos"</div>
+                                </div>
+                                <div className="bg-gray-900/40 rounded p-2.5" style={{ borderLeft: '3px solid #22d3ee' }}>
+                                    <div className="text-gray-500 text-[10px] uppercase tracking-wide">CTR</div>
+                                    <div className="text-cyan-400 text-lg font-semibold">{imp > 0 ? ctr.toFixed(1) + '%' : '—'}</div>
+                                    <div className="text-gray-500 text-[10px] mt-0.5">de los que lo vieron</div>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })()}
+
                 {error && (
                     <div className="card p-4 text-xs text-red-400">Error: {error}</div>
                 )}

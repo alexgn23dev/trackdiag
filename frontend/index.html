@@ -923,16 +923,20 @@
 
     // CTA hacia Relesit (relesit.com) — solo tras un diagnóstico BUENO: el track
     // está fino, así que invitamos a buscarle sello. Relesit es gratis.
-    function RelesitCTA({ diagId, estado }) {
+    function RelesitCTA({ diagId, estado, userEmail }) {
         useEffect(() => {
             try { trackEvent('cta_relesit_visto', { diagnostico: diagId, estado }); } catch (e) {}
+            try { window.mtCtaEvent && window.mtCtaEvent('relesit_visto', { diagnostico_id: diagId || '', email: userEmail || '' }); } catch (e) {}
         }, [diagId]);
         return (
             <a
                 href="https://relesit.com"
                 target="_blank"
                 rel="noopener"
-                onClick={() => { try { trackEvent('cta_relesit_clicked', { diagnostico: diagId }); } catch (e) {} }}
+                onClick={() => {
+                    try { trackEvent('cta_relesit_clicked', { diagnostico: diagId }); } catch (e) {}
+                    try { window.mtCtaEvent && window.mtCtaEvent('relesit_clicked', { diagnostico_id: diagId || '', email: userEmail || '' }); } catch (e) {}
+                }}
                 className="block card p-5 mb-6 transition-all"
                 style={{
                     background: 'linear-gradient(135deg, rgba(37,244,100,0.08) 0%, rgba(34,211,238,0.06) 100%)',
@@ -2033,7 +2037,7 @@
 
                     {/* CTA a Relesit: solo si el diagnóstico es bueno (track fino → busca sello) */}
                     {(diagId === 'sin_diagnostico' || r.estado_track === 'avanzado') && r.estado_track !== 'verde' && (
-                        <RelesitCTA diagId={diagId} estado={r.estado_track} />
+                        <RelesitCTA diagId={diagId} estado={r.estado_track} userEmail={userEmail} />
                     )}
 
                     {/* CTA de la encuesta de comunidad (tras el análisis) */}

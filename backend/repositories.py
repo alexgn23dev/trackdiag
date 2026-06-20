@@ -370,6 +370,8 @@ _CTA_EVENTOS_VALIDOS = (
     "consultoria_calendly_click",   # clic en "Reserva tu llamada gratis" → Calendly
     "consultoria_form_started",     # legacy: form retirado (flujo llamada-primero)
     "consultoria_form_submit",      # legacy: form retirado (flujo llamada-primero)
+    "relesit_visto",                # CTA a Relesit tras diagnóstico bueno (impresión)
+    "relesit_clicked",              # clic en "Buscar sellos en Relesit" → relesit.com
 )
 
 
