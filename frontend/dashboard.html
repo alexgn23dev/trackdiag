@@ -2270,6 +2270,43 @@
     }
 
 
+    // Tarjeta resumen de Relesit (para la pestaña principal) — carga el embudo
+    // por su cuenta (últimos 30 días) y muestra impresiones / clics / CTR.
+    function RelesitResumenCard() {
+        const [d, setD] = React.useState(null);
+        React.useEffect(() => {
+            fetch(`${API_URL}/api/admin/embudo?dias=30`, { credentials: 'same-origin' })
+                .then(r => r.ok ? r.json() : null).then(setD).catch(() => {});
+        }, []);
+        const rv = d?.totales_recientes?.relesit_visto || {};
+        const rc = d?.totales_recientes?.relesit_clicked || {};
+        const imp = rv.sesiones || 0, clk = rc.sesiones || 0;
+        const ctr = imp > 0 ? (clk / imp * 100) : 0;
+        return (
+            <div className="card p-5 mb-8">
+                <h3 className="text-sm font-medium text-gray-300 mb-4">
+                    🏷️ Relesit — busca sello tras diagnóstico bueno
+                    <span className="text-gray-500 text-xs font-normal"> (últimos 30 días)</span>
+                </h3>
+                <div className="grid grid-cols-3 gap-4">
+                    <div className="text-center">
+                        <p className="text-2xl font-bold text-gray-200">{imp}</p>
+                        <p className="text-gray-500 text-xs mt-1">CTA mostrado</p>
+                    </div>
+                    <div className="text-center">
+                        <p className="text-2xl font-bold" style={{ color: '#25F464' }}>{clk}</p>
+                        <p className="text-gray-500 text-xs mt-1">Fueron a Relesit</p>
+                    </div>
+                    <div className="text-center">
+                        <p className="text-2xl font-bold" style={{ color: '#22d3ee' }}>{imp > 0 ? ctr.toFixed(1) + '%' : '—'}</p>
+                        <p className="text-gray-500 text-xs mt-1">CTR (clic / mostrado)</p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+
     // =========================================================================
     // Dashboard principal
     // =========================================================================
@@ -2561,6 +2598,9 @@
                             <StatCard label="Feedback real" value={feedbackReal} sub={`de ${totalUsers} análisis`} color="#a78bfa" icon="🎧" />
                             <StatCard label="Satisfacción" value={`${utilRate}%`} sub={`${utilSi} sí / ${utilParcial} parcial / ${utilNo} no`} color={utilRate >= 70 ? '#4ade80' : utilRate >= 40 ? '#facc15' : '#f87171'} icon="💬" />
                         </div>
+
+                        {/* Relesit — conversión del CTA "busca sello" */}
+                        <RelesitResumenCard />
 
                         {/* Engagement Card */}
                         <div className="card p-5 mb-8">
