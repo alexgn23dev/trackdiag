@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "version": "0.5.68",
+      "date": "2026-07-24",
+      "title": "Tu análisis, con siguiente paso: el Máster",
+      "changes": [
+        "Cada informe termina ahora con una recomendación del Máster de Producción Online adaptada al problema principal detectado (mezcla, mastering o estructura).",
+        "Si tu track sale limpio, se mantiene la sugerencia de buscar sello en Relesit — nunca verás las dos tarjetas a la vez."
+      ]
+    },
+    {
       "version": "0.5.65",
       "date": "2026-06-18",
       "title": "¿Track listo? Te ayudamos a buscar sello",
