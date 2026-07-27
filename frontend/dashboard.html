@@ -2397,22 +2397,40 @@
             return users.sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
         }, [userMap, userSort]);
 
-        // Engagement: repetición y stickiness
+        // Engagement: repetición y retorno real. La media aritmética engaña
+        // (los heavy users concentran gran parte del volumen), así que las
+        // métricas centrales son de retorno: análisis en días de calendario
+        // distintos — iterar el mismo track en la misma sesión no cuenta y
+        // cada usuario cuenta una sola vez.
         const engagementData = useMemo(() => {
             const users = Object.values(userMap);
             const total = users.length;
-            if (total === 0) return { avgAnalyses: 0, repeatRate: 0, dist1: 0, dist2_3: 0, dist4plus: 0, totalUsers: 0, maxAnalyses: 0, topUser: null };
+            if (total === 0) return { avgAnalyses: 0, medianAnalyses: 0, repeatRate: 0, returnDayRate: 0, return7Rate: 0, top5Share: 0, dist1: 0, dist2_3: 0, dist4plus: 0, totalUsers: 0, maxAnalyses: 0, topUser: null };
             const counts = users.map(u => u.analyses.length);
             const avg = counts.reduce((a, b) => a + b, 0) / total;
+            const asc = [...counts].sort((a, b) => a - b);
+            const median = total % 2 ? asc[(total - 1) / 2] : (asc[total / 2 - 1] + asc[total / 2]) / 2;
             const repeaters = counts.filter(c => c >= 2).length;
+            const returnDay = users.filter(u => {
+                const days = new Set(u.analyses.map(a => a.date && a.date.toISOString().slice(0, 10)).filter(Boolean));
+                return days.size >= 2;
+            }).length;
+            const return7 = users.filter(u => u.firstSeen && u.lastSeen && (u.lastSeen - u.firstSeen) >= 7 * 86400000).length;
             const dist1 = counts.filter(c => c === 1).length;
             const dist2_3 = counts.filter(c => c >= 2 && c <= 3).length;
             const dist4plus = counts.filter(c => c >= 4).length;
             const maxVal = Math.max(...counts);
             const topUser = users.find(u => u.analyses.length === maxVal);
+            const desc = [...counts].sort((a, b) => b - a);
+            const top5n = Math.max(1, Math.round(total * 0.05));
+            const top5Share = Math.round((desc.slice(0, top5n).reduce((a, b) => a + b, 0) / counts.reduce((a, b) => a + b, 0)) * 100);
             return {
                 avgAnalyses: Math.round(avg * 10) / 10,
+                medianAnalyses: Math.round(median * 10) / 10,
                 repeatRate: Math.round((repeaters / total) * 100),
+                returnDayRate: Math.round((returnDay / total) * 100),
+                return7Rate: Math.round((return7 / total) * 100),
+                top5Share,
                 dist1, dist2_3, dist4plus,
                 totalUsers: total,
                 maxAnalyses: maxVal,
@@ -2613,12 +2631,16 @@
                                     <p className="text-gray-500 text-xs mt-1">Repiten (2+ análisis)</p>
                                 </div>
                                 <div className="text-center">
-                                    <p className="text-2xl font-bold text-purple-400">{engagementData.avgAnalyses}</p>
-                                    <p className="text-gray-500 text-xs mt-1">Media análisis/usuario</p>
+                                    <p className="text-2xl font-bold text-purple-400" title="Usuarios con análisis en 2+ días de calendario distintos — iterar en la misma sesión no cuenta">
+                                        {engagementData.returnDayRate}%
+                                    </p>
+                                    <p className="text-gray-500 text-xs mt-1">Vuelven otro día</p>
                                 </div>
                                 <div className="text-center">
-                                    <p className="text-2xl font-bold text-blue-400">{engagementData.maxAnalyses}</p>
-                                    <p className="text-gray-500 text-xs mt-1">Máx. de un usuario</p>
+                                    <p className="text-2xl font-bold text-blue-400" title="Usuarios cuyo último análisis llega 7+ días después del primero">
+                                        {engagementData.return7Rate}%
+                                    </p>
+                                    <p className="text-gray-500 text-xs mt-1">Vuelven tras 7+ días</p>
                                 </div>
                             </div>
 
@@ -2651,6 +2673,9 @@
                                                 <span className="text-gray-400">4+: {dist4plus} ({pct4}%)</span>
                                             </span>
                                         </div>
+                                        <p className="text-gray-600 text-xs mt-3">
+                                            media {engagementData.avgAnalyses} · mediana {engagementData.medianAnalyses} · máx {engagementData.maxAnalyses} · el top 5% de usuarios concentra el {engagementData.top5Share}% de los análisis (por eso la media no es fiable como KPI)
+                                        </p>
                                     </div>
                                 );
                             })()}
