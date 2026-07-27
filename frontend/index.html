@@ -930,7 +930,7 @@
         }, [diagId]);
         return (
             <a
-                href="https://relesit.com"
+                href="https://relesit.com/?utm_source=mentotrack&utm_medium=app&utm_campaign=derivacion&utm_content=objetivo_sello"
                 target="_blank"
                 rel="noopener"
                 onClick={() => {
@@ -957,6 +957,87 @@
                 </p>
                 <span className="inline-flex items-center gap-1.5 text-white text-sm font-medium">
                     Buscar sellos en Relesit →
+                </span>
+            </a>
+        );
+    }
+
+
+    // =====================================================================
+    // CTA al Máster de Producción Online — cierra todos los informes en los
+    // que NO se muestra el CTA de Relesit (nunca dos tarjetas). El texto se
+    // adapta a la categoría dominante del diagnóstico.
+    // =====================================================================
+    const MASTER_CTA_VARIANTES = {
+        mezcla: 'Lo que el análisis ha detectado en tu track se trabaja a fondo en el bloque de Mezcla del Máster: 7 cursos y 106 clases.',
+        mastering: 'Lo que el análisis ha detectado en tu track se trabaja en el bloque de Mastering del Máster: sonido final listo para club, sello y plataformas.',
+        estructura: 'Lo que el análisis ha detectado en tu track se trabaja en los bloques de composición y arreglo del Máster: de la idea suelta al track terminado.',
+        general: 'Una ruta completa, paso a paso, de la idea al track terminado: +900 clases y 16 profesores especializados.',
+    };
+
+    // Categoría de diagnóstico → variante de la tarjeta.
+    const MASTER_CTA_MAPEO = {
+        carencia_espectral: 'mezcla',
+        harshness_mezcla: 'mezcla',
+        exceso_lowend: 'mezcla',
+        exceso_densidad: 'mezcla',
+        enmascaramiento_bajo: 'mezcla',
+        problema_arreglo: 'estructura',
+        poco_contraste: 'estructura',
+        falta_impacto: 'estructura',
+        break_sin_payoff: 'estructura',
+        arreglo_repetitivo: 'estructura',
+        mezcla_prematura: 'estructura',
+        track_verde: 'estructura',
+        // Desactivadas en el motor (score 0); mapeadas por si se reactivan:
+        conflicto_armonico: 'general',
+        pobreza_armonica: 'general',
+    };
+
+    // Resuelve variante + categoría dominante. Ningún dx del motor cubre
+    // master/loudness: esa variante sale de los avisos de loudness/true peak.
+    function resolverVarianteMaster(r) {
+        const diagId = (r && r.diagnostico_principal && r.diagnostico_principal.id) || 'sin_diagnostico';
+        if (diagId !== 'sin_diagnostico' && MASTER_CTA_MAPEO[diagId]) {
+            return { variante: MASTER_CTA_MAPEO[diagId], categoria: diagId };
+        }
+        const loud = (r && r.datos_audio && r.datos_audio.loudness) || {};
+        if (loud.aviso_true_peak) return { variante: 'mastering', categoria: 'true_peak' };
+        if (loud.aviso_saturacion || loud.nivel === 'muy_alto') return { variante: 'mastering', categoria: 'loudness' };
+        return { variante: 'general', categoria: 'general' };
+    }
+
+    function MasterCTA({ diagId, variante, categoria, userEmail }) {
+        useEffect(() => {
+            try { trackEvent('cta_master_visto', { diagnostico: diagId, variante, categoria }); } catch (e) {}
+            try { window.mtCtaEvent && window.mtCtaEvent('master_visto', { diagnostico_id: categoria || '', email: userEmail || '' }); } catch (e) {}
+        }, [diagId]);
+        const url = 'https://producciononline.com/master/?utm_source=mentotrack&utm_medium=app&utm_campaign=derivacion&utm_content=' + encodeURIComponent(categoria || 'general');
+        return (
+            <a
+                href={url}
+                target="_blank"
+                rel="noopener"
+                onClick={() => {
+                    try { trackEvent('cta_master_clicked', { diagnostico: diagId, variante, categoria }); } catch (e) {}
+                    try { window.mtCtaEvent && window.mtCtaEvent('master_clicked', { diagnostico_id: categoria || '', email: userEmail || '' }); } catch (e) {}
+                }}
+                className="block card p-5 mb-6 transition-all"
+                style={{
+                    background: 'linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(99,102,241,0.05) 100%)',
+                    border: '1px solid rgba(139,92,246,0.25)',
+                    textDecoration: 'none',
+                    cursor: 'pointer',
+                }}
+            >
+                <p className="text-white text-sm font-semibold mb-1">
+                    Este análisis te dice qué falla. El Máster te enseña a arreglarlo.
+                </p>
+                <p className="text-gray-400 text-xs leading-relaxed mb-3">
+                    {MASTER_CTA_VARIANTES[variante] || MASTER_CTA_VARIANTES.general}
+                </p>
+                <span className="inline-flex items-center gap-1.5 text-white text-sm font-medium">
+                    Ver el Máster →
                 </span>
             </a>
         );
@@ -1328,6 +1409,9 @@
                 allTutoriales.push(t);
             }
         });
+
+        // Variante del CTA al Máster según la categoría dominante del análisis
+        const masterCta = resolverVarianteMaster(r);
 
         const semaforoConfig = r.estado_track === 'verde'
             ? { color: '#f87171', bg: 'rgba(248,113,113,0.10)', border: '#7f1d1d', label: 'Fase temprana', icon: '🔴' }
@@ -2035,9 +2119,13 @@
                             <CTAAuditoria diagId={diagId} userEmail={userEmail} />
                           )} */}
 
-                    {/* CTA a Relesit: solo si el diagnóstico es bueno (track fino → busca sello) */}
-                    {(diagId === 'sin_diagnostico' || r.estado_track === 'avanzado') && r.estado_track !== 'verde' && (
+                    {/* Tarjeta de derivación (siempre una y solo una): Relesit si el
+                        diagnóstico es bueno (track fino → busca sello); si no, el
+                        Máster con el texto adaptado a la categoría dominante. */}
+                    {(diagId === 'sin_diagnostico' || r.estado_track === 'avanzado') && r.estado_track !== 'verde' ? (
                         <RelesitCTA diagId={diagId} estado={r.estado_track} userEmail={userEmail} />
+                    ) : (
+                        <MasterCTA diagId={diagId} variante={masterCta.variante} categoria={masterCta.categoria} userEmail={userEmail} />
                     )}
 
                     {/* CTA de la encuesta de comunidad (tras el análisis) */}
