@@ -194,7 +194,7 @@ def email_html(ctx: dict, t: str) -> str:
         <p style="margin:0 0 10px;font-size:15px;line-height:1.6;color:#3f3f46">
           Si notas que siempre te atascas en lo mismo, es que falta método. El Máster de
           Producción Online es un programa paso a paso y desde cero para
-          <strong>terminar temas al nivel que pide el mercado junto</strong> a 16 profesores
+          <strong>terminar temas al nivel que pide el mercado</strong> junto a 16 profesores
           especializados.
         </p>
         <a href="{url_master(ctx, t)}" style="font-size:15px;color:#18181b;font-weight:600;text-decoration:underline">
