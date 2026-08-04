@@ -377,6 +377,7 @@ _CTA_EVENTOS_VALIDOS = (
     "promesa_v2_visto",             # promesa de la comparativa entre versiones (impresión)
     "promesa_v2_clicked",           # clic en "ver qué ha cambiado" (solo con v2+)
     "reenganche_click",             # clic en el CTA del email de re-enganche (día 3)
+    "reenganche_master_click",      # clic en el CTA secundario al Máster del mismo email
 )
 
 

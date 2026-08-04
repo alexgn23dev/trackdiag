@@ -118,6 +118,13 @@ def url_boton(ctx: dict, t: str) -> str:
     return f"{BASE_URL}/r/reenganche?t={t}{extra}"
 
 
+def url_master(ctx: dict, t: str) -> str:
+    """CTA secundario al Máster. También por el redirect propio, para poder
+    separar en el embudo quién viene del email y con qué bloqueo."""
+    cat = ctx.get("diag_id") or "general"
+    return f"{BASE_URL}/r/reenganche?t={t}&d=master&c={cat}"
+
+
 def email_html(ctx: dict, t: str) -> str:
     proyecto = ctx.get("proyecto")
     nombre_track = f"<strong>{proyecto}</strong>" if proyecto else "tu track"
@@ -183,8 +190,20 @@ def email_html(ctx: dict, t: str) -> str:
         </a>
       </td></tr>
     </table>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:26px 0 0">
+      <tr><td style="border-top:1px solid #e4e4e7;padding-top:18px">
+        <p style="margin:0 0 10px;font-size:15px;line-height:1.6;color:#3f3f46">
+          Y si notas que siempre te atascas en lo mismo, el problema no es el track: es que
+          falta un método. El <strong>Máster de Producción Online</strong> es un programa paso
+          a paso para terminar temas al nivel que pide el mercado — +900 clases y 16 profesores
+          especializados.
+        </p>
+        <a href="{url_master(ctx, t)}" style="font-size:15px;color:#18181b;font-weight:600;text-decoration:underline">
+          Ver el Máster →
+        </a>
+      </td></tr>
+    </table>
     <p style="margin:22px 0 0;font-size:15px;color:#3f3f46">
-      Si te has quedado atascado, responde a este email y le echo un oído.<br>
       <strong>Alex</strong> · Mentotrack — Producción Online
     </p>
     <p style="margin:28px 0 0;font-size:12px;color:#a1a1aa;border-top:1px solid #e4e4e7;padding-top:14px">
@@ -226,7 +245,13 @@ def email_texto(ctx: dict, t: str) -> str:
             "en la carpeta de siempre."
         )
     partes.append(f"Subir la {vsig}: {url_boton(ctx, t)}")
-    partes.append("Si te has quedado atascado, responde a este email y le echo un oído.\nAlex · Mentotrack — Producción Online")
+    partes.append(
+        "Y si notas que siempre te atascas en lo mismo, el problema no es el track: es que "
+        "falta un método. El Máster de Producción Online es un programa paso a paso para "
+        "terminar temas al nivel que pide el mercado — +900 clases y 16 profesores "
+        f"especializados.\nVer el Máster: {url_master(ctx, t)}"
+    )
+    partes.append("Alex · Mentotrack — Producción Online")
     partes.append(f"--\nRecibes este email porque analizaste un track en mentotrack.com.\nDarte de baja: {BASE_URL}/email/baja?t={t}")
     return "\n\n".join(partes) + "\n"
 

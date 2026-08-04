@@ -20,6 +20,7 @@ import jwt
 from datetime import datetime, timedelta, timezone
 
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import FastAPI, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -3912,13 +3913,16 @@ def _email_desde_token_encuesta(token: str) -> str | None:
 
 @app.get("/r/reenganche")
 @limiter.limit("120/minute")
-async def reenganche_redirect(request: Request, t: str = "", p: str = ""):
-    """Redirect del botón del email de re-enganche. Registra el clic y manda a
-    la app con el proyecto preseleccionado.
+async def reenganche_redirect(request: Request, t: str = "", p: str = "", d: str = "", c: str = ""):
+    """Redirect de los enlaces del email de re-enganche. Registra el clic y
+    manda al destino: la app con el proyecto preseleccionado (por defecto) o
+    el Máster (`d=master`, el CTA secundario).
 
     Límite alto a propósito: los proxies de Gmail concentran muchas IPs. Si el
     token no vale, redirige igual — el usuario ya hizo clic, no merece un error.
     """
+    a_master = _sanitize(d, 20) == "master"
+    categoria = _sanitize(c, 50) or "general"
     email = _email_desde_token_encuesta(t)
     if email and _pg_available():
         try:
@@ -3926,18 +3930,25 @@ async def reenganche_redirect(request: Request, t: str = "", p: str = ""):
             import repositories as repo
             await repo.create_cta_evento(
                 get_pool(),
-                evento="reenganche_click",
+                evento="reenganche_master_click" if a_master else "reenganche_click",
                 session_id=None,
-                diagnostico_id=None,
+                diagnostico_id=categoria if a_master else None,
                 email=email,
                 user_agent=(request.headers.get("user-agent") or "")[:500],
             )
         except Exception as e:
             print(f"[REENGANCHE-CLICK] no registrado: {type(e).__name__}: {e}")
+    if a_master:
+        destino = (
+            "https://producciononline.com/master/"
+            "?utm_source=mentotrack&utm_medium=email&utm_campaign=reenganche"
+            f"&utm_content={quote(categoria, safe='')}"
+        )
+        return RedirectResponse(destino, status_code=302)
     destino = f"{APP_BASE_URL.rstrip('/')}/?utm_source=mentotrack&utm_medium=email&utm_campaign=reenganche"
     pid = _sanitize(p, 40)
     if pid:
-        destino += f"&proyecto={pid}"
+        destino += f"&proyecto={quote(pid, safe='')}"
     return RedirectResponse(destino, status_code=302)
 
 
