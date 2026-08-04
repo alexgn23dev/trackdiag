@@ -193,9 +193,9 @@ def email_html(ctx: dict, t: str) -> str:
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:26px 0 0">
       <tr><td style="border-top:1px solid #e4e4e7;padding-top:18px">
         <p style="margin:0 0 10px;font-size:15px;line-height:1.6;color:#3f3f46">
-          Y si notas que siempre te atascas en lo mismo, el problema no es el track: es que
-          falta un método. El <strong>Máster de Producción Online</strong> es un programa paso
-          a paso para terminar temas al nivel que pide el mercado — +900 clases y 16 profesores
+          Si notas que siempre te atascas en lo mismo, es que falta método. El Máster de
+          Producción Online es un programa paso a paso y desde cero para
+          <strong>terminar temas al nivel que pide el mercado junto</strong> a 16 profesores
           especializados.
         </p>
         <a href="{url_master(ctx, t)}" style="font-size:15px;color:#18181b;font-weight:600;text-decoration:underline">
@@ -246,10 +246,10 @@ def email_texto(ctx: dict, t: str) -> str:
         )
     partes.append(f"Subir la {vsig}: {url_boton(ctx, t)}")
     partes.append(
-        "Y si notas que siempre te atascas en lo mismo, el problema no es el track: es que "
-        "falta un método. El Máster de Producción Online es un programa paso a paso para "
-        "terminar temas al nivel que pide el mercado — +900 clases y 16 profesores "
-        f"especializados.\nVer el Máster: {url_master(ctx, t)}"
+        "Si notas que siempre te atascas en lo mismo, es que falta método. El Máster de "
+        "Producción Online es un programa paso a paso y desde cero para terminar temas al "
+        "nivel que pide el mercado junto a 16 profesores especializados."
+        f"\nVer el Máster: {url_master(ctx, t)}"
     )
     partes.append("Alex · Mentotrack — Producción Online")
     partes.append(f"--\nRecibes este email porque analizaste un track en mentotrack.com.\nDarte de baja: {BASE_URL}/email/baja?t={t}")
