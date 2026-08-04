@@ -149,10 +149,9 @@ def email_html(ctx: dict, t: str) -> str:
 
     bloque_sesion = ""
     if ctx.get("siguiente_sesion"):
-        titulo_sesion = "Lo que te propuse" if ctx.get("sin_bloqueo") else "Lo que te propuse para esa sesión"
         bloque_sesion = f"""
     <p style="margin:0 0 6px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:#71717a">
-      {titulo_sesion}
+      Lo que el análisis te propuso:
     </p>
     <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#3f3f46">{ctx['siguiente_sesion']}</p>"""
 
@@ -230,8 +229,7 @@ def email_texto(ctx: dict, t: str) -> str:
         if ctx.get("diag_titulo"):
             partes.append(f"El bloqueo principal era este:\n\n  {ctx['diag_titulo']}")
     if ctx.get("siguiente_sesion"):
-        titulo_sesion = "LO QUE TE PROPUSE" if ctx.get("sin_bloqueo") else "LO QUE TE PROPUSE PARA ESA SESIÓN"
-        partes.append(f"{titulo_sesion}\n{ctx['siguiente_sesion']}")
+        partes.append(f"LO QUE EL ANÁLISIS TE PROPUSO:\n{ctx['siguiente_sesion']}")
     if ctx.get("sin_bloqueo"):
         partes.append(
             f"Si le has seguido dando vueltas, sube la {vsig}: comparo las dos versiones y te digo "
