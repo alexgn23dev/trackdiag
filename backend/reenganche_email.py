@@ -183,7 +183,7 @@ def email_html(ctx: dict, t: str) -> str:
     <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 8px">
       <tr><td>
         <a href="{url_boton(ctx, t)}"
-           style="display:inline-block;padding:12px 22px;background:#18181b;color:#ffffff;
+           style="display:inline-block;padding:12px 22px;background:#6D10FF;color:#ffffff;
                   text-decoration:none;border-radius:10px;font-size:15px;font-weight:600">
           Subir la {vsig}{f" de {proyecto}" if proyecto else ""}
         </a>
@@ -197,7 +197,7 @@ def email_html(ctx: dict, t: str) -> str:
           <strong>terminar temas al nivel que pide el mercado</strong> junto a 16 profesores
           especializados.
         </p>
-        <a href="{url_master(ctx, t)}" style="font-size:15px;color:#18181b;font-weight:600;text-decoration:underline">
+        <a href="{url_master(ctx, t)}" style="font-size:15px;color:#6D10FF;font-weight:600;text-decoration:underline">
           Ver el Máster →
         </a>
       </td></tr>
