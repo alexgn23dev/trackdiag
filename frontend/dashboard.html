@@ -2307,6 +2307,55 @@
     }
 
 
+    // Re-enganche — email de vuelta al día 3. La métrica que importa no es el
+    // CTR sino "volvieron": análisis nuevo en los 7 días siguientes al envío.
+    function ReengancheCard() {
+        const [d, setD] = React.useState(null);
+        React.useEffect(() => {
+            fetch(`${API_URL}/api/admin/reenganche/stats?dias=30`, { credentials: 'same-origin' })
+                .then(r => r.ok ? r.json() : null).then(setD).catch(() => {});
+        }, []);
+        if (!d) return null;
+        return (
+            <div className="card p-5 mb-8">
+                <h3 className="text-sm font-medium text-gray-300 mb-4">
+                    ✉️ Re-enganche — email de vuelta
+                    <span className="text-gray-500 text-xs font-normal"> (últimos 30 días)</span>
+                    {!d.activo && (
+                        <span className="ml-2 text-xs px-2 py-0.5 rounded"
+                              style={{ background: 'rgba(250,204,21,0.15)', color: '#facc15' }}>
+                            en dry-run (REENGANCHE_ACTIVO=0)
+                        </span>
+                    )}
+                </h3>
+                <div className="grid grid-cols-4 gap-4">
+                    <div className="text-center">
+                        <p className="text-2xl font-bold text-gray-200">{d.enviados}</p>
+                        <p className="text-gray-500 text-xs mt-1">Enviados</p>
+                    </div>
+                    <div className="text-center">
+                        <p className="text-2xl font-bold" style={{ color: '#22d3ee' }}>{d.con_click}</p>
+                        <p className="text-gray-500 text-xs mt-1">Hicieron clic</p>
+                    </div>
+                    <div className="text-center">
+                        <p className="text-2xl font-bold" style={{ color: '#25F464' }}>{d.volvieron}</p>
+                        <p className="text-gray-500 text-xs mt-1">Volvieron (7 días)</p>
+                    </div>
+                    <div className="text-center">
+                        <p className="text-2xl font-bold" style={{ color: d.tasa_vuelta >= 15 ? '#4ade80' : '#facc15' }}>
+                            {d.enviados > 0 ? d.tasa_vuelta + '%' : '—'}
+                        </p>
+                        <p className="text-gray-500 text-xs mt-1">Tasa de vuelta</p>
+                    </div>
+                </div>
+                {d.fallidos > 0 && (
+                    <p className="text-gray-500 text-xs mt-3">{d.fallidos} envíos fallidos en el periodo.</p>
+                )}
+            </div>
+        );
+    }
+
+
     // =========================================================================
     // Dashboard principal
     // =========================================================================
@@ -3138,7 +3187,10 @@
 
                 {/* ============ TAB: EMBUDO (CTA conversion funnel) ============ */}
                 {tab === 'embudo' && (
-                    <EmbudoTab />
+                    <>
+                        <ReengancheCard />
+                        <EmbudoTab />
+                    </>
                 )}
 
                 {/* ============ TAB: ENCUESTA (respuestas en tiempo real) ============ */}

@@ -193,7 +193,7 @@
     <div id="root"></div>
 
     <script type="text/babel">
-    const { useState, useRef, useEffect } = React;
+    const { useState, useRef, useEffect, useMemo } = React;
 
     const API_URL = window.location.hostname === 'localhost'
         ? 'http://localhost:8000'
@@ -964,6 +964,55 @@
 
 
     // =====================================================================
+    // Promesa de la comparativa entre versiones — va dentro de la tarjeta
+    // "Tu próxima sesión". El 84% de los proyectos se queda en una sola
+    // versión: la comparativa existe pero no se descubre hasta tenerla. Con
+    // v1 se anuncia; con v2+ ya está disponible y se enlaza directamente.
+    // =====================================================================
+    function PromesaComparativa({ diagId, userEmail, nombre, version, proyectoId, onVerComparativa }) {
+        const tieneAnterior = version > 1;
+        useEffect(() => {
+            try { trackEvent('promesa_v2_visto', { diagnostico: diagId, version }); } catch (e) {}
+            try { window.mtCtaEvent && window.mtCtaEvent('promesa_v2_visto', { diagnostico_id: diagId || '', email: userEmail || '' }); } catch (e) {}
+        }, [diagId]);
+        return (
+            <div className="mt-4 pt-4" style={{borderTop: '1px solid rgba(255,255,255,0.08)'}}>
+                {tieneAnterior ? (
+                    <>
+                        <p className="text-gray-300 text-sm leading-relaxed">
+                            Esta es la <span className="text-white font-medium">v{version}</span>
+                            {nombre ? <> de <span className="text-white font-medium">{nombre}</span></> : null}.
+                            Ya tienes la comparativa con la versión anterior: qué has arreglado,
+                            qué se ha movido de sitio y qué sigue igual.
+                        </p>
+                        {proyectoId && onVerComparativa && (
+                            <button
+                                onClick={() => {
+                                    try { trackEvent('promesa_v2_clicked', { diagnostico: diagId, version }); } catch (e) {}
+                                    try { window.mtCtaEvent && window.mtCtaEvent('promesa_v2_clicked', { diagnostico_id: diagId || '', email: userEmail || '' }); } catch (e) {}
+                                    onVerComparativa(proyectoId);
+                                }}
+                                className="mt-3 text-white text-sm font-medium"
+                                style={{background: 'none', border: 'none', padding: 0, cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.35)'}}
+                            >
+                                Ver qué ha cambiado desde la v{version - 1} →
+                            </button>
+                        )}
+                    </>
+                ) : (
+                    <p className="text-gray-300 text-sm leading-relaxed">
+                        Cuando lo tengas, vuelve y sube la <span className="text-white font-medium">v2</span>
+                        {nombre ? <> de <span className="text-white font-medium">{nombre}</span></> : ' a este mismo proyecto'}.
+                        No empiezo de cero: comparo las dos versiones y te digo punto por punto
+                        <span className="text-white font-medium"> qué has arreglado</span>, qué se ha movido de sitio y qué sigue igual.
+                    </p>
+                )}
+            </div>
+        );
+    }
+
+
+    // =====================================================================
     // CTA al Máster de Producción Online — cierra todos los informes en los
     // que NO se muestra el CTA de Relesit (nunca dos tarjetas). El texto se
     // adapta a la categoría dominante del diagnóstico.
@@ -1352,7 +1401,8 @@
     }
 
 
-    function DiagnosticoScreen({ resultado, onReset, contexto, userEmail, file, opciones, nombreProyecto, onIrAPerfil, comunidadOk }) {
+    function DiagnosticoScreen({ resultado, onReset, contexto, userEmail, file, opciones, nombreProyecto, onIrAPerfil, comunidadOk,
+                                proyectoNombreResuelto, versionActual, proyectoIdActual, onVerComparativa }) {
         const r = resultado;
         const d = r.datos_audio;
         const [feedbackStep, setFeedbackStep] = useState(0); // 0=coincide?, 1=detalle, 2=feedback real
@@ -1622,10 +1672,27 @@
                         </div>
                     )}
 
-                    {/* Siguiente sesión */}
+                    {/* Siguiente sesión + promesa de la comparativa entre versiones.
+                        La comparativa v1→v2 ya existe en el detalle de proyecto, pero
+                        solo se descubre cuando ya tienes 2 versiones — de ahí que se
+                        anuncie aquí, que es donde el usuario lee qué hacer después.
+                        Con v2+ ya no se promete: se enlaza la comparativa que existe. */}
                     <div className="card p-6 mb-4 border-purple-800">
                         <p className="text-xs accent-purple font-medium uppercase tracking-wider mb-2">Tu próxima sesión</p>
                         <p className="text-white text-sm leading-relaxed">{r.siguiente_sesion}</p>
+                        {/* Solo si el análisis pertenece a un proyecto: sin él no
+                            hay nada con lo que comparar y la promesa no se podría
+                            cumplir. */}
+                        {(proyectoIdActual || (proyectoNombreResuelto || nombreProyecto || '').trim()) && (
+                            <PromesaComparativa
+                                diagId={diagId}
+                                userEmail={userEmail}
+                                nombre={proyectoNombreResuelto || nombreProyecto || ''}
+                                version={versionActual || 1}
+                                proyectoId={proyectoIdActual || ''}
+                                onVerComparativa={onVerComparativa}
+                            />
+                        )}
                     </div>
 
                     {/* Disclaimer */}
@@ -2810,14 +2877,33 @@
         // (/?compartir=1) queriendo publicar un track. Mostramos un aviso de que
         // primero hay que analizarlo (si no, la home parece no tener que ver).
         const [intencionCompartir, setIntencionCompartir] = useState(false);
+        // Proyecto que llega en la URL (/?proyecto=<id>), desde el email de
+        // re-enganche: al cargar los proyectos se preselecciona solo.
+        const [proyectoDeepLink, setProyectoDeepLink] = useState('');
 
-        // Detecta ?compartir=1 al cargar y limpia el parámetro de la URL.
+        // Detecta ?compartir=1 / ?proyecto=<id> al cargar y limpia la URL.
         useEffect(() => {
             try {
                 const params = new URLSearchParams(window.location.search);
+                let tocado = false;
                 if (params.get('compartir') === '1') {
                     setIntencionCompartir(true);
                     params.delete('compartir');
+                    tocado = true;
+                }
+                const pid = params.get('proyecto');
+                if (pid) {
+                    setProyectoDeepLink(pid);
+                    params.delete('proyecto');
+                    tocado = true;
+                    // Sin sesión no se pueden listar sus proyectos, así que el
+                    // deep link se perdería y acabaría creando un proyecto
+                    // duplicado con el mismo track. Viene de un email personal:
+                    // pedir login aquí es coherente y es la única forma de que
+                    // la nueva versión caiga en el proyecto correcto.
+                    if (!getAuth().token) openAuthModal('login');
+                }
+                if (tocado) {
                     const qs = params.toString();
                     window.history.replaceState({}, '', window.location.pathname + (qs ? '?' + qs : ''));
                 }
@@ -2976,6 +3062,22 @@
             }
         };
 
+        // Proyecto/versión efectivos del análisis en curso. `nombreProyecto` solo
+        // se rellena al crear uno nuevo; en modo "continuar uno existente" (que es
+        // justo el caso con versión anterior) hay que resolverlo del listado.
+        const proyectoActual = useMemo(() => {
+            const usandoExistente = proyectoMode === 'select' && proyectoSeleccionadoId;
+            if (usandoExistente) {
+                const p = (proyectosPrevios || []).find(x => x.id === proyectoSeleccionadoId);
+                return {
+                    id: proyectoSeleccionadoId,
+                    nombre: (p && p.nombre) || '',
+                    version: ((p && p.n_versiones) || 0) + 1,
+                };
+            }
+            return { id: '', nombre: (nombreProyecto || '').trim(), version: 1 };
+        }, [proyectoMode, proyectoSeleccionadoId, proyectosPrevios, nombreProyecto]);
+
         const loadProyectoDetalle = (proyectoId) => {
             setPanelView('detalle');
             setPanelProyectoActivo(null);
@@ -2992,6 +3094,20 @@
             setPanelView('proyectos');
             setPanelProyectoActivo(null);
             setPanelExpandedVersion(null);
+        };
+
+        // Atajo desde el informe a la comparativa entre versiones: abre el panel
+        // directamente en el detalle del proyecto y con "Progreso del proyecto"
+        // ya desplegado (por defecto va colapsado, a 3 clicks de distancia).
+        const handleVerComparativa = (proyectoId) => {
+            if (!proyectoId) return;
+            // Sin sesión, handleOpenPanel abre el modal de login y NO cambia de
+            // pantalla: cargar el detalle dejaría el panel colgado en "Cargando".
+            const { token } = getAuth();
+            if (!panelAuth && !token) { openAuthModal('login'); return; }
+            setPanelAvanceOpen(true);
+            handleOpenPanel();
+            loadProyectoDetalle(proyectoId);
         };
 
         // Normaliza una fila de análisis (sea row del historial panel o versión
@@ -3375,12 +3491,25 @@
                     // Si no tiene proyectos, modo "new" por defecto (input texto).
                     // Si tiene, modo "select" pero sin seleccionar nada todavía.
                     setProyectoMode(proys.length > 0 ? 'select' : 'new');
+                    // Deep link del email de re-enganche: si el proyecto es suyo,
+                    // se preselecciona (y el efecto de abajo prerrellena el form).
+                    // Si no lo es o ya no existe, se ignora en silencio.
+                    // Se consume una sola vez: sin esto, el siguiente track que
+                    // analizase en la misma sesión se archivaría como versión
+                    // del proyecto que venía en el email.
+                    if (proyectoDeepLink) {
+                        if (proys.some(p => p.id === proyectoDeepLink)) {
+                            setProyectoMode('select');
+                            setProyectoSeleccionadoId(proyectoDeepLink);
+                        }
+                        setProyectoDeepLink('');
+                    }
                 })
                 .catch(() => {
                     setProyectosPrevios([]);
                     setProyectoMode('new');
                 });
-        }, [screen]);
+        }, [screen, proyectoDeepLink]);
 
         // Al elegir un proyecto existente, prerrellenar género/objetivo/dificultad
         // desde la última versión de ese proyecto. Fase, bloqueo y experiencia
@@ -3992,6 +4121,10 @@
                         resultado={resultado} onReset={handleReset} contexto={contexto} userEmail={userEmail}
                         file={file} opciones={opciones} nombreProyecto={nombreProyecto}
                         comunidadOk={comunidadOk}
+                        proyectoNombreResuelto={proyectoActual.nombre}
+                        versionActual={proyectoActual.version}
+                        proyectoIdActual={proyectoActual.id}
+                        onVerComparativa={handleVerComparativa}
                         onIrAPerfil={() => { setPanelView('perfil'); handleOpenPanel(); }}
                     />
                 )}

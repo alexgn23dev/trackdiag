@@ -53,13 +53,14 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.69")
+app = FastAPI(title="Mentotrack API", version="0.5.70")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Tarea de cron para reporte mensual
 _reporte_task_handle = None
 _encuesta_task_handle = None
+_reenganche_task_handle = None
 
 
 def _run_alembic_upgrade() -> None:
@@ -90,7 +91,7 @@ async def _startup_db():
     no depende de la BD; los endpoints que sí dependan fallarán explícitos).
     Lanza también la tarea de cron del reporte mensual.
     """
-    global _reporte_task_handle, _encuesta_task_handle
+    global _reporte_task_handle, _encuesta_task_handle, _reenganche_task_handle
     if os.environ.get("DATABASE_URL"):
         # Migraciones primero (sync, rápido si no hay nada que aplicar).
         await asyncio.to_thread(_run_alembic_upgrade)
@@ -100,11 +101,13 @@ async def _startup_db():
         _reporte_task_handle = asyncio.create_task(_task_monthly_reporte())
         # Envío programado de la encuesta de comunidad (one-shot, con candado en DB)
         _encuesta_task_handle = asyncio.create_task(_task_envio_encuesta())
+        # Drip de re-enganche (arranca en dry-run salvo REENGANCHE_ACTIVO=1)
+        _reenganche_task_handle = asyncio.create_task(_task_reenganche())
 
 
 @app.on_event("shutdown")
 async def _shutdown_db():
-    global _reporte_task_handle, _encuesta_task_handle
+    global _reporte_task_handle, _encuesta_task_handle, _reenganche_task_handle
     if _reporte_task_handle:
         _reporte_task_handle.cancel()
         try:
@@ -115,6 +118,12 @@ async def _shutdown_db():
         _encuesta_task_handle.cancel()
         try:
             await _encuesta_task_handle
+        except asyncio.CancelledError:
+            pass
+    if _reenganche_task_handle:
+        _reenganche_task_handle.cancel()
+        try:
+            await _reenganche_task_handle
         except asyncio.CancelledError:
             pass
     if os.environ.get("DATABASE_URL"):
@@ -278,7 +287,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.69"}
+    return {"status": "ok", "version": "0.5.70"}
 
 
 # Validación compartida de uploads de audio (track principal y referencia)
@@ -3701,6 +3710,165 @@ async def _task_envio_encuesta():
 
 
 # =========================================================================
+# Re-enganche — email de vuelta unos días después de un análisis (v0.5.70)
+# Medido: el 69% de los usuarios se va tras un solo día; de los que vuelven,
+# la mediana son 5 días. Esta tarea escribe dentro de esa ventana.
+# =========================================================================
+
+# Kill switch: arranca APAGADO. Con 0 la tarea corre en dry-run (loguea a quién
+# escribiría, sin reservar ni enviar). Se enciende en Railway tras revisar
+# /api/admin/reenganche/candidatos en producción.
+REENGANCHE_ACTIVO = os.environ.get("REENGANCHE_ACTIVO", "0") in ("1", "true", "si", "sí")
+REENGANCHE_LOTE = int(os.environ.get("REENGANCHE_LOTE", "40"))
+REENGANCHE_TOPE_DIA = int(os.environ.get("REENGANCHE_TOPE_DIA", "120"))
+REENGANCHE_DIAS_MIN = int(os.environ.get("REENGANCHE_DIAS_MIN", "3"))
+REENGANCHE_DIAS_MAX = int(os.environ.get("REENGANCHE_DIAS_MAX", "6"))
+REENGANCHE_COOLDOWN = int(os.environ.get("REENGANCHE_COOLDOWN", "30"))
+# Cuentas internas: nunca reciben el drip. Se pueden añadir más por env (CSV).
+_REENGANCHE_EXCLUIDOS = [
+    e.strip().lower()
+    for e in (
+        "alexgn23@gmail.com,alex@producciononline.com,producciononline.blog@gmail.com,"
+        + os.environ.get("REENGANCHE_EXCLUIR_EMAILS", "")
+    ).split(",")
+    if e.strip()
+]
+
+
+async def _enviar_reenganche_uno(pool, cand: dict, *, destinatario: str = "", registrar: bool = True) -> dict:
+    """Envía un email de re-enganche. Con `registrar=False` (prueba manual) no
+    toca la tabla, así probar no quema el envío real de ese análisis."""
+    import reenganche_email
+    import repositories as repo
+    import resend
+
+    ctx = reenganche_email.contexto_desde_fila(cand)
+    token = _encuesta_token(ctx["email"], dias=90)
+    payload = reenganche_email.payload_para(ctx, token, destinatario=destinatario)
+    resend.api_key = RESEND_API_KEY
+    resp = await asyncio.to_thread(resend.Emails.send, payload)
+    resend_id = (resp or {}).get("id") if isinstance(resp, dict) else None
+    if registrar:
+        # A partir de aquí el email YA HA SALIDO. Un fallo de Postgres al
+        # marcarlo no puede propagar: si lo hiciera, el manejador de arriba
+        # trataría el envío como fallido y podría reintentarlo (duplicado).
+        # Peor caso con este try: la fila se queda en 'claimed' y el reaper la
+        # cierra como fallida — un email perdido de la estadística, ninguno de más.
+        try:
+            await repo.marcar_reenganche_enviado(pool, cand["analisis_id"], resend_id)
+        except Exception as e:
+            print(f"[REENGANCHE] email enviado pero no se pudo marcar "
+                  f"({cand['analisis_id']}): {type(e).__name__}: {e}")
+    return {"asunto": payload["subject"], "resend_id": resend_id, "para": payload["to"][0]}
+
+
+def _resend_rechazo_sin_encolar(msg: str) -> bool:
+    """True solo si Resend RECHAZÓ la petición sin llegar a encolar el email.
+
+    Únicamente los errores de cuota/rate limit dan esa garantía. Un timeout de
+    lectura o un 5xx del borde pueden ocurrir DESPUÉS de que Resend aceptara:
+    ahí el email puede haber salido, así que no se puede liberar el claim
+    (semántica at-least-once). Perder un email es más barato que duplicarlo.
+    """
+    m = (msg or "").lower()
+    return any(s in m for s in ("rate limit", "rate_limit", "too many requests", "429", "quota"))
+
+
+async def _pasada_reenganche() -> dict:
+    """Una pasada del drip. Devuelve un resumen (también sirve al endpoint
+    de disparo manual)."""
+    from db import get_pool
+    import repositories as repo
+
+    pool = get_pool()
+    await repo.reaper_reenganche(pool, horas=2)
+    enviados_24h = await repo.enviados_reenganche_24h(pool)
+    cupo = min(REENGANCHE_LOTE, REENGANCHE_TOPE_DIA - enviados_24h)
+    if cupo <= 0:
+        print(f"[REENGANCHE] tope diario alcanzado ({enviados_24h}/{REENGANCHE_TOPE_DIA})")
+        return {"enviados": 0, "candidatos": 0, "motivo": "tope_diario"}
+
+    cands = await repo.candidatos_reenganche(
+        pool,
+        dias_min=REENGANCHE_DIAS_MIN,
+        dias_max=REENGANCHE_DIAS_MAX,
+        cooldown_dias=REENGANCHE_COOLDOWN,
+        excluidos=_REENGANCHE_EXCLUIDOS,
+        limit=cupo,
+    )
+    if not REENGANCHE_ACTIVO:
+        print(f"[REENGANCHE] dry-run: {len(cands)} candidatos (REENGANCHE_ACTIVO=0, no se envía nada)")
+        return {"enviados": 0, "candidatos": len(cands), "motivo": "dry_run"}
+
+    enviados, fallidos = 0, 0
+    for c in cands:
+        if not await repo.claim_reenganche(
+            pool,
+            analisis_id=c["analisis_id"],
+            usuario_id=c.get("usuario_id"),
+            email=c["email"],
+            diagnostico_id=(c.get("senales") or {}).get("diag_principal")
+            if isinstance(c.get("senales"), dict) else None,
+        ):
+            continue  # otra réplica se lo quedó
+        try:
+            await _enviar_reenganche_uno(pool, c)
+            enviados += 1
+        except Exception as e:
+            msg = f"{type(e).__name__}: {e}"
+            if _resend_rechazo_sin_encolar(msg):
+                # Resend rechazó la petición sin encolarla: es seguro devolver
+                # el análisis a la cola. Se corta la pasada (si estamos en el
+                # límite, insistir solo empeora).
+                try:
+                    await repo.liberar_reenganche(pool, c["analisis_id"])
+                except Exception as e2:
+                    print(f"[REENGANCHE] no se pudo liberar el claim: {type(e2).__name__}: {e2}")
+                print(f"[REENGANCHE] corte de pasada por límite de Resend: {msg}")
+                break
+            # Cualquier otro fallo (timeout, 5xx, error de red): NO sabemos si el
+            # email salió, así que se marca como fallido y no se reintenta.
+            try:
+                await repo.marcar_reenganche_fallido(pool, c["analisis_id"], msg)
+            except Exception as e2:
+                print(f"[REENGANCHE] no se pudo marcar el fallo: {type(e2).__name__}: {e2}")
+            fallidos += 1
+            print(f"[REENGANCHE] envío fallido (sin reintento): {msg}")
+        await asyncio.sleep(0.6)  # Resend admite ~2 req/s
+    print(f"[REENGANCHE] pasada: {enviados} enviados, {fallidos} fallidos, {len(cands)} candidatos")
+    return {"enviados": enviados, "fallidos": fallidos, "candidatos": len(cands)}
+
+
+async def _task_reenganche():
+    """Cron del drip. Cada 30 min dentro de una ventana horaria amplia.
+
+    A diferencia de _task_monthly_reporte (que compara `minute < 1` y por eso
+    depende de la fase del arranque), aquí la condición es una ventana de 11 h:
+    da igual a qué hora despliegue Railway. El criterio real es la antigüedad
+    del análisis, no la hora exacta del envío.
+    """
+    try:
+        while True:
+            await asyncio.sleep(1800)
+            now = datetime.now(timezone.utc)
+            # 9-20 UTC = 11:00-22:00 en España (verano). Nadie recibe el email
+            # de madrugada; la base es sobre todo ES/LATAM.
+            if not (9 <= now.hour < 20):
+                continue
+            if not _pg_available():
+                continue
+            if REENGANCHE_ACTIVO and not _resend_disponible():
+                print("[REENGANCHE] Resend no disponible — se salta la pasada")
+                continue
+            try:
+                await _pasada_reenganche()
+            except Exception as e:
+                print(f"[REENGANCHE] error en la pasada: {type(e).__name__}: {e}")
+    except asyncio.CancelledError:
+        pass
+
+
+# =========================================================================
 # Encuesta por email — un clic desde el email registra el voto (v0.5.34)
 # =========================================================================
 
@@ -3740,6 +3908,176 @@ def _email_desde_token_encuesta(token: str) -> str | None:
         return (payload.get("em") or "").strip().lower() or None
     except Exception:
         return None
+
+
+@app.get("/r/reenganche")
+@limiter.limit("120/minute")
+async def reenganche_redirect(request: Request, t: str = "", p: str = ""):
+    """Redirect del botón del email de re-enganche. Registra el clic y manda a
+    la app con el proyecto preseleccionado.
+
+    Límite alto a propósito: los proxies de Gmail concentran muchas IPs. Si el
+    token no vale, redirige igual — el usuario ya hizo clic, no merece un error.
+    """
+    email = _email_desde_token_encuesta(t)
+    if email and _pg_available():
+        try:
+            from db import get_pool
+            import repositories as repo
+            await repo.create_cta_evento(
+                get_pool(),
+                evento="reenganche_click",
+                session_id=None,
+                diagnostico_id=None,
+                email=email,
+                user_agent=(request.headers.get("user-agent") or "")[:500],
+            )
+        except Exception as e:
+            print(f"[REENGANCHE-CLICK] no registrado: {type(e).__name__}: {e}")
+    destino = f"{APP_BASE_URL.rstrip('/')}/?utm_source=mentotrack&utm_medium=email&utm_campaign=reenganche"
+    pid = _sanitize(p, 40)
+    if pid:
+        destino += f"&proyecto={pid}"
+    return RedirectResponse(destino, status_code=302)
+
+
+@app.get("/api/admin/reenganche/candidatos")
+@limiter.limit("10/minute")
+async def admin_reenganche_candidatos(request: Request, dias_min: int = 0, dias_max: int = 0, limit: int = 50):
+    """Dry-run puro: a quién se le escribiría ahora mismo. No escribe nada."""
+    if not _admin_email_from_cookie(request):
+        return JSONResponse(status_code=403, content={"error": "No autorizado"})
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Postgres no disponible"})
+    from db import get_pool
+    import repositories as repo
+    import reenganche_email
+
+    cands = await repo.candidatos_reenganche(
+        get_pool(),
+        dias_min=dias_min or REENGANCHE_DIAS_MIN,
+        dias_max=dias_max or REENGANCHE_DIAS_MAX,
+        cooldown_dias=REENGANCHE_COOLDOWN,
+        excluidos=_REENGANCHE_EXCLUIDOS,
+        limit=max(1, min(limit, 200)),
+    )
+    salida = []
+    for c in cands:
+        ctx = reenganche_email.contexto_desde_fila(c)
+        salida.append({
+            "analisis_id": str(c["analisis_id"]),
+            "email": c["email"],
+            "proyecto": ctx["proyecto"],
+            "version_siguiente": ctx["version_siguiente"],
+            "diagnostico": ctx["diag_id"],
+            "asunto": reenganche_email.asunto(ctx),
+            "analizado": c["timestamp"].isoformat() if c.get("timestamp") else None,
+        })
+    return {
+        "activo": REENGANCHE_ACTIVO,
+        "ventana_dias": [dias_min or REENGANCHE_DIAS_MIN, dias_max or REENGANCHE_DIAS_MAX],
+        "total": len(salida),
+        "candidatos": salida,
+    }
+
+
+@app.get("/api/admin/reenganche/preview")
+@limiter.limit("10/minute")
+async def admin_reenganche_preview(request: Request, analisis_id: str = ""):
+    """Renderiza el email tal cual se enviaría. No envía."""
+    if not _admin_email_from_cookie(request):
+        return JSONResponse(status_code=403, content={"error": "No autorizado"})
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Postgres no disponible"})
+    from db import get_pool
+    import repositories as repo
+    import reenganche_email
+
+    cands = await repo.candidatos_reenganche(
+        get_pool(),
+        dias_min=REENGANCHE_DIAS_MIN,
+        dias_max=REENGANCHE_DIAS_MAX,
+        cooldown_dias=REENGANCHE_COOLDOWN,
+        excluidos=_REENGANCHE_EXCLUIDOS,
+        limit=200,
+    )
+    if not cands:
+        return HTMLResponse("<p style='font-family:sans-serif'>No hay candidatos en la ventana.</p>")
+    elegido = cands[0]
+    if analisis_id:
+        elegido = next((c for c in cands if str(c["analisis_id"]) == analisis_id), None)
+        if elegido is None:
+            return JSONResponse(status_code=404, content={"error": "Ese análisis no está entre los candidatos"})
+    ctx = reenganche_email.contexto_desde_fila(elegido)
+    cabecera = (
+        f"<div style='font:13px monospace;color:#555;max-width:600px;margin:0 auto 10px'>"
+        f"<b>ASUNTO:</b> {reenganche_email.asunto(ctx)}<br>"
+        f"<b>PARA:</b> {ctx['email']} · proyecto: {ctx['proyecto'] or '(ninguno)'} · dx: {ctx['diag_id']}</div>"
+    )
+    return HTMLResponse(cabecera + reenganche_email.email_html(ctx, "TOKEN_PREVIEW"))
+
+
+@app.post("/api/admin/reenganche/enviar")
+@limiter.limit("3/minute")
+async def admin_reenganche_enviar(request: Request, data: dict):
+    """Disparo manual. Con `email_test` manda una prueba a esa dirección SIN
+    reservar el análisis (probar no quema el envío real). Sin `analisis_id`
+    ejecuta una pasada completa del drip."""
+    if not _admin_email_from_cookie(request):
+        return JSONResponse(status_code=403, content={"error": "No autorizado"})
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Postgres no disponible"})
+    if not _resend_disponible():
+        return JSONResponse(status_code=503, content={"error": "Resend no configurado"})
+    from db import get_pool
+    import repositories as repo
+
+    analisis_id = _sanitize(data.get("analisis_id", ""), 40)
+    email_test = _sanitize(data.get("email_test", ""), 180).lower()
+
+    if not analisis_id:
+        return await _pasada_reenganche()
+
+    pool = get_pool()
+    cands = await repo.candidatos_reenganche(
+        pool,
+        dias_min=REENGANCHE_DIAS_MIN,
+        dias_max=REENGANCHE_DIAS_MAX,
+        cooldown_dias=REENGANCHE_COOLDOWN,
+        excluidos=_REENGANCHE_EXCLUIDOS,
+        limit=200,
+    )
+    cand = next((c for c in cands if str(c["analisis_id"]) == analisis_id), None)
+    if cand is None:
+        return JSONResponse(status_code=404, content={"error": "Ese análisis no está entre los candidatos"})
+    try:
+        if email_test:
+            info = await _enviar_reenganche_uno(pool, cand, destinatario=email_test, registrar=False)
+            return {"ok": True, "prueba": True, **info}
+        if not await repo.claim_reenganche(
+            pool, analisis_id=cand["analisis_id"], usuario_id=cand.get("usuario_id"),
+            email=cand["email"],
+            diagnostico_id=(cand.get("senales") or {}).get("diag_principal")
+            if isinstance(cand.get("senales"), dict) else None,
+        ):
+            return JSONResponse(status_code=409, content={"error": "Ya reservado o enviado"})
+        info = await _enviar_reenganche_uno(pool, cand)
+        return {"ok": True, "prueba": False, **info}
+    except Exception as e:
+        return JSONResponse(status_code=502, content={"error": f"{type(e).__name__}: {e}"})
+
+
+@app.get("/api/admin/reenganche/stats")
+@limiter.limit("10/minute")
+async def admin_reenganche_stats(request: Request, dias: int = 30):
+    if not _admin_email_from_cookie(request):
+        return JSONResponse(status_code=403, content={"error": "No autorizado"})
+    if not _pg_available():
+        return JSONResponse(status_code=503, content={"error": "Postgres no disponible"})
+    from db import get_pool
+    import repositories as repo
+    stats = await repo.stats_reenganche(get_pool(), dias=max(1, min(dias, 365)))
+    return {"activo": REENGANCHE_ACTIVO, **stats}
 
 
 @app.get("/encuesta")

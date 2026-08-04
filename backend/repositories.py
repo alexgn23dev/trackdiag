@@ -372,6 +372,11 @@ _CTA_EVENTOS_VALIDOS = (
     "consultoria_form_submit",      # legacy: form retirado (flujo llamada-primero)
     "relesit_visto",                # CTA a Relesit tras diagnóstico bueno (impresión)
     "relesit_clicked",              # clic en "Buscar sellos en Relesit" → relesit.com
+    "master_visto",                 # CTA al Máster al cierre del informe (impresión)
+    "master_clicked",               # clic en "Ver el Máster" → producciononline.com
+    "promesa_v2_visto",             # promesa de la comparativa entre versiones (impresión)
+    "promesa_v2_clicked",           # clic en "ver qué ha cambiado" (solo con v2+)
+    "reenganche_click",             # clic en el CTA del email de re-enganche (día 3)
 )
 
 
@@ -1508,6 +1513,194 @@ async def finalizar_envio_campana(pool: asyncpg.Pool, campana: str, n_enviados: 
             "UPDATE email_envios SET enviado_at = now(), n_enviados = $2 WHERE campana = $1",
             campana, n_enviados,
         )
+
+
+# =============================================================================
+# RE-ENGANCHE — email de vuelta unos días después de un análisis
+# El 69% de los usuarios se va tras un solo día de uso; de los que vuelven, la
+# mediana son 5 días. Este drip actúa en la ventana en la que aún vuelven.
+# Nota: email_envios NO vale aquí (candado one-shot por campaña, no por usuario).
+# =============================================================================
+
+@with_retry()
+async def candidatos_reenganche(
+    pool: asyncpg.Pool,
+    *,
+    dias_min: int = 3,
+    dias_max: int = 6,
+    cooldown_dias: int = 30,
+    excluidos: Optional[list[str]] = None,
+    limit: int = 40,
+) -> list[dict]:
+    """Análisis que merecen email de re-enganche.
+
+    Toma el ÚLTIMO análisis de cada usuario: si ya volvió, ese último cae fuera
+    de la ventana [dias_max, dias_min] y queda descartado sin condición extra.
+    El techo `dias_max` es crítico — sin él, la primera pasada escribiría a
+    todo el histórico.
+    """
+    excl = [e.strip().lower() for e in (excluidos or []) if e and e.strip()]
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            WITH ultimo AS (
+                SELECT DISTINCT ON (lower(a.email))
+                       a.id AS analisis_id, a.email, a.usuario_id, a.proyecto_id,
+                       a.version_num, a.timestamp, a.diagnostico, a.senales
+                FROM analisis a
+                WHERE a.timestamp <= now()
+                  AND a.timestamp >= now() - interval '60 days'
+                ORDER BY lower(a.email), a.timestamp DESC
+            )
+            SELECT u.analisis_id, u.email, u.usuario_id, u.proyecto_id,
+                   u.version_num, u.timestamp, u.diagnostico, u.senales,
+                   usr.username, p.nombre AS proyecto_nombre
+            FROM ultimo u
+            JOIN usuarios usr ON usr.id = u.usuario_id
+            LEFT JOIN proyectos p ON p.id = u.proyecto_id
+            WHERE u.timestamp <= now() - make_interval(days => $1)
+              AND u.timestamp >= now() - make_interval(days => $2)
+              AND NOT usr.email_opt_out
+              AND u.email ~ '^[^@[:space:]]+@[^@[:space:]]+\\.[^@[:space:]]+$'
+              AND NOT (lower(u.email) = ANY($3::text[]))
+              AND NOT EXISTS (
+                  SELECT 1 FROM reenganche_envios r
+                  WHERE r.analisis_id = u.analisis_id)
+              AND NOT EXISTS (
+                  SELECT 1 FROM reenganche_envios r2
+                  WHERE lower(r2.email) = lower(u.email)
+                    AND r2.timestamp > now() - make_interval(days => $4))
+            ORDER BY u.timestamp ASC
+            LIMIT $5
+            """,
+            dias_min, dias_max, excl, cooldown_dias, limit,
+        )
+    return [dict(r) for r in rows]
+
+
+@with_retry()
+async def claim_reenganche(
+    pool: asyncpg.Pool,
+    *,
+    analisis_id,
+    usuario_id,
+    email: str,
+    diagnostico_id: Optional[str] = None,
+) -> bool:
+    """Reserva el envío para un análisis. True solo si ESTE proceso gana la
+    carrera (UNIQUE sobre analisis_id) — evita duplicados entre réplicas."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """INSERT INTO reenganche_envios
+                   (analisis_id, usuario_id, email, diagnostico_id)
+               VALUES ($1, $2, $3, $4)
+               ON CONFLICT (analisis_id) DO NOTHING
+               RETURNING id""",
+            analisis_id, usuario_id, email, (diagnostico_id or None),
+        )
+    return row is not None
+
+
+@with_retry()
+async def marcar_reenganche_enviado(pool: asyncpg.Pool, analisis_id, resend_id: Optional[str]) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """UPDATE reenganche_envios
+               SET estado = 'enviado', enviado_at = now(), resend_id = $2
+               WHERE analisis_id = $1""",
+            analisis_id, (resend_id or None),
+        )
+
+
+@with_retry()
+async def marcar_reenganche_fallido(pool: asyncpg.Pool, analisis_id, error: str) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """UPDATE reenganche_envios
+               SET estado = 'fallido', error = $2
+               WHERE analisis_id = $1""",
+            analisis_id, (error or "")[:500],
+        )
+
+
+@with_retry()
+async def liberar_reenganche(pool: asyncpg.Pool, analisis_id) -> None:
+    """Suelta el claim cuando el fallo ocurrió ANTES de que Resend aceptara
+    (red, cuota, 5xx): así el análisis vuelve a la cola mañana."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "DELETE FROM reenganche_envios WHERE analisis_id = $1 AND estado = 'claimed'",
+            analisis_id,
+        )
+
+
+@with_retry()
+async def reaper_reenganche(pool: asyncpg.Pool, horas: int = 2) -> int:
+    """Marca como fallidos los claims que llevan horas colgados (proceso muerto
+    entre el claim y el envío). NO reintenta: si el POST a Resend llegó a salir
+    no lo sabemos, y perder un email es más barato que duplicarlo."""
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            """UPDATE reenganche_envios
+               SET estado = 'fallido', error = 'claim huérfano (proceso interrumpido)'
+               WHERE estado = 'claimed' AND timestamp < now() - make_interval(hours => $1)""",
+            horas,
+        )
+    try:
+        return int(result.split()[-1])
+    except (ValueError, IndexError):
+        return 0
+
+
+@with_retry()
+async def enviados_reenganche_24h(pool: asyncpg.Pool) -> int:
+    """Cuántos emails de re-enganche han salido en las últimas 24 h (tope diario)."""
+    async with pool.acquire() as conn:
+        n = await conn.fetchval(
+            """SELECT COUNT(*) FROM reenganche_envios
+               WHERE estado = 'enviado' AND enviado_at > now() - interval '24 hours'"""
+        )
+    return int(n or 0)
+
+
+@with_retry()
+async def stats_reenganche(pool: asyncpg.Pool, dias: int = 30) -> dict:
+    """Embudo del re-enganche: enviados → clicks → vueltas en 7 días."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            WITH env AS (
+                SELECT * FROM reenganche_envios
+                WHERE estado = 'enviado'
+                  AND enviado_at > now() - make_interval(days => $1)
+            )
+            SELECT
+                (SELECT COUNT(*) FROM env) AS enviados,
+                (SELECT COUNT(*) FROM reenganche_envios
+                  WHERE estado = 'fallido' AND timestamp > now() - make_interval(days => $1)) AS fallidos,
+                (SELECT COUNT(DISTINCT lower(c.email)) FROM cta_eventos c
+                  WHERE c.evento = 'reenganche_click'
+                    AND c.timestamp > now() - make_interval(days => $1)) AS con_click,
+                (SELECT COUNT(*) FROM env e
+                  WHERE EXISTS (
+                      SELECT 1 FROM analisis a
+                      WHERE lower(a.email) = lower(e.email)
+                        AND a.timestamp > e.enviado_at
+                        AND a.timestamp < e.enviado_at + interval '7 days')) AS volvieron
+            """,
+            dias,
+        )
+    d = dict(row) if row else {}
+    enviados = int(d.get("enviados") or 0)
+    volvieron = int(d.get("volvieron") or 0)
+    return {
+        "dias": dias,
+        "enviados": enviados,
+        "fallidos": int(d.get("fallidos") or 0),
+        "con_click": int(d.get("con_click") or 0),
+        "volvieron": volvieron,
+        "tasa_vuelta": round(100 * volvieron / enviados, 1) if enviados else 0.0,
+    }
 
 
 # =========================================================================

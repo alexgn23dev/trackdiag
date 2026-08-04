@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "version": "0.5.70",
+      "date": "2026-08-03",
+      "title": "Tu track, versión a versión",
+      "changes": [
+        "Al final de cada análisis te decimos qué vas a ver cuando subas la siguiente versión: la comparación punto por punto con la anterior.",
+        "Si ya tienes más de una versión del proyecto, ahora se entra a esa comparación directamente desde el informe.",
+        "Nuevo recordatorio por email unos días después de un análisis, con tu bloqueo principal y un enlace para subir la nueva versión. Se puede desactivar desde el propio email."
+      ]
+    },
+    {
       "version": "0.5.68",
       "date": "2026-07-24",
       "title": "Tu análisis, con siguiente paso: el Máster",
