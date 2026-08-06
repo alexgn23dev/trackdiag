@@ -13,23 +13,28 @@ import soundfile as sf
 # ===========================================================================
 # Estado de validación del medidor de true peak
 # ===========================================================================
-# Solo puede pasar a True cuando backend/tests/validar_true_peak.py termine
-# sin fallos contra las tres referencias (valor analítico, ffmpeg ebur128 y
-# un medidor realmente independiente). Se publica en cada análisis para poder
-# saber después con qué grado de confianza se midió cada fila.
+# Tres estados separados, porque significan cosas distintas y mezclarlos
+# permitiría dar por validado algo que solo se ha comprobado contra sí mismo.
 #
-# 2026-08-06 — False. La batería automática PASA (ver
-# backend/tests/RESULTADOS_VALIDACION.md), pero quedan dos cosas antes de
-# poder ponerlo a True: la comprobación manual contra un medidor profesional
-# de escritorio y la ejecución dentro de la imagen de producción.
+# INTERNA — la batería automatizada: valor analítico, FIR de referencia del
+#   anexo 2 de BS.1770-5, interpolación sinc por FFT, polifásico de scipy y
+#   ffmpeg. Todo dentro del ecosistema Python/ffmpeg.
+# EXTERNA — contraste manual contra un medidor profesional de escritorio
+#   (Youlean, iZotope Insight, el del DAW). Es la única referencia realmente
+#   ajena. Se registra en tests/VALIDACION_MANUAL.md.
+# GLOBAL — solo puede ser True si las dos anteriores lo son. No se pone a
+#   mano: se deriva.
+TRUE_PEAK_INTERNAL_VALIDATION_PASSED = True   # 2026-08-06, ver RESULTADOS_VALIDACION.md
+TRUE_PEAK_EXTERNAL_VALIDATION_PASSED = False  # pendiente: tests/VALIDACION_MANUAL.md
+_TRUE_PEAK_VALIDATED = (TRUE_PEAK_INTERNAL_VALIDATION_PASSED
+                        and TRUE_PEAK_EXTERNAL_VALIDATION_PASSED)
 #
-# PRIORIDAD DE FASE 2, registrada aquí a propósito: un WAV 32-bit float con
+# PRIORIDAD DE FASE 2A, registrada aquí a propósito: un WAV 32-bit float con
 # picos por encima de 0 dBFS se sigue clasificando como "clipping" y se le
 # dice al usuario que "el master clipea digitalmente". Es falso — en coma
 # flotante esos overs son recuperables bajando el gain. Desde v0.5.71 ya se
 # registra `archivo_sample_format`, así que el dato para distinguirlo existe;
-# lo que falta es usarlo. Esta fase NO lo corrige por decisión de alcance.
-_TRUE_PEAK_VALIDATED = False
+# lo que falta es usarlo.
 
 # Bits de almacenamiento por subtype de libsndfile. OJO: en FLOAT/DOUBLE esto
 # es el tamaño del contenedor de la muestra, NO un techo PCM — por eso
@@ -627,6 +632,8 @@ def _analizar_loudness(audio_path: str, y_preloaded=None, sr_preloaded=None,
         "sample_peak_source": "no_disponible",   # archivo_nativo | audio_remuestreado_22k | no_disponible
         "true_peak_method": "no_disponible",     # soxr_hq_4x | sample_peak_22k_fallback | no_disponible
         "true_peak_oversampling": 0,             # 4 | 1 | 0
+        "true_peak_internal_validation_passed": TRUE_PEAK_INTERNAL_VALIDATION_PASSED,
+        "true_peak_external_validation_passed": TRUE_PEAK_EXTERNAL_VALIDATION_PASSED,
         "true_peak_validated": _TRUE_PEAK_VALIDATED,
         "peak_measurement_sample_rate": 0,       # sr al que se midieron los picos
         "peak_measurement_channels": 0,          # nº de canales medidos

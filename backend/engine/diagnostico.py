@@ -143,6 +143,8 @@ def generar_diagnostico(senales: dict, contexto: dict) -> dict:
                 "sample_peak_source": senales["loudness"].get("sample_peak_source", ""),
                 "true_peak_method": senales["loudness"].get("true_peak_method", ""),
                 "true_peak_oversampling": senales["loudness"].get("true_peak_oversampling", 0),
+                "true_peak_internal_validation_passed": senales["loudness"].get("true_peak_internal_validation_passed", False),
+                "true_peak_external_validation_passed": senales["loudness"].get("true_peak_external_validation_passed", False),
                 "true_peak_validated": senales["loudness"].get("true_peak_validated", False),
                 "peak_measurement_sample_rate": senales["loudness"].get("peak_measurement_sample_rate", 0),
                 "peak_measurement_channels": senales["loudness"].get("peak_measurement_channels", 0),

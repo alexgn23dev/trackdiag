@@ -100,6 +100,11 @@ async def _startup_db():
     Lanza también la tarea de cron del reporte mensual.
     """
     global _reporte_task_handle, _encuesta_task_handle, _reenganche_task_handle
+    # Antes de abrir el pool: si esto es un preview apuntando a la base o a
+    # las credenciales de producción, no arrancamos. Preferimos caerse a
+    # escribir en la base real o mandar correos a usuarios de verdad.
+    from entorno import proteger_arranque
+    proteger_arranque()
     if os.environ.get("DATABASE_URL"):
         # Migraciones primero (sync, rápido si no hay nada que aplicar).
         await asyncio.to_thread(_run_alembic_upgrade)
@@ -295,7 +300,16 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": APP_VERSION}
+    # `entorno` va aquí a propósito: es lo único que permite al frontend
+    # pintar la banda de "PREVIEW" sin exponer nada. No es un secreto y evita
+    # el peor accidente de un preview: creer que estás mirando producción.
+    respuesta = {"status": "ok", "version": APP_VERSION}
+    # Se lee del módulo en cada llamada (no se cachea en una constante) para
+    # que recargar `entorno` en los tests no deje la app en un estado mentiroso.
+    import entorno as _entorno
+    if not _entorno.ES_PRODUCCION:
+        respuesta["entorno"] = _entorno.ENV
+    return respuesta
 
 
 @app.get("/api/tecnico/versiones")
@@ -311,11 +325,22 @@ def tecnico_versiones(request: Request):
     if not _admin_email_from_cookie(request):
         return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
     from engine.versiones import algoritmos, dependencias, ffmpeg_version
+    from entorno import resumen as resumen_entorno
+    from engine.extractor import (
+        TRUE_PEAK_EXTERNAL_VALIDATION_PASSED, TRUE_PEAK_INTERNAL_VALIDATION_PASSED,
+        _TRUE_PEAK_VALIDATED,
+    )
     return {
         "backend_version": APP_VERSION,
         **algoritmos(),
+        "validacion_true_peak": {
+            "true_peak_internal_validation_passed": TRUE_PEAK_INTERNAL_VALIDATION_PASSED,
+            "true_peak_external_validation_passed": TRUE_PEAK_EXTERNAL_VALIDATION_PASSED,
+            "true_peak_validated": _TRUE_PEAK_VALIDATED,
+        },
         "dependencias": dependencias(),
         "ffmpeg": ffmpeg_version(),
+        "entorno": resumen_entorno(),
     }
 
 

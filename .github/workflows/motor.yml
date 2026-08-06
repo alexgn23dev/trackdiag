@@ -1,0 +1,132 @@
+name: motor
+
+# Valida el motor de análisis dentro de la MISMA imagen que se despliega.
+# Un venv de CI no sirve: libsndfile, soxr y ffmpeg vienen del sistema, y son
+# justo los que determinan los números que ve el usuario.
+#
+# No bloquea nada por sí solo. Para que impida mergear a `main` hay que marcar
+# el check como obligatorio en la protección de rama (ver backend/tests/README.md).
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+# Un PR que recibe varios push seguidos cancela las ejecuciones anteriores.
+concurrency:
+  group: motor-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  motor:
+    name: tests del motor en la imagen de producción
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Construir la imagen con el Dockerfile real
+        run: docker build -t mentotrack:ci .
+
+      - name: Inventario de versiones
+        run: |
+          echo "::group::Versiones del entorno y de los algoritmos"
+          docker run --rm -w /app/backend mentotrack:ci python - <<'PY'
+          import json
+          from engine.versiones import algoritmos, dependencias, ffmpeg_version
+          deps = dependencias()
+          algos = algoritmos()
+          print(f"{'python':<14} {deps['python']}")
+          for k in ("numpy", "scipy", "librosa", "soundfile", "libsndfile",
+                    "soxr", "pyloudnorm"):
+              print(f"{k:<14} {deps[k]}")
+          print(f"{'ffmpeg':<14} {ffmpeg_version()}")
+          import main
+          print(f"{'backend':<14} {main.APP_VERSION}")
+          import re, pathlib
+          html = pathlib.Path('/app/frontend/index.html').read_text(encoding='utf-8')
+          m = re.search(r"const APP_VERSION\s*=\s*'([\d.]+)'", html)
+          print(f"{'frontend':<14} {m.group(1) if m else 'NO ENCONTRADA'}")
+          for k, v in algos.items():
+              print(f"{k:<34} {v}")
+          PY
+          echo "::endgroup::"
+
+      - name: Reporte de entorno + batería completa + validaciones
+        id: reporte
+        run: |
+          set -o pipefail
+          docker run --rm -w /app/backend mentotrack:ci \
+            python tests/reporte_entorno.py 2>&1 | tee reporte-motor.txt
+
+      # reporte_entorno.py ya devuelve != 0 si algo falla, pero estos pasos
+      # dejan en el log CUÁL de los bloques cayó, sin tener que leer 200
+      # líneas de salida.
+      - name: Golden (clasificación y textos congelados)
+        if: always()
+        run: |
+          docker run --rm -w /app/backend mentotrack:ci \
+            python tests/capturar_golden.py
+
+      - name: Validación del true peak
+        if: always()
+        run: |
+          docker run --rm -w /app/backend mentotrack:ci \
+            python tests/validar_true_peak.py
+
+      - name: Estudio de la continua
+        if: always()
+        run: |
+          docker run --rm -w /app/backend mentotrack:ci \
+            python tests/estudio_continua.py
+
+      - name: Bloques de tests por área
+        if: always()
+        run: |
+          for m in test_picos test_formato test_sin_senal test_itu_referencia \
+                   test_versiones test_frontend; do
+            echo "::group::$m"
+            docker run --rm -w /app/backend mentotrack:ci \
+              python -m unittest "tests.$m" -v 2>&1 | tail -25
+            echo "::endgroup::"
+          done
+
+      # Lock de versiones REALMENTE instaladas en la imagen (incluidas las
+      # transitivas). requirements.txt fija las directas; esto captura el
+      # resto, que hoy pueden resolverse distinto entre dos builds.
+      - name: Generar lock de versiones instaladas
+        if: always()
+        run: |
+          docker run --rm mentotrack:ci pip freeze > requirements.lock.generado.txt
+          echo "::group::Lock generado"
+          cat requirements.lock.generado.txt
+          echo "::endgroup::"
+
+      - name: Comparar el lock generado con el del repo
+        if: always()
+        run: |
+          if [ -f requirements.lock.txt ]; then
+            if diff -u requirements.lock.txt requirements.lock.generado.txt; then
+              echo "El lock del repo coincide con lo instalado en la imagen."
+            else
+              echo "::warning::El lock del repo no coincide con la imagen. "\
+          "Regenera con: docker run --rm mentotrack:ci pip freeze > requirements.lock.txt"
+            fi
+          else
+            echo "::notice::No hay requirements.lock.txt en el repo. "\
+          "Se puede crear con el artefacto de este job."
+          fi
+
+      - name: Publicar reporte y lock
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: motor-${{ github.sha }}
+          path: |
+            reporte-motor.txt
+            requirements.lock.generado.txt
+          retention-days: 30

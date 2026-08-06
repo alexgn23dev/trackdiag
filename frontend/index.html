@@ -205,10 +205,13 @@
     // espera — se recarga una sola vez y, si aun así no cuadra, se avisa.
     const APP_VERSION = '0.5.71';
 
-    function comprobarVersionFrontend(onDesfase) {
+    function comprobarVersionFrontend(onDesfase, onEntorno) {
         fetch(`${API_URL}/api/health`, { cache: 'no-store' })
             .then(r => r.ok ? r.json() : null)
             .then(data => {
+                // /api/health solo devuelve `entorno` cuando NO es producción.
+                // Evita el peor accidente de un preview: creer que miras prod.
+                if (data && data.entorno) onEntorno && onEntorno(data.entorno);
                 const backend = data && data.version;
                 if (!backend || backend === APP_VERSION) return;
                 // Guarda contra bucles: solo se recarga una vez por versión.
@@ -2935,6 +2938,7 @@
         // re-enganche: al cargar los proyectos se preselecciona solo.
         const [proyectoDeepLink, setProyectoDeepLink] = useState('');
         const [versionDesfasada, setVersionDesfasada] = useState('');
+        const [entorno, setEntorno] = useState('');
 
         // Detecta ?compartir=1 / ?proyecto=<id> al cargar y limpia la URL.
         useEffect(() => {
@@ -2967,7 +2971,7 @@
 
         // Compatibilidad frontend ↔ backend: detecta un index.html cacheado.
         useEffect(() => {
-            comprobarVersionFrontend(setVersionDesfasada);
+            comprobarVersionFrontend(setVersionDesfasada, setEntorno);
         }, []);
 
         // Cargar opciones al inicio
@@ -3866,6 +3870,8 @@
                     true_peak_method: da.loudness?.true_peak_method,
                     true_peak_oversampling: da.loudness?.true_peak_oversampling,
                     true_peak_validated: da.loudness?.true_peak_validated,
+                    true_peak_internal_validation_passed: da.loudness?.true_peak_internal_validation_passed,
+                    true_peak_external_validation_passed: da.loudness?.true_peak_external_validation_passed,
                     peak_measurement_sample_rate: da.loudness?.peak_measurement_sample_rate,
                     peak_measurement_channels: da.loudness?.peak_measurement_channels,
                     // Metadatos del archivo — solo registro, nada los usa aún
@@ -4153,6 +4159,14 @@
 
         return (
             <div>
+                {/* Banda de entorno: solo si NO es producción. Un preview tiene
+                    que gritarlo — es lo que impide confundirlo con la app real. */}
+                {entorno && (
+                    <div className="fixed bottom-0 left-0 right-0 z-50 px-4 py-1 text-center text-xs font-bold tracking-wide"
+                         style={{ background: '#b45309', color: '#fff' }}>
+                        ENTORNO: {entorno.toUpperCase()} — los datos de aquí no son reales
+                    </div>
+                )}
                 {/* Aviso de versión desfasada: solo aparece si tras recargar una
                     vez el index.html sigue siendo más viejo que el backend, lo
                     que indica una caché intermedia (navegador o CDN). */}
