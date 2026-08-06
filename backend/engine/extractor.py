@@ -3,10 +3,39 @@ Extractor de señales de audio.
 Recibe un path de audio y retorna un diccionario con señales crudas y derivadas.
 """
 
+import os
+
 import librosa
 import numpy as np
 import pyloudnorm as pyln
 import soundfile as sf
+
+# ===========================================================================
+# Estado de validación del medidor de true peak
+# ===========================================================================
+# Solo puede pasar a True cuando backend/tests/validar_true_peak.py termine
+# sin fallos contra las tres referencias (valor analítico, ffmpeg ebur128 y
+# un medidor realmente independiente). Se publica en cada análisis para poder
+# saber después con qué grado de confianza se midió cada fila.
+#
+# 2026-08-06 — False. La validación inicial encontró desviaciones sobre el
+# valor analítico (ver backend/tests/RESULTADOS_VALIDACION.md).
+_TRUE_PEAK_VALIDATED = False
+
+# Bits de almacenamiento por subtype de libsndfile. OJO: en FLOAT/DOUBLE esto
+# es el tamaño del contenedor de la muestra, NO un techo PCM — por eso
+# `archivo_pcm_bit_depth` queda a None en esos casos.
+_SUBTYPE_STORAGE_BITS = {
+    "PCM_S8": 8, "PCM_U8": 8, "PCM_16": 16, "PCM_24": 24, "PCM_32": 32,
+    "FLOAT": 32, "DOUBLE": 64,
+    "ALAW": 8, "ULAW": 8, "VOX_ADPCM": 4, "IMA_ADPCM": 4, "MS_ADPCM": 4,
+}
+_SUBTYPES_FLOAT = {"FLOAT", "DOUBLE"}
+_SUBTYPES_LOSSY = {
+    "MPEG_LAYER_I", "MPEG_LAYER_II", "MPEG_LAYER_III",
+    "VORBIS", "OPUS", "GSM610", "G721_32", "G723_24", "G723_40",
+}
+_EXTENSIONES_LOSSY = {".mp3", ".ogg", ".opus", ".m4a", ".aac"}
 
 
 def extraer_senales(audio_path: str, bpm_manual: int | None = None,
@@ -206,6 +235,10 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None,
     # === Harshness (picos molestos en medios-altos) ===
     harshness = _analizar_harshness(mel_db, mel_freqs)
 
+    # === Metadatos del archivo ===
+    # Solo registro (fase 1): ninguna decisión del motor los lee todavía.
+    formato = _analizar_formato(audio_path)
+
     # === Loudness (LUFS) ===
     # Pasamos audio ya cargado para evitar re-lectura desde disco
     loudness = _analizar_loudness(audio_path, y_preloaded=y, sr_preloaded=sr,
@@ -300,7 +333,74 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None,
         "espectro_bandas_norm": espectro_bandas_norm,
         "loudness": loudness,
         "harshness": harshness,
+        "formato": formato,
     }
+
+
+def _analizar_formato(audio_path: str) -> dict:
+    """Metadatos del archivo tal y como llegó, sin interpretarlos.
+
+    FASE 1: esto se REGISTRA y nada más. Ninguna regla, umbral, clasificación
+    ni texto depende todavía de estos campos. El objetivo es tener datos
+    reales (¿cuánta gente sube 32-bit float? ¿a qué sample rate?) antes de
+    decidir en fase 2 qué ramas del diagnóstico merecen existir.
+
+    `storage_bits` vs `pcm_bit_depth`: en un WAV FLOAT de 32 bits los 32 bits
+    son el tamaño del contenedor, no un techo de cuantización — ahí no hay
+    valor máximo representable en el sentido del punto fijo, y por eso
+    `pcm_bit_depth` es None. Confundir ambos es justo lo que lleva a tratar
+    un over recuperable como si fuera recorte irreversible.
+    """
+    extension = os.path.splitext(audio_path or "")[1].lower()
+    info_fmt = {
+        "archivo_extension": extension,
+        "archivo_container": "",
+        "archivo_codec": "",
+        "archivo_subtype": "",
+        "archivo_sample_format": "desconocido",   # integer | float | desconocido
+        "archivo_storage_bits": None,
+        "archivo_pcm_bit_depth": None,
+        "archivo_sample_rate": 0,
+        "archivo_canales": 0,
+        "archivo_lossy": None,
+        "archivo_metadata_source": "desconocida",  # soundfile | extension | desconocida
+    }
+    try:
+        info = sf.info(audio_path)
+        subtype = (info.subtype or "").upper()
+        es_float = subtype in _SUBTYPES_FLOAT
+        es_lossy = subtype in _SUBTYPES_LOSSY
+        storage = _SUBTYPE_STORAGE_BITS.get(subtype)
+        if es_lossy:
+            # En un códec con pérdida no hay ni bit depth de almacenamiento ni
+            # techo PCM: lo que se decodifica es coma flotante reconstruida.
+            storage = None
+            sample_format = "float"
+        elif es_float:
+            sample_format = "float"
+        elif storage is not None:
+            sample_format = "integer"
+        else:
+            sample_format = "desconocido"
+        info_fmt.update({
+            "archivo_container": info.format or "",
+            "archivo_codec": info.subtype_info or subtype,
+            "archivo_subtype": subtype,
+            "archivo_sample_format": sample_format,
+            "archivo_storage_bits": storage,
+            # Solo el punto fijo tiene techo de cuantización.
+            "archivo_pcm_bit_depth": storage if sample_format == "integer" else None,
+            "archivo_sample_rate": int(info.samplerate or 0),
+            "archivo_canales": int(info.channels or 0),
+            "archivo_lossy": bool(es_lossy),
+            "archivo_metadata_source": "soundfile",
+        })
+    except Exception:
+        # Nunca romper el análisis por no poder leer una cabecera. Se degrada
+        # a lo único que se sabe con certeza: la extensión.
+        info_fmt["archivo_lossy"] = extension in _EXTENSIONES_LOSSY if extension else None
+        info_fmt["archivo_metadata_source"] = "extension" if extension else "desconocida"
+    return info_fmt
 
 
 def _analizar_harshness(mel_db: np.ndarray, mel_freqs: np.ndarray) -> dict:
@@ -419,12 +519,36 @@ def _analizar_loudness(audio_path: str, y_preloaded=None, sr_preloaded=None,
     Mide loudness según ITU-R BS.1770 (LUFS).
     Usa audio precargado si está disponible para evitar re-lectura de disco.
     Retorna: LUFS integrado, short-term max, rango, y nivel relativo.
+
+    Sobre el true peak — qué parte de la norma se implementa realmente:
+    referencia objetivo ITU-R BS.1770-5 (2023), Anexo 2 "Sampling-rate
+    conversion for the measurement of true-peak level". De ahí se implementa
+    el sobremuestreo 4x y la toma del máximo absoluto sobre la señal
+    reconstruida, canal a canal, quedándose con el mayor de los canales.
+    NO se implementan: el filtro FIR polifásico concreto que especifica la
+    norma (aquí se usa el resampler genérico soxr_hq), la atenuación previa
+    de 12,04 dB (innecesaria trabajando en coma flotante) ni el filtro
+    paso-bajo posterior. Es una aproximación al método, no el método literal;
+    por eso `true_peak_validated` arranca en False y solo puede pasar a True
+    tras superar backend/tests/validar_true_peak.py.
     """
     resultado = {
         "lufs_integrado": -99.0,
         "lufs_short_term_max": -99.0,
         "rango_loudness": 0.0,
-        "true_peak_dbtp": -99.0,      # true peak con oversampling 4x (ITU-R BS.1770)
+        # --- Picos ---
+        # Ambos se guardan SIN redondear: el redondeo pertenece a la
+        # presentación y a la compatibilidad de clasificación de la fase 1.
+        "true_peak_dbtp": -99.0,      # pico reconstruido, dBTP
+        "sample_peak_dbfs": -99.0,    # máximo absoluto de las muestras, dBFS
+        # --- Estado del método de medición (no del archivo) ---
+        "sample_peak_source": "no_disponible",   # archivo_nativo | audio_remuestreado_22k | no_disponible
+        "true_peak_method": "no_disponible",     # soxr_hq_4x | sample_peak_22k_fallback | no_disponible
+        "true_peak_oversampling": 0,             # 4 | 1 | 0
+        "true_peak_validated": _TRUE_PEAK_VALIDATED,
+        "peak_measurement_sample_rate": 0,       # sr al que se midieron los picos
+        "peak_measurement_channels": 0,          # nº de canales medidos
+        # --- Clasificación y textos (sin cambios en fase 1) ---
         "nivel": "",                  # "bajo", "moderado", "alto", "muy_alto"
         "referencia": "",             # texto con contexto
         "consejo_master": "",         # texto accionable según nivel
@@ -442,14 +566,19 @@ def _analizar_loudness(audio_path: str, y_preloaded=None, sr_preloaded=None,
                 # Stereo: transponer de (2, N) a (N, 2) para pyloudnorm
                 data = y_stereo_preloaded.T
             else:
-                # Mono: duplicar a estéreo
-                data = np.column_stack([y_preloaded, y_preloaded])
+                # Mono: se mide como UN canal. Duplicarlo a dos (que es lo que
+                # se hacía hasta v0.5.70) hace que la suma de canales de
+                # BS.1770 cuente la energía dos veces y devuelva 10·log10(2) =
+                # +3,01 LU de más frente a cualquier medidor de referencia.
+                # Los análisis mono anteriores a v0.5.71 llevan ese sesgo.
+                data = y_preloaded
         else:
+            # Mismo criterio que arriba: un archivo mono se mide como un canal.
             data, rate = sf.read(audio_path)
-            if data.ndim == 1:
-                data = np.column_stack([data, data])
 
         meter = pyln.Meter(rate)
+        resultado["peak_measurement_sample_rate"] = int(rate)
+        resultado["peak_measurement_channels"] = 1 if data.ndim == 1 else int(data.shape[1])
 
         # LUFS integrado (todo el track)
         lufs_i = meter.integrated_loudness(data)
@@ -482,13 +611,30 @@ def _analizar_loudness(audio_path: str, y_preloaded=None, sr_preloaded=None,
 
             # Sanity: el true peak nunca puede ser MENOR que el sample peak.
             # Si por artefacto el oversampleado da menos, nos quedamos con el
-            # sample peak (cota inferior segura).
-            resultado["true_peak_dbtp"] = round(max(tp_db, sample_peak_db), 1)
+            # sample peak (cota inferior segura). OJO: esto hace que el test
+            # `true_peak >= sample_peak` sea un invariante forzado por el
+            # código, no una validación del algoritmo.
+            resultado["true_peak_dbtp"] = float(max(tp_db, sample_peak_db))
+            resultado["sample_peak_dbfs"] = float(sample_peak_db)
+            resultado["sample_peak_source"] = "archivo_nativo"
+            resultado["true_peak_method"] = "soxr_hq_4x"
+            resultado["true_peak_oversampling"] = 4
+            resultado["peak_measurement_sample_rate"] = int(native_sr)
+            resultado["peak_measurement_channels"] = int(native.shape[1])
         except Exception:
-            # Fallback: sample peak sobre el audio ya cargado (sin oversampling)
+            # Fallback: el archivo no se pudo releer a sample rate nativo.
+            # Lo único que queda es el audio ya remuestreado a 22 kHz, que NO
+            # es ni el true peak ni el sample peak del archivo: el filtro del
+            # remuestreo introduce overshoot. Se publica como cota aproximada
+            # y se marca el origen para que nadie lo confunda con una medida
+            # buena. El sample peak se deja sin valor antes que dar uno falso.
             peak_lin = float(np.max(np.abs(data)))
             if peak_lin > 1e-9:
-                resultado["true_peak_dbtp"] = round(20.0 * float(np.log10(peak_lin)), 1)
+                resultado["true_peak_dbtp"] = 20.0 * float(np.log10(peak_lin))
+            resultado["sample_peak_dbfs"] = -99.0
+            resultado["sample_peak_source"] = "no_disponible"
+            resultado["true_peak_method"] = "sample_peak_22k_fallback"
+            resultado["true_peak_oversampling"] = 1
 
         # Aviso de true peak según severidad. Umbrales basados en estándares
         # de industria, no en datos de Mentotrack (no necesitan calibrado).
@@ -498,7 +644,20 @@ def _analizar_loudness(audio_path: str, y_preloaded=None, sr_preloaded=None,
         #   codecs lossy (AAC, MP3, Opus) generan inter-sample peaks adicionales
         #   al comprimir y pueden saturar el reproductor del oyente.
         # - <= -1 dBTP: zona segura para streaming.
-        tp_val = resultado["true_peak_dbtp"]
+        #
+        # ===================== DEUDA DE FASE 1 =====================
+        # COMPATIBILIDAD TEMPORAL: hasta v0.5.70 el true peak se guardaba ya
+        # redondeado a 1 decimal y la clasificación se decidía sobre ese valor
+        # redondeado. Desde v0.5.71 el valor se conserva con precisión
+        # completa, pero la clasificación SIGUE tomándose sobre el redondeado
+        # para que ningún análisis cambie de categoría en esta fase (un track
+        # a +0,04 dBTP pasaría de "streaming" a "clipping" solo por dejar de
+        # redondear, y eso es un cambio de clasificación).
+        # PENDIENTE FASE 2: decidir el umbral sobre `true_peak_dbtp` sin
+        # redondear, junto con la nueva taxonomía de picos. Al hacerlo hay que
+        # regenerar backend/tests/golden_loudness.json de forma consciente.
+        # ===========================================================
+        tp_val = round(resultado["true_peak_dbtp"], 1)
         if tp_val > 0.0:
             resultado["nivel_true_peak"] = "clipping"
             resultado["aviso_true_peak"] = (

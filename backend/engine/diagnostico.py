@@ -135,7 +135,16 @@ def generar_diagnostico(senales: dict, contexto: dict) -> dict:
                 "lufs_integrado": senales["loudness"]["lufs_integrado"],
                 "lufs_short_term_max": senales["loudness"]["lufs_short_term_max"],
                 "rango_loudness": senales["loudness"]["rango_loudness"],
+                # Picos sin redondear: el redondeo lo hace la interfaz.
                 "true_peak_dbtp": senales["loudness"].get("true_peak_dbtp", -99.0),
+                "sample_peak_dbfs": senales["loudness"].get("sample_peak_dbfs", -99.0),
+                # Estado del método de medición (no del archivo)
+                "sample_peak_source": senales["loudness"].get("sample_peak_source", ""),
+                "true_peak_method": senales["loudness"].get("true_peak_method", ""),
+                "true_peak_oversampling": senales["loudness"].get("true_peak_oversampling", 0),
+                "true_peak_validated": senales["loudness"].get("true_peak_validated", False),
+                "peak_measurement_sample_rate": senales["loudness"].get("peak_measurement_sample_rate", 0),
+                "peak_measurement_channels": senales["loudness"].get("peak_measurement_channels", 0),
                 "nivel": senales["loudness"]["nivel"],
                 "referencia": senales["loudness"]["referencia"],
                 "consejo_master": senales["loudness"].get("consejo_master", ""),
@@ -163,6 +172,8 @@ def generar_diagnostico(senales: dict, contexto: dict) -> dict:
                 "peak_freq_hz": senales["harshness"].get("peak_freq_hz", 0),
                 "caracter": senales["harshness"].get("caracter", ""),
             },
+            # Metadatos del archivo — solo registro en fase 1, nada los usa.
+            "formato": senales.get("formato", {}),
         },
         # Señales crudas para calibración del motor (el frontend las guarda en el Sheet)
         "senales": {

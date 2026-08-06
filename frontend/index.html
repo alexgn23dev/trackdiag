@@ -199,6 +199,44 @@
         ? 'http://localhost:8000'
         : '';
 
+    // Versión de este index.html. Tiene que coincidir con la que devuelve
+    // /api/health. Si no coincide, este fichero viene de la caché del
+    // navegador y puede estar dejando de enviar campos que el backend ya
+    // espera — se recarga una sola vez y, si aun así no cuadra, se avisa.
+    const APP_VERSION = '0.5.71';
+
+    function comprobarVersionFrontend(onDesfase) {
+        fetch(`${API_URL}/api/health`, { cache: 'no-store' })
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                const backend = data && data.version;
+                if (!backend || backend === APP_VERSION) return;
+                // Guarda contra bucles: solo se recarga una vez por versión.
+                const yaIntentado = sessionStorage.getItem('mt_reload_version');
+                if (yaIntentado !== backend) {
+                    sessionStorage.setItem('mt_reload_version', backend);
+                    window.location.reload();
+                    return;
+                }
+                // Recargamos y sigue sin cuadrar: hay una caché intermedia.
+                // No insistimos, avisamos.
+                onDesfase && onDesfase(backend);
+            })
+            .catch(() => {});
+    }
+
+    // Formatea una medida numérica para la UI, o devuelve "—".
+    // Un análisis antiguo no trae los campos nuevos (undefined), un fallo de
+    // medición los deja en el centinela -99, y un JSON raro puede colar NaN o
+    // null. Ninguno de esos debe llegar nunca a pantalla como tal.
+    const SENTINELA_SIN_DATO = -99;
+    function fmtMedida(valor, decimales = 1, sufijo = '') {
+        const n = typeof valor === 'number' ? valor : parseFloat(valor);
+        if (valor === null || valor === undefined || !isFinite(n)) return '—';
+        if (n <= SENTINELA_SIN_DATO) return '—';
+        return n.toFixed(decimales) + sufijo;
+    }
+
     // =========================================================================
     // Componentes de UI
     // =========================================================================
@@ -1838,13 +1876,29 @@
                                     <div className="mt-3 grid grid-cols-2 gap-3">
                                         <div>
                                             <span className="text-gray-500 text-xs">Pico short-term</span>
-                                            <p className="text-gray-300 text-sm">{d.loudness.lufs_short_term_max} LUFS</p>
+                                            <p className="text-gray-300 text-sm">{fmtMedida(d.loudness.lufs_short_term_max, 1, ' LUFS')}</p>
                                             <p className="text-gray-600 text-xs">El momento más fuerte del track.</p>
                                         </div>
                                         <div>
                                             <span className="text-gray-500 text-xs">Rango</span>
-                                            <p className="text-gray-300 text-sm">{d.loudness.rango_loudness} LU</p>
+                                            <p className="text-gray-300 text-sm">{fmtMedida(d.loudness.rango_loudness, 1, ' LU')}</p>
                                             <p className="text-gray-600 text-xs">Diferencia entre lo más fuerte y lo más suave. Más rango = más dinámica.</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Picos — siempre visibles. El true peak es el dato
+                                        principal; el sample peak va como técnico secundario.
+                                        Fase 1: solo se muestran, sin color ni juicio nuevo. */}
+                                    <div className="mt-3 grid grid-cols-2 gap-3">
+                                        <div>
+                                            <span className="text-gray-500 text-xs">True peak</span>
+                                            <p className="text-gray-300 text-sm">{fmtMedida(d.loudness.true_peak_dbtp, 1, ' dBTP')}</p>
+                                            <p className="text-gray-600 text-xs">El pico real reconstruido, incluyendo lo que ocurre entre muestras.</p>
+                                        </div>
+                                        <div>
+                                            <span className="text-gray-600 text-xs">Sample peak</span>
+                                            <p className="text-gray-500 text-sm">{fmtMedida(d.loudness.sample_peak_dbfs, 1, ' dBFS')}</p>
+                                            <p className="text-gray-600 text-xs">El valor más alto de las muestras del archivo.</p>
                                         </div>
                                     </div>
                                 </div>
@@ -2880,6 +2934,7 @@
         // Proyecto que llega en la URL (/?proyecto=<id>), desde el email de
         // re-enganche: al cargar los proyectos se preselecciona solo.
         const [proyectoDeepLink, setProyectoDeepLink] = useState('');
+        const [versionDesfasada, setVersionDesfasada] = useState('');
 
         // Detecta ?compartir=1 / ?proyecto=<id> al cargar y limpia la URL.
         useEffect(() => {
@@ -2908,6 +2963,11 @@
                     window.history.replaceState({}, '', window.location.pathname + (qs ? '?' + qs : ''));
                 }
             } catch (e) { /* noop */ }
+        }, []);
+
+        // Compatibilidad frontend ↔ backend: detecta un index.html cacheado.
+        useEffect(() => {
+            comprobarVersionFrontend(setVersionDesfasada);
         }, []);
 
         // Cargar opciones al inicio
@@ -3725,8 +3785,17 @@
                 informe += `Densidad: ${da.densidad || '?'}\n`;
                 if (da.loudness) {
                     informe += `Loudness: ${da.loudness.lufs_integrado} LUFS (${da.loudness.nivel}) | Pico: ${da.loudness.lufs_short_term_max} LUFS | Rango: ${da.loudness.rango_loudness} LU\n`;
-                    if (da.loudness.true_peak_dbtp && da.loudness.true_peak_dbtp > -99) {
-                        informe += `True peak: ${da.loudness.true_peak_dbtp} dBTP${da.loudness.nivel_true_peak ? ` (${da.loudness.nivel_true_peak})` : ''}\n`;
+                    // OJO: `!= null` y no truthiness. Con `&&`, un true peak de
+                    // 0.0 (o -0.0) es falsy y la línea desaparecía del informe:
+                    // se perdieron ~4-5% de análisis, justo los del filo.
+                    const _tp = da.loudness.true_peak_dbtp;
+                    const _sp = da.loudness.sample_peak_dbfs;
+                    if (_tp != null && !isNaN(_tp) && _tp > -99) {
+                        // El backend ya no redondea: el formato es cosa de aquí.
+                        informe += `True peak: ${_tp.toFixed(1)} dBTP${da.loudness.nivel_true_peak ? ` (${da.loudness.nivel_true_peak})` : ''}\n`;
+                    }
+                    if (_sp != null && !isNaN(_sp) && _sp > -99) {
+                        informe += `Sample peak: ${_sp.toFixed(1)} dBFS\n`;
                     }
                 }
                 if (da.mono_compat) {
@@ -3788,6 +3857,29 @@
                     lufs_short_term_max: da.loudness?.lufs_short_term_max,
                     rango_loudness: da.loudness?.rango_loudness,
                     nivel_loudness: da.loudness?.nivel,
+                    // Picos — sin redondear, tal cual los mide el backend
+                    true_peak_dbtp: da.loudness?.true_peak_dbtp,
+                    sample_peak_dbfs: da.loudness?.sample_peak_dbfs,
+                    nivel_true_peak: da.loudness?.nivel_true_peak,
+                    // Estado del método de medición (no del archivo)
+                    sample_peak_source: da.loudness?.sample_peak_source,
+                    true_peak_method: da.loudness?.true_peak_method,
+                    true_peak_oversampling: da.loudness?.true_peak_oversampling,
+                    true_peak_validated: da.loudness?.true_peak_validated,
+                    peak_measurement_sample_rate: da.loudness?.peak_measurement_sample_rate,
+                    peak_measurement_channels: da.loudness?.peak_measurement_channels,
+                    // Metadatos del archivo — solo registro, nada los usa aún
+                    archivo_extension: da.formato?.archivo_extension,
+                    archivo_container: da.formato?.archivo_container,
+                    archivo_codec: da.formato?.archivo_codec,
+                    archivo_subtype: da.formato?.archivo_subtype,
+                    archivo_sample_format: da.formato?.archivo_sample_format,
+                    archivo_storage_bits: da.formato?.archivo_storage_bits,
+                    archivo_pcm_bit_depth: da.formato?.archivo_pcm_bit_depth,
+                    archivo_sample_rate: da.formato?.archivo_sample_rate,
+                    archivo_canales: da.formato?.archivo_canales,
+                    archivo_lossy: da.formato?.archivo_lossy,
+                    archivo_metadata_source: da.formato?.archivo_metadata_source,
                     // Mono compatibility
                     es_stereo: da.mono_compat?.es_stereo,
                     correlacion_lr: da.mono_compat?.correlacion_lr,
@@ -3805,6 +3897,10 @@
                     // Carencias
                     carencia_medios: dx.senales?.carencia_medios,
                     carencia_agudos: dx.senales?.carencia_agudos,
+                    // Versión del frontend que escribió esta fila. Permite medir
+                    // en Postgres cuánto tarda en propagarse un deploy y saber
+                    // por qué a una fila le faltan campos nuevos.
+                    frontend_version: APP_VERSION,
                     // Diagnósticos emitidos y scores
                     diag_principal: dx.diagnostico_principal?.id,
                     diag_secundario: dx.diagnostico_secundario?.id || null,
@@ -4053,6 +4149,22 @@
 
         return (
             <div>
+                {/* Aviso de versión desfasada: solo aparece si tras recargar una
+                    vez el index.html sigue siendo más viejo que el backend, lo
+                    que indica una caché intermedia (navegador o CDN). */}
+                {versionDesfasada && (
+                    <div className="fixed top-0 left-0 right-0 z-50 px-4 py-2 text-center text-xs"
+                         style={{ background: 'rgba(109,16,255,0.9)', color: '#fff' }}>
+                        Estás viendo una versión antigua de la app (v{APP_VERSION} frente a v{versionDesfasada}).
+                        {' '}
+                        <button type="button"
+                                onClick={() => window.location.reload(true)}
+                                style={{ background: 'transparent', border: 0, color: '#fff', textDecoration: 'underline', cursor: 'pointer', padding: 0 }}>
+                            Recargar
+                        </button>
+                        {' '}— si persiste, vacía la caché del navegador.
+                    </div>
+                )}
                 {/* Botón Mi panel — siempre visible arriba a la derecha (no en panel) */}
                 {screen !== 'panel' && (
                     <div className="fixed top-4 right-4 z-40">

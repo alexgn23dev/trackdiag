@@ -54,7 +54,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.70")
+app = FastAPI(title="Mentotrack API", version="0.5.71")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -288,7 +288,7 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.70"}
+    return {"status": "ok", "version": "0.5.71"}
 
 
 # Validación compartida de uploads de audio (track principal y referencia)
@@ -5482,7 +5482,17 @@ async def comunidad_marcar_util(request: Request, comentario_id: str):
 
 @app.get("/")
 def serve_frontend():
-    return FileResponse(FRONTEND_DIR / "index.html")
+    # `/` se servía SIN Cache-Control (v0.5.70 y anteriores). Sin directiva, el
+    # navegador aplica caché heurística sobre Last-Modified y se queda con un
+    # index.html viejo días o semanas — que es exactamente lo que hizo que
+    # tras el deploy del true peak un 10,8% de los análisis de mayo llegaran
+    # sin los campos nuevos. El catch-all sí ponía no-cache; la home no.
+    # `no-cache` no significa "no guardar": significa revalidar antes de usar,
+    # así que el 304 sigue siendo barato.
+    return FileResponse(
+        FRONTEND_DIR / "index.html",
+        headers={"Cache-Control": "no-cache, must-revalidate"},
+    )
 
 
 # Extensiones de assets inmutables → cache largo (7 días)
