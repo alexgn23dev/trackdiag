@@ -3897,10 +3897,14 @@
                     // Carencias
                     carencia_medios: dx.senales?.carencia_medios,
                     carencia_agudos: dx.senales?.carencia_agudos,
-                    // Versión del frontend que escribió esta fila. Permite medir
-                    // en Postgres cuánto tarda en propagarse un deploy y saber
-                    // por qué a una fila le faltan campos nuevos.
+                    // Con qué se midió esta fila. Permite saber qué análisis son
+                    // comparables entre sí sin deducirlo por la fecha, y medir
+                    // cuánto tarda en propagarse un deploy.
                     frontend_version: APP_VERSION,
+                    backend_version: dx.versiones?.backend_version,
+                    analysis_engine_version: dx.versiones?.analysis_engine_version,
+                    peak_algorithm_version: dx.versiones?.peak_algorithm_version,
+                    loudness_algorithm_version: dx.versiones?.loudness_algorithm_version,
                     // Diagnósticos emitidos y scores
                     diag_principal: dx.diagnostico_principal?.id,
                     diag_secundario: dx.diagnostico_secundario?.id || null,

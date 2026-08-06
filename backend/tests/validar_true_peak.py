@@ -171,6 +171,28 @@ def validar(destino_fixtures: str) -> dict:
         analitico = spec.get("tp_analitico")
         patologico = spec.get("patologico", False)
 
+        # Señales con discontinuidad: el máximo GLOBAL no puede compararse
+        # contra el valor analítico de régimen estable. Un escalón produce
+        # sobreoscilación real en cualquier reconstrucción band-limited — está
+        # medido en tests/estudio_continua.py, donde los cuatro métodos
+        # (incluido ffmpeg) sobrepasan el sample peak sobre el mismo escalón.
+        # Para estos fixtures la comprobación válida es la de régimen estable,
+        # que hace estudio_continua.py; aquí solo se registra.
+        if spec.get("regimen"):
+            filas.append({
+                "fixture": nombre, "mentotrack": round(medido, 3),
+                "analitico": None,
+                "objetivo_regimen_estable": spec.get("tp_regimen_estable"),
+                "ffmpeg": None if ref_ffmpeg is None else round(ref_ffmpeg, 3),
+                "fft_sinc_32x": round(ref_fft, 3),
+                "resample_poly_4x": None if ref_poly is None else round(ref_poly, 3),
+                "patologico": False,
+                "nota": ("señal con discontinuidad: el máximo global no se "
+                         "contrasta contra el analítico de régimen estable "
+                         "(ver tests/estudio_continua.py)"),
+            })
+            continue
+
         fila = {
             "fixture": nombre, "mentotrack": round(medido, 3),
             "analitico": analitico,

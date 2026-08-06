@@ -1,10 +1,36 @@
 {
-  "dc_menos6": {
+  "dc_bordes_menos6": {
     "aviso_saturacion": "",
     "aviso_true_peak": "",
     "consejo_master": "Antes de pensar en mastering, sube los niveles de mezcla. Apunta a que el bus master marque picos en -6dB y RMS en torno a -18dB. Luego ya aplicas limiter para llegar al target del género.",
     "lufs_integrado": -29.4,
     "lufs_short_term_max": -99.0,
+    "nivel": "muy_bajo",
+    "nivel_true_peak": "ok",
+    "rango_loudness": 0.0,
+    "referencia": "Nivel muy bajo. Puede ser que el track esté en fase muy temprana o que los niveles de mezcla estén demasiado bajos.",
+    "saturacion_dinamica": "",
+    "true_peak_dbtp_1dec": -4.9
+  },
+  "dc_estable_menos6": {
+    "aviso_saturacion": "",
+    "aviso_true_peak": "",
+    "consejo_master": "Antes de pensar en mastering, sube los niveles de mezcla. Apunta a que el bus master marque picos en -6dB y RMS en torno a -18dB. Luego ya aplicas limiter para llegar al target del género.",
+    "lufs_integrado": -29.4,
+    "lufs_short_term_max": -29.4,
+    "nivel": "muy_bajo",
+    "nivel_true_peak": "ok",
+    "rango_loudness": 0.0,
+    "referencia": "Nivel muy bajo. Puede ser que el track esté en fase muy temprana o que los niveles de mezcla estén demasiado bajos.",
+    "saturacion_dinamica": "",
+    "true_peak_dbtp_1dec": -4.9
+  },
+  "dc_salto_interno_menos6": {
+    "aviso_saturacion": "",
+    "aviso_true_peak": "",
+    "consejo_master": "Antes de pensar en mastering, sube los niveles de mezcla. Apunta a que el bus master marque picos en -6dB y RMS en torno a -18dB. Luego ya aplicas limiter para llegar al target del género.",
+    "lufs_integrado": -29.3,
+    "lufs_short_term_max": -29.3,
     "nivel": "muy_bajo",
     "nivel_true_peak": "ok",
     "rango_loudness": 0.0,
@@ -115,6 +141,19 @@
     "referencia": "Nivel bajo — normal si el track no está masterizado. Un mastering profesional subirá esto a -8 a -14 LUFS según el género.",
     "saturacion_dinamica": "",
     "true_peak_dbtp_1dec": -0.9
+  },
+  "wav24_bandlimitada_15k": {
+    "aviso_saturacion": "",
+    "aviso_true_peak": "True peak en +0.1 dBTP — el master clipea digitalmente. Habrá distorsión audible en cualquier sistema de reproducción. Baja el ceiling del limiter del master a -1 dBTP y reanaliza.",
+    "consejo_master": "Si el track está terminado, un mastering básico lo sube: limiter con ceiling a -1dB, input gain hasta -8/-10 LUFS. Si suena distorsionado al subir, hay problemas de mezcla que resolver primero.",
+    "lufs_integrado": -16.8,
+    "lufs_short_term_max": -99.0,
+    "nivel": "bajo",
+    "nivel_true_peak": "clipping",
+    "rango_loudness": 0.0,
+    "referencia": "Nivel bajo — normal si el track no está masterizado. Un mastering profesional subirá esto a -8 a -14 LUFS según el género.",
+    "saturacion_dinamica": "",
+    "true_peak_dbtp_1dec": 0.1
   },
   "wav24_clip_solo_L": {
     "aviso_saturacion": "",

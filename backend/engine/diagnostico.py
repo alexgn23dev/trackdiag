@@ -7,6 +7,7 @@ v0.3: feedback contextualizado por experiencia, género, objetivo y fase.
 from .reglas import evaluar_diagnosticos, aplicar_jerarquia, UMBRAL_MINIMO_CONFIANZA
 from .templates import TEMPLATES
 from .contextualizador import contextualizar_feedback, generar_sugerencias_estructura
+from .versiones import algoritmos as _versiones_algoritmos
 
 # Umbrales por dx para contar "puntos pendientes" en el estado.
 # Coincide con aplicar_jerarquia en reglas.py: armónicos exigen más evidencia.
@@ -175,6 +176,9 @@ def generar_diagnostico(senales: dict, contexto: dict) -> dict:
             # Metadatos del archivo — solo registro en fase 1, nada los usa.
             "formato": senales.get("formato", {}),
         },
+        # Con qué se midió esto. Permite saber después qué análisis son
+        # comparables entre sí sin deducirlo por la fecha.
+        "versiones": _versiones_algoritmos(),
         # Señales crudas para calibración del motor (el frontend las guarda en el Sheet)
         "senales": {
             "db_grave": senales.get("db_grave"),

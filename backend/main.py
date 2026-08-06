@@ -39,22 +39,29 @@ from slowapi.errors import RateLimitExceeded
 _extraer_senales = None
 _generar_diagnostico = None
 _comparar_senales = None
+# Excepción de "audio sin señal analizable". Vive en engine.extractor, que se
+# carga en diferido; se cachea aquí para poder capturarla en el endpoint.
+AudioSinSenalAnalizable = None
 
 
 def _load_engine():
     """Carga los módulos pesados de análisis de audio bajo demanda."""
     global _extraer_senales, _generar_diagnostico, _comparar_senales
+    global AudioSinSenalAnalizable
     if _extraer_senales is None:
-        from engine.extractor import extraer_senales
+        from engine.extractor import extraer_senales, AudioSinSenalAnalizable as _AudioSinSenal
         from engine.diagnostico import generar_diagnostico
         from engine.comparador import comparar_senales
         _extraer_senales = extraer_senales
         _generar_diagnostico = generar_diagnostico
         _comparar_senales = comparar_senales
+        AudioSinSenalAnalizable = _AudioSinSenal
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.71")
+APP_VERSION = "0.5.71"
+
+app = FastAPI(title="Mentotrack API", version=APP_VERSION)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -288,7 +295,28 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.71"}
+    return {"status": "ok", "version": APP_VERSION}
+
+
+@app.get("/api/tecnico/versiones")
+@limiter.limit("30/minute")
+def tecnico_versiones(request: Request):
+    """Inventario de versiones: backend, algoritmos y librerías que
+    determinan las mediciones. Sirve para reproducir un análisis y para
+    comprobar que un contenedor trae lo que se validó.
+
+    Bajo cookie admin: enumerar versiones exactas de dependencias facilita
+    emparejarlas con CVEs conocidas, así que no se expone públicamente.
+    """
+    if not _admin_email_from_cookie(request):
+        return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
+    from engine.versiones import algoritmos, dependencias, ffmpeg_version
+    return {
+        "backend_version": APP_VERSION,
+        **algoritmos(),
+        "dependencias": dependencias(),
+        "ffmpeg": ffmpeg_version(),
+    }
 
 
 # Validación compartida de uploads de audio (track principal y referencia)
@@ -444,6 +472,24 @@ async def diagnosticar(
                 status_code=504,
                 content={"error": "El análisis tardó demasiado. El archivo puede estar corrupto. Inténtalo con otro archivo."}
             )
+        except AudioSinSenalAnalizable as e:
+            # Salida controlada: el archivo se decodifica pero está mudo. Antes
+            # esto llegaba hasta pyloudnorm, devolvía -inf y Starlette
+            # respondía 500 con `Out of range float values are not JSON
+            # compliant`. Ahora es un 422 legible y NO se genera ni se guarda
+            # ningún diagnóstico: el frontend corta en `if (!resp.ok)`, así que
+            # no llega a llamar a /api/sheets/registro.
+            print(f"[AUDIO-SIN-SENAL] {session_id}: {e.motivo} {e.detalle}")
+            return JSONResponse(
+                status_code=422,
+                content={
+                    "error": (f"{e.motivo} Comprueba que exportaste el bounce con "
+                              "audio (a veces se exporta con el master en mute o "
+                              "con la selección vacía) y vuelve a subirlo."),
+                    "codigo": AudioSinSenalAnalizable.codigo,
+                    "detalle": e.detalle,
+                },
+            )
 
         # Extraer señales de la referencia — EN SERIE (no en paralelo: el worker de
         # Railway comparte CPU) y sin armonía (~90% más rápido). Si falla, el
@@ -457,6 +503,9 @@ async def diagnosticar(
             except asyncio.TimeoutError:
                 print(f"[ERROR] diagnosticar: Timeout en referencia ({session_id})")
                 comparacion_error = "No se pudo analizar el track de referencia (tardó demasiado). Tu diagnóstico se generó igualmente, sin la comparación."
+            except AudioSinSenalAnalizable:
+                # La referencia está muda: el diagnóstico del usuario sale igual.
+                comparacion_error = "El track de referencia está en silencio o no tiene señal analizable. Tu diagnóstico se generó igualmente, sin la comparación."
             except Exception as e:
                 print(f"[ERROR] diagnosticar: referencia {type(e).__name__}: {e}")
                 comparacion_error = "No se pudo analizar el track de referencia. Tu diagnóstico se generó igualmente, sin la comparación."
@@ -477,6 +526,9 @@ async def diagnosticar(
 
         # Generar diagnóstico
         resultado = _generar_diagnostico(senales, contexto)
+        # El motor no conoce la versión del backend: se añade aquí para que la
+        # fila guardada tenga el juego completo de versiones.
+        resultado.setdefault("versiones", {})["backend_version"] = APP_VERSION
 
         # Comparación contra la referencia (si la hay)
         if senales_ref is not None:

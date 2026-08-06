@@ -48,6 +48,12 @@ CAMBIOS_AUTORIZADOS = {
         "pasa de 'bajo' a 'muy_bajo'."),
     ("wav24_mono", "referencia"): "Texto asociado al cambio de `nivel`.",
     ("wav24_mono", "consejo_master"): "Texto asociado al cambio de `nivel`.",
+    ("wav24_silencio", "lufs_integrado"): (
+        "v0.5.71 — pyloudnorm devuelve -inf con silencio absoluto y ese -inf "
+        "llegaba a la respuesta, donde Starlette (allow_nan=False) provocaba "
+        "un HTTP 500. Ahora se sustituye por el centinela -99.0. En el flujo "
+        "real este archivo ni siquiera llega hasta aquí: extraer_senales lo "
+        "corta antes con AudioSinSenalAnalizable → HTTP 422."),
 }
 
 

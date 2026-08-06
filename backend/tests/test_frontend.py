@@ -105,8 +105,8 @@ class TestVersionYCache(unittest.TestCase):
         m = re.search(r"const APP_VERSION\s*=\s*'([\d.]+)'", html)
         self.assertIsNotNone(m, "falta APP_VERSION en index.html")
         main = _leer(MAIN)
-        m2 = re.search(r'"version":\s*"([\d.]+)"', main)
-        self.assertIsNotNone(m2, "falta la versión en /api/health")
+        m2 = re.search(r'APP_VERSION\s*=\s*"([\d.]+)"', main)
+        self.assertIsNotNone(m2, "falta APP_VERSION en main.py")
         self.assertEqual(m.group(1), m2.group(1),
                          "APP_VERSION y /api/health no coinciden: el aviso de "
                          "versión desfasada saltaría siempre")

@@ -217,13 +217,51 @@ def _catalogo():
     reg("wav24_clip_solo_L", _clip_solo_L, sp_esperado=0.0,
         notas="Recorte severo en L, derecho intacto a -6 dBFS.")
 
-    # --- 14. DC: true peak == sample peak ---------------------------------
-    def _dc(rng):
-        n = int(SR_DEFAULT * DUR_DEFAULT)
-        x = np.full(n, _db_a_lin(-6.0))
+    # --- 14. Continua: tres variantes para separar señal de artefacto ------
+    # El true peak de una continua es su sample peak: no hay nada entre
+    # muestras. Pero un archivo finito tiene bordes, y lo que un interpolador
+    # haga ahí depende de qué asuma fuera del archivo. Por eso la prueba se
+    # parte en tres en lugar de exigir -6 dBTP en todos los casos.
+
+    # (A) Régimen estable: continua en todo el archivo. El objetivo de
+    #     -6 dBTP solo es exigible en la región central, tras el asentamiento.
+    def _dc_estable(rng):
+        n = int(SR_DEFAULT * 4.0)
+        return _a_estereo(np.full(n, _db_a_lin(-6.0))), SR_DEFAULT, "PCM_24", "WAV"
+    reg("dc_estable_menos6", _dc_estable,
+        tp_analitico=None, tp_regimen_estable=-6.0, sp_esperado=-6.0,
+        regimen="estable",
+        notas="Continua a -6 dBFS durante 4 s. El objetivo de -6 dBTP aplica a "
+              "la región central, no al máximo global.")
+
+    # (B1) Salto DENTRO del archivo: silencio → continua → silencio. La
+    #      discontinuidad es real y todos los métodos ven la misma señal, sin
+    #      depender de qué se asuma fuera del archivo.
+    def _dc_salto_interno(rng):
+        n_sil = int(SR_DEFAULT * 0.5)
+        n_dc = int(SR_DEFAULT * 3.0)
+        x = np.concatenate([np.zeros(n_sil), np.full(n_dc, _db_a_lin(-6.0)),
+                            np.zeros(n_sil)])
         return _a_estereo(x), SR_DEFAULT, "PCM_24", "WAV"
-    reg("dc_menos6", _dc, tp_analitico=-6.0, sp_esperado=-6.0,
-        notas="Continua a -6 dBFS. Sin contenido entre muestras: TP = SP.")
+    reg("dc_salto_interno_menos6", _dc_salto_interno,
+        tp_analitico=None, tp_regimen_estable=-6.0, sp_esperado=-6.0,
+        regimen="borde_abrupto",
+        notas="Silencio → continua -6 dBFS → silencio. El escalón está dentro "
+              "del archivo: no hay ambigüedad sobre qué pasa fuera, así que la "
+              "sobreoscilación es la respuesta real del filtro al escalón.")
+
+    # (B2) Salto en el BORDE del archivo: empieza y acaba de golpe a nivel
+    #      pleno. Aquí el resultado sí depende de la extensión que asuma cada
+    #      implementación, así que NO se le pone objetivo analítico.
+    def _dc_bordes(rng):
+        n = int(SR_DEFAULT * DUR_DEFAULT)
+        return _a_estereo(np.full(n, _db_a_lin(-6.0))), SR_DEFAULT, "PCM_24", "WAV"
+    reg("dc_bordes_menos6", _dc_bordes,
+        tp_analitico=None, tp_regimen_estable=-6.0, sp_esperado=-6.0,
+        regimen="borde_archivo",
+        notas="Continua que arranca y termina abruptamente en el borde del "
+              "archivo. Sin objetivo analítico: el valor depende de qué asuma "
+              "cada interpolador fuera del archivo.")
 
     # --- 15. Limitado agresivo sin llegar al techo ------------------------
     def _limitado(rng):
@@ -232,6 +270,25 @@ def _catalogo():
         return _a_estereo(_escalar_a_sample_peak(x, -1.0)), SR_DEFAULT, "PCM_24", "WAV"
     reg("wav24_limitado_sin_clip", _limitado, sp_esperado=-1.0,
         notas="Saturación blanda con ceiling a -1: dinámica aplastada, sin recorte.")
+
+    # --- 15b. Banda limitada a 15 kHz -------------------------------------
+    # `_musical` mete ráfagas de ruido blanco (los hats) con energía hasta
+    # Nyquist. Eso NO se parece a música real, y cerca de Nyquist cada
+    # interpolador se comporta distinto: soxr lee de más, el FIR de la ITU lee
+    # de menos. Este fixture recorta a 15 kHz para tener el caso realista, en
+    # el que todos los métodos deben coincidir.
+    def _banda_limitada(rng):
+        from scipy.signal import butter, sosfiltfilt
+        x = _musical(SR_DEFAULT, DUR_DEFAULT, rng)
+        sos = butter(8, 15000, "lp", fs=SR_DEFAULT, output="sos")
+        x = sosfiltfilt(sos, x)
+        return (_a_estereo(_escalar_a_sample_peak(x, -1.0)),
+                SR_DEFAULT, "PCM_24", "WAV")
+    reg("wav24_bandlimitada_15k", _banda_limitada, sp_esperado=-1.0,
+        banda_limitada=True,
+        notas="Material con el espectro recortado a 15 kHz, como la música "
+              "real. Sin energía pegada a Nyquist, todos los métodos de "
+              "medida de true peak convergen.")
 
     # --- 16. Crest factor bajo (onda cuadrada) ----------------------------
     def _cuadrada(rng):
@@ -296,6 +353,8 @@ def generar(destino: str, solo: list | None = None) -> dict:
             "formato": formato,
             "canales": 1 if data.ndim == 1 else data.shape[1],
             "tp_analitico": spec.get("tp_analitico"),
+            "tp_regimen_estable": spec.get("tp_regimen_estable"),
+            "regimen": spec.get("regimen", ""),
             "sp_esperado": spec.get("sp_esperado"),
             "patologico": bool(spec.get("patologico", False)),
             "mono": bool(spec.get("mono", False)),

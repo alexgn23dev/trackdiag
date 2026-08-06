@@ -18,8 +18,17 @@ import soundfile as sf
 # un medidor realmente independiente). Se publica en cada análisis para poder
 # saber después con qué grado de confianza se midió cada fila.
 #
-# 2026-08-06 — False. La validación inicial encontró desviaciones sobre el
-# valor analítico (ver backend/tests/RESULTADOS_VALIDACION.md).
+# 2026-08-06 — False. La batería automática PASA (ver
+# backend/tests/RESULTADOS_VALIDACION.md), pero quedan dos cosas antes de
+# poder ponerlo a True: la comprobación manual contra un medidor profesional
+# de escritorio y la ejecución dentro de la imagen de producción.
+#
+# PRIORIDAD DE FASE 2, registrada aquí a propósito: un WAV 32-bit float con
+# picos por encima de 0 dBFS se sigue clasificando como "clipping" y se le
+# dice al usuario que "el master clipea digitalmente". Es falso — en coma
+# flotante esos overs son recuperables bajando el gain. Desde v0.5.71 ya se
+# registra `archivo_sample_format`, así que el dato para distinguirlo existe;
+# lo que falta es usarlo. Esta fase NO lo corrige por decisión de alcance.
 _TRUE_PEAK_VALIDATED = False
 
 # Bits de almacenamiento por subtype de libsndfile. OJO: en FLOAT/DOUBLE esto
@@ -37,6 +46,74 @@ _SUBTYPES_LOSSY = {
 }
 _EXTENSIONES_LOSSY = {".mp3", ".ogg", ".opus", ".m4a", ".aac"}
 
+# ===========================================================================
+# Señal analizable
+# ===========================================================================
+# Umbral por debajo del cual damos por hecho que NO hay señal, no que la haya
+# floja. Un pico de -80 dBFS es una diezmilésima de fondo de escala: ni la
+# grabación más silenciosa de un track real baja de ahí. Un bounce bajo de
+# verdad (mezcla sin masterizar, -30/-40 dBFS de pico) queda muy por encima y
+# se analiza con normalidad — es un caso legítimo que el motor ya cubre con
+# el nivel "muy_bajo".
+_UMBRAL_PICO_SIN_SENAL_DBFS = -80.0
+# Segundo criterio, para señales con un chasquido aislado sobre silencio:
+# si la energía media es despreciable, tampoco hay nada que analizar.
+_UMBRAL_RMS_SIN_SENAL_DBFS = -90.0
+
+
+class AudioSinSenalAnalizable(Exception):
+    """El archivo se decodifica pero no contiene señal que se pueda analizar.
+
+    Silencio digital, un archivo de puros ceros o muestras no finitas. NO se
+    lanza por tener nivel bajo: para eso está el nivel "muy_bajo" del
+    diagnóstico normal.
+    """
+
+    codigo = "AUDIO_WITHOUT_ANALYZABLE_SIGNAL"
+
+    def __init__(self, motivo: str, detalle: dict | None = None):
+        super().__init__(motivo)
+        self.motivo = motivo
+        self.detalle = detalle or {}
+
+
+def _comprobar_senal_analizable(y: np.ndarray) -> None:
+    """Lanza AudioSinSenalAnalizable si el audio no da para analizar nada.
+
+    Se ejecuta ANTES que cualquier medición: sin esto, pyloudnorm devuelve
+    -inf en silencio, ese -inf viaja hasta la respuesta y Starlette revienta
+    con `Out of range float values are not JSON compliant` (HTTP 500).
+    """
+    if y is None or y.size == 0:
+        raise AudioSinSenalAnalizable("El archivo no contiene muestras de audio.",
+                                      {"motivo_tecnico": "sin_muestras"})
+
+    finitos = np.isfinite(y)
+    if not finitos.all():
+        n_malos = int(y.size - np.count_nonzero(finitos))
+        # Si además de valores raros no queda nada útil, es inanalizable.
+        if n_malos == y.size:
+            raise AudioSinSenalAnalizable(
+                "El archivo contiene valores de audio inválidos (NaN o infinito).",
+                {"motivo_tecnico": "muestras_no_finitas", "n_muestras_malas": n_malos})
+        y = y[finitos]
+
+    pico = float(np.max(np.abs(y))) if y.size else 0.0
+    pico_db = 20.0 * float(np.log10(pico)) if pico > 0 else -999.0
+    rms = float(np.sqrt(np.mean(np.square(y)))) if y.size else 0.0
+    rms_db = 20.0 * float(np.log10(rms)) if rms > 0 else -999.0
+
+    if pico_db <= _UMBRAL_PICO_SIN_SENAL_DBFS or rms_db <= _UMBRAL_RMS_SIN_SENAL_DBFS:
+        raise AudioSinSenalAnalizable(
+            "El archivo está en silencio o no tiene señal suficiente para analizarlo.",
+            {
+                "motivo_tecnico": "silencio",
+                "pico_dbfs": None if pico_db < -998 else round(pico_db, 1),
+                "rms_dbfs": None if rms_db < -998 else round(rms_db, 1),
+                "umbral_pico_dbfs": _UMBRAL_PICO_SIN_SENAL_DBFS,
+                "umbral_rms_dbfs": _UMBRAL_RMS_SIN_SENAL_DBFS,
+            })
+
 
 def extraer_senales(audio_path: str, bpm_manual: int | None = None,
                     omitir_armonia: bool = False) -> dict:
@@ -49,6 +126,11 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None,
         y = np.mean(y_stereo, axis=0)
     else:
         y = y_stereo if y_stereo.ndim == 1 else y_stereo[0]
+
+    # Puerta de entrada: si no hay señal, se corta aquí y no se mide nada.
+    # Cualquier análisis sobre silencio produce -inf, divisiones por casi cero
+    # y conclusiones sin sentido ("balance grave normal" sobre un archivo mudo).
+    _comprobar_senal_analizable(y)
 
     # Duración calculada del array cargado (evita re-lectura del archivo)
     duracion_seg = librosa.get_duration(y=y, sr=sr)
@@ -581,8 +663,12 @@ def _analizar_loudness(audio_path: str, y_preloaded=None, sr_preloaded=None,
         resultado["peak_measurement_channels"] = 1 if data.ndim == 1 else int(data.shape[1])
 
         # LUFS integrado (todo el track)
-        lufs_i = meter.integrated_loudness(data)
-        resultado["lufs_integrado"] = round(float(lufs_i), 1)
+        # pyloudnorm devuelve -inf con silencio absoluto. `_comprobar_senal_
+        # analizable` ya debería haber cortado antes, pero esta red evita que
+        # un -inf llegue jamás a la respuesta: Starlette serializa con
+        # allow_nan=False y devolvería un 500 en vez de un error legible.
+        lufs_i = float(meter.integrated_loudness(data))
+        resultado["lufs_integrado"] = round(lufs_i, 1) if np.isfinite(lufs_i) else -99.0
 
         # True Peak (dBTP) — ITU-R BS.1770 exige medirlo sobre el archivo a su
         # sample rate nativo con oversampling 4x. Reusar el audio ya
