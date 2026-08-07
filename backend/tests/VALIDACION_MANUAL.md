@@ -65,18 +65,22 @@ hizo con el falso positivo de la continua (ver `RESULTADOS_VALIDACION.md`).
 Las columnas «Mentotrack», «FIR ITU» y «FFmpeg» salen de `auto.json`. Las
 demás se rellenan a mano.
 
-| # | Archivo | SR | Formato | SP Mentotrack (dBFS) | TP Mentotrack (dBTP) | FIR ITU | FFmpeg | Medidor externo | Δ ext−Mento | Δ ext−ITU | Resultado | Observaciones |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | `wav24_pico_menos1.wav` | 44100 | WAV PCM_24 | −1,00 | +0,53 | +0,22 | +0,40 | | | | ⬜ | Material musical de banda completa |
-| 2 | `wav24_bandlimitada_15k.wav` | 44100 | WAV PCM_24 | −1,00 | +0,15 | +0,12 | +0,10 | | | | ⬜ | **El más representativo de música real** |
-| 3 | `isp_fs4_sobre_0.wav` | 44100 | WAV PCM_24 | −0,20 | +2,91 | +2,89 | +3,40 | | | | ⬜ | Analítico: **+2,81**. Decide |
-| 4 | `isp_fs4_48000.wav` | 48000 | WAV PCM_24 | −0,20 | +2,91 | +2,89 | +3,40 | | | | ⬜ | Analítico: **+2,81**. Decide |
-| 5 | `isp_fs4_96000.wav` | 96000 | WAV PCM_24 | −0,20 | +2,91 | +2,89 | +3,40 | | | | ⬜ | Analítico: **+2,81**. Decide |
-| 6 | `wav24_muestras_0dbfs.wav` | 44100 | WAV PCM_24 | 0,00 | +1,53 | +1,22 | +1,40 | | | | ⬜ | Normalizado exacto a fondo de escala |
-| 7 | `wav32f_sobre_0.wav` | 44100 | WAV FLOAT 32 | +3,00 | +4,53 | +4,22 | +4,40 | | | | ⬜ | Comprobar que el medidor lee el float sin recortar a 0 |
-| 8 | `wav24_clip_solo_L.wav` | 44100 | WAV PCM_24 | 0,00 | +3,83 | — | +3,70 | | | | ⬜ | Anotar si el medidor distingue L de R |
-| 9 | `mp3_320.mp3` | 44100 | MP3 320 | — | −0,01 | — | −0,00 | | | | ⬜ | Decodificadores distintos: informativo |
-| 10 | `dc_salto_interno_menos6.wav` | 44100 | WAV PCM_24 | −6,00 | −4,90 | −5,05 | −4,90 | | | | ⬜ | Escalón interno. **No decide**, solo se registra |
+| # | Archivo | SR | Formato | SP Mento (dBFS) | TP Mento (dBTP) | FIR ITU | FFmpeg | **Medidor externo** | **Δ ext−Mento** | **Resultado** | Observaciones |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | `wav24_pico_menos1.wav` | 44100 | WAV PCM_24 | −1,00 | **+0,53** | +0,22 | +0,40 | | | ⬜ | Ruido hasta Nyquist: los métodos divergen aquí a propósito (§6 de RESULTADOS_VALIDACION) |
+| 2 | `wav24_bandlimitada_15k.wav` | 44100 | WAV PCM_24 | −1,00 | **+0,14** | +0,11 | +0,10 | | | ⬜ | **El más representativo de música real.** Tolerancia ±0,30. Decide |
+| 3 | `isp_fs4_sobre_0.wav` | 44100 | WAV PCM_24 | −0,20 | **+2,91** | +2,89 | +3,40 | | | ⬜ | Analítico **+2,81**. Tolerancia ±0,15. Decide |
+| 4 | `isp_fs4_48000.wav` | 48000 | WAV PCM_24 | −0,20 | **+2,91** | +2,89 | +3,40 | | | ⬜ | Analítico **+2,81**. Decide |
+| 5 | `isp_fs4_96000.wav` | 96000 | WAV PCM_24 | −0,20 | **+2,91** | +2,89 | +3,40 | | | ⬜ | Analítico **+2,81**. Decide |
+| 6 | `wav24_muestras_0dbfs.wav` | 44100 | WAV PCM_24 | 0,00 | **+1,53** | +1,22 | +1,40 | | | ⬜ | Normalizado exacto a fondo de escala |
+| 7 | `wav32f_sobre_0.wav` | 44100 | WAV FLOAT 32 | **+3,00** | **+4,53** | +4,22 | +4,40 | | | ⬜ | Comprobar que el medidor lee el float sin recortarlo a 0 |
+| 8 | `wav24_clip_solo_L.wav` | 44100 | WAV PCM_24 | 0,00 | **+3,83** | +3,32 | +3,70 | | | ⬜ | Anotar si el medidor distingue L de R |
+| 9 | `mp3_320.mp3` | 44100 | MP3 320 | −1,40 | **−0,01** | −0,08 | −0,00 | | | ⬜ | Decodificadores distintos: informativo, no decide |
+| 10 | `dc_salto_interno_menos6.wav` | 44100 | WAV PCM_24 | −6,00 | **−4,90** | −5,05 | −4,90 | | | ⬜ | Escalón interno. **No decide**: cada implementación asume algo distinto en los bordes |
+
+Valores de Mentotrack medidos el 2026-08-07 con `peak-soxr_hq_4x-1`, verificados
+idénticos en la imagen de Docker de CI. Si al repetir la medición salieran
+otros, hay que investigar el entorno antes de seguir.
 
 Resultado: ⬜ pendiente · ✅ dentro de tolerancia · ⚠️ fuera (investigar) · ➖ no decide
 
