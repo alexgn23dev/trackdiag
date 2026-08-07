@@ -1862,15 +1862,29 @@
                                                 <p className="text-gray-300 text-xs mt-1">{d.loudness.aviso_saturacion}</p>
                                             </div>
                                         )}
-                                        {d.loudness.aviso_true_peak && (
-                                            <div className={`mt-3 p-2 rounded border-l-2 ${d.loudness.nivel_true_peak === 'clipping' ? 'border-red-400 bg-red-400/5' : 'border-yellow-400 bg-yellow-400/5'}`}>
-                                                <p className={`text-xs font-medium ${d.loudness.nivel_true_peak === 'clipping' ? 'text-red-400' : 'text-yellow-400'}`}>
-                                                    {d.loudness.nivel_true_peak === 'clipping' ? '⚠ True peak: clipping digital' : 'True peak por encima del ceiling de streaming'}
+                                        {/* Taxonomía de picos (fase 2A). Sustituye al aviso
+                                            antiguo, que llamaba "clipping digital" a un over de
+                                            true peak sin haber contado una sola muestra recortada.
+                                            Los campos viejos siguen viajando en la respuesta para
+                                            los parsers, pero ya no se pintan.
+                                            Fallback: un análisis anterior a 2A no trae
+                                            `aviso_picos`, así que se muestra el texto que tenía. */}
+                                        {d.loudness.aviso_picos ? (
+                                            <div className={`mt-3 p-2 rounded border-l-2 ${d.loudness.severidad_picos === 'atencion' ? 'border-yellow-400 bg-yellow-400/5' : 'border-gray-600 bg-white/5'}`}>
+                                                <p className={`text-xs font-medium ${d.loudness.severidad_picos === 'atencion' ? 'text-yellow-400' : 'text-gray-300'}`}>
+                                                    {d.loudness.titulo_picos}
                                                 </p>
-                                                <p className="text-gray-300 text-xs mt-1">{d.loudness.aviso_true_peak}</p>
-                                                <p className="text-gray-500 text-xs mt-1">Si subiste un mp3, parte del pico puede venir del propio códec (genera picos entre muestras al recodificar). Para el dato exacto, analiza el WAV.</p>
+                                                <p className="text-gray-300 text-xs mt-1">{d.loudness.aviso_picos}</p>
+                                                {d.loudness.nota_lossy_picos && (
+                                                    <p className="text-gray-500 text-xs mt-1">{d.loudness.nota_lossy_picos}</p>
+                                                )}
                                             </div>
-                                        )}
+                                        ) : d.loudness.aviso_true_peak ? (
+                                            <div className="mt-3 p-2 rounded border-l-2 border-yellow-400 bg-yellow-400/5">
+                                                <p className="text-xs font-medium text-yellow-400">True peak</p>
+                                                <p className="text-gray-300 text-xs mt-1">{d.loudness.aviso_true_peak}</p>
+                                            </div>
+                                        ) : null}
                                         {loudnessTip && (
                                             <p className={`text-xs mt-1 ${loudnessColor.replace('text-', 'text-').replace('400', '400/70')}`}>{loudnessTip}</p>
                                         )}
@@ -3801,6 +3815,12 @@
                     if (_sp != null && !isNaN(_sp) && _sp > -99) {
                         informe += `Sample peak: ${_sp.toFixed(1)} dBFS\n`;
                     }
+                    // La línea "True peak: X dBTP (nivel)" de arriba mantiene el
+                    // vocabulario antiguo a propósito: la parsean el dashboard y
+                    // el estudio histórico. La categoría nueva va aparte.
+                    if (da.loudness.categoria_picos) {
+                        informe += `Categoría de picos: ${da.loudness.categoria_picos}\n`;
+                    }
                 }
                 if (da.mono_compat) {
                     informe += `Mono compat: ${da.mono_compat.nivel_compatibilidad || 'N/A'}`;
@@ -3865,6 +3885,10 @@
                     true_peak_dbtp: da.loudness?.true_peak_dbtp,
                     sample_peak_dbfs: da.loudness?.sample_peak_dbfs,
                     nivel_true_peak: da.loudness?.nivel_true_peak,
+                    // Taxonomía de picos (fase 2A). El campo de arriba se
+                    // conserva para no romper parsers ni el histórico.
+                    categoria_picos: da.loudness?.categoria_picos,
+                    severidad_picos: da.loudness?.severidad_picos,
                     // Estado del método de medición (no del archivo)
                     sample_peak_source: da.loudness?.sample_peak_source,
                     true_peak_method: da.loudness?.true_peak_method,

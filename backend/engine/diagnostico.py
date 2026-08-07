@@ -154,8 +154,16 @@ def generar_diagnostico(senales: dict, contexto: dict) -> dict:
                 "referencia_genero": feedback_ctx.get("referencia_lufs_genero", ""),
                 "saturacion_dinamica": senales["loudness"].get("saturacion_dinamica", ""),
                 "aviso_saturacion": senales["loudness"].get("aviso_saturacion", ""),
+                # Campos antiguos: se conservan para parsers e histórico.
+                # La interfaz NO los usa desde la fase 2A.
                 "nivel_true_peak": senales["loudness"].get("nivel_true_peak", ""),
                 "aviso_true_peak": senales["loudness"].get("aviso_true_peak", ""),
+                # Taxonomía de picos (fase 2A) — lo que se muestra al usuario
+                "categoria_picos": senales["loudness"].get("categoria_picos", ""),
+                "severidad_picos": senales["loudness"].get("severidad_picos", ""),
+                "titulo_picos": senales["loudness"].get("titulo_picos", ""),
+                "aviso_picos": senales["loudness"].get("aviso_picos", ""),
+                "nota_lossy_picos": senales["loudness"].get("nota_lossy_picos", ""),
             },
             "mono_compat": {
                 "es_stereo": senales["mono_compat"]["es_stereo"],

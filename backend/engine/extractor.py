@@ -331,6 +331,12 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None,
     loudness = _analizar_loudness(audio_path, y_preloaded=y, sr_preloaded=sr,
                                   y_stereo_preloaded=y_stereo if es_stereo else None)
 
+    # Taxonomía de picos (fase 2A). Necesita el formato del archivo, así que
+    # se calcula aquí y no dentro de _analizar_loudness. Los campos antiguos
+    # (`nivel_true_peak`, `aviso_true_peak`) siguen intactos: la interfaz usa
+    # los nuevos, los parsers y el histórico siguen viendo los viejos.
+    loudness.update(_clasificar_picos(loudness, formato))
+
     # === Saturación dinámica (over-compression / "chafado") ===
     # Cruza LUFS + LRA + rango_dinamico para detectar si el limiter ha aplastado
     # la dinámica. Los tres juntos dan una firma fiable de over-limiting:
@@ -598,6 +604,136 @@ def _analizar_harshness(mel_db: np.ndarray, mel_freqs: np.ndarray) -> dict:
             resultado["caracter"] = "mixto"
 
     return resultado
+
+
+def _clasificar_picos(loudness: dict, formato: dict) -> dict:
+    """Taxonomía de picos (fase 2A). Sustituye a `nivel_true_peak` en la
+    interfaz; el campo antiguo se conserva intacto para no romper parsers ni
+    la comparabilidad de los análisis históricos.
+
+    Qué se puede afirmar y qué no, que es de lo que iba todo esto:
+
+    * `overs_float_recuperables` — AFIRMABLE. Sabemos que el archivo es coma
+      flotante y que hay muestras por encima de 0 dBFS. En float eso no
+      recorta la onda: el valor está guardado tal cual y se recupera bajando
+      el gain. NO se puede afirmar que haya daño.
+    * `true_peak_over` — AFIRMABLE que el pico reconstruido pasa de 0 dBTP.
+      NO demuestra que haya muestras recortadas: para eso haría falta contar
+      muestras a fondo de escala, que es fase 2B.
+    * `margen_streaming` — no es un fallo. Es una recomendación de margen.
+    * `ok` — el margen recomendado está cubierto. No dice nada sobre si hay
+      recorte dentro de la señal.
+    """
+    # Se clasifica sobre el valor REDONDEADO a 1 decimal, que es el que se
+    # enseña. Si se decidiera sobre el crudo, un track a -0,9997 dBTP se
+    # mostraría como "-1,0 dBTP" y a la vez se le diría que está por encima
+    # de -1: el número visible contradiría a la categoría.
+    def _mostrable(v):
+        r = round(v, 1)
+        return 0.0 if abs(r) < 0.05 else r   # evita el "-0.0"
+
+    tp = _mostrable(loudness.get("true_peak_dbtp", -99.0))
+    sp = _mostrable(loudness.get("sample_peak_dbfs", -99.0))
+    fmt = formato or {}
+    es_float = fmt.get("archivo_sample_format") == "float"
+    es_lossy = bool(fmt.get("archivo_lossy"))
+    picos_fiables = loudness.get("sample_peak_source") == "archivo_nativo"
+
+    salida = {
+        "categoria_picos": "",
+        "severidad_picos": "",       # info | atencion
+        "titulo_picos": "",
+        "aviso_picos": "",
+        "nota_lossy_picos": "",
+    }
+    if tp <= -99.0:
+        return salida
+
+    # Coletilla para formatos con pérdida: el pico medido es el del audio
+    # DECODIFICADO, que no tiene por qué ser el del máster original.
+    if es_lossy:
+        salida["nota_lossy_picos"] = (
+            "Has subido un archivo con pérdida (MP3, OGG…). Parte de estos picos "
+            "puede venir de la propia codificación o de la decodificación, no de "
+            "tu máster: los codecs generan picos entre muestras que no estaban en "
+            "el original. Para un dato exacto, analiza el WAV o AIFF del que salió."
+        )
+
+    # --- A. Overs en coma flotante: recuperables, no son daño ---------------
+    if es_float and picos_fiables and sp > 0.0:
+        salida.update({
+            "categoria_picos": "overs_float_recuperables",
+            "severidad_picos": "atencion",
+            "titulo_picos": "Picos por encima de 0 dBFS en un archivo de coma flotante",
+            "aviso_picos": (
+                f"El archivo llega a {sp:+.1f} dBFS de pico de muestra, por encima de 0. "
+                "Es un archivo de coma flotante ({}), y en ese formato los valores por "
+                "encima de 0 se guardan tal cual: la onda no se ha recortado por estar "
+                "ahí. Se recuperan bajando el gain. Lo que sí hay que hacer es reducirlos "
+                "antes de exportar a PCM (WAV 16/24 bits) o de distribuir, porque en punto "
+                "fijo esos valores ya no caben y ahí sí se recortarían. Con este dato solo "
+                "no se puede afirmar que el máster esté dañado."
+            ).format(fmt.get("archivo_subtype", "float")),
+        })
+        return salida
+
+    # --- B. Pico reconstruido por encima del techo -------------------------
+    if tp > 0.0:
+        salida.update({
+            "categoria_picos": "true_peak_over",
+            "severidad_picos": "atencion",
+            "titulo_picos": "Picos reconstruidos por encima del techo",
+            "aviso_picos": (
+                f"El true peak llega a {tp:+.1f} dBTP, por encima de 0. Son picos que "
+                "aparecen al reconstruir la onda entre muestras. "
+                "Esto no demuestra que las muestras de tu archivo estén recortadas: "
+                "el sample peak está en {:+.1f} dBFS. "
+                "Sí implica riesgo de distorsión en la reproducción — el conversor del "
+                "oyente puede no tener margen para esos picos — y al codificar a MP3 o "
+                "AAC, que añaden picos propios. "
+                "Qué hacer: baja el ceiling del limiter (prueba -1 dBTP) y vuelve a "
+                "analizar para ver cuánto se mueve."
+            ).format(sp) if sp > -99.0 else (
+                f"El true peak llega a {tp:+.1f} dBTP, por encima de 0. Son picos que "
+                "aparecen al reconstruir la onda entre muestras, y no demuestran por sí "
+                "solos que las muestras del archivo estén recortadas. Sí implica riesgo "
+                "de distorsión al reproducir o al codificar a formatos con pérdida. "
+                "Qué hacer: baja el ceiling del limiter (prueba -1 dBTP) y reanaliza."
+            ),
+        })
+        return salida
+
+    # --- C. Entre -1 y 0: margen recomendado, no un error ------------------
+    if tp > -1.0:
+        salida.update({
+            "categoria_picos": "margen_streaming",
+            "severidad_picos": "info",
+            "titulo_picos": "Margen por debajo de la recomendación de streaming",
+            "aviso_picos": (
+                f"El true peak está en {tp:+.1f} dBTP: por debajo de 0, pero por encima "
+                "de -1. No es un error. Es una recomendación de margen — las "
+                "plataformas sugieren dejar el techo en -1 dBTP para que la codificación "
+                "con pérdida, que genera picos adicionales, no se quede sin sitio. "
+                "Si vas a distribuir en streaming, bajar el ceiling a -1 dBTP te da ese "
+                "colchón. Si es un máster para club o para pinchar, puede quedarse así."
+            ),
+        })
+        return salida
+
+    # --- D. Margen cubierto -------------------------------------------------
+    salida.update({
+        "categoria_picos": "ok",
+        "severidad_picos": "info",
+        "titulo_picos": "Margen de picos correcto",
+        "aviso_picos": (
+            f"El true peak está en {tp:+.1f} dBTP, dentro del margen de -1 dBTP que "
+            "recomiendan las plataformas. Ojo a qué significa esto y qué no: habla del "
+            "techo del archivo, no de lo que pase dentro de la señal. Un track puede "
+            "haber pasado por un clipper o un limitador agresivo antes del bounce y "
+            "seguir teniendo el techo perfectamente puesto."
+        ),
+    })
+    return salida
 
 
 def _analizar_loudness(audio_path: str, y_preloaded=None, sr_preloaded=None,
