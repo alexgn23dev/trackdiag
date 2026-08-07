@@ -1,10 +1,85 @@
 # Validación externa del true peak — registro manual
 
-**Estado: PENDIENTE.** Ninguna fila tiene datos reales.
+**Estado: EJECUTADA EL 2026-08-07 · RESULTADO: NO PASA.**
 
-Mientras esta tabla no esté completa,
-`TRUE_PEAK_EXTERNAL_VALIDATION_PASSED` sigue en `False` en
+`TRUE_PEAK_EXTERNAL_VALIDATION_PASSED` permanece en `False` en
 `backend/engine/extractor.py`, y por tanto `_TRUE_PEAK_VALIDATED` también.
+**No se ha tocado ninguna tolerancia ni el algoritmo para forzar el paso.**
+
+## Resultado
+
+| Campo | Valor |
+|---|---|
+| Medidor | Youlean Loudness Meter 2, versión 2.5.14 |
+| Cadena | Ableton Live 12.4.3 · macOS Sonoma 14.0 |
+| Métrica | True Peak / dBTP |
+| Fecha | 2026-08-07 |
+| Persona | Alex Gonzalez |
+| `peak_algorithm_version` evaluada | **`peak-soxr_hq_4x-1`** |
+| Fixtures evaluados | 8 decisivos + 2 informativos |
+| Resultado | **4 PASS · 3 FAIL · 1 sin medir** |
+| Desviación máxima | **−0,33 dB** (fixtures 01 y 06) |
+| Desviación media (filas limpias) | **−0,20 dB** — Mentotrack lee sistemáticamente alto |
+
+| # | Archivo | Mentotrack | Youlean | Δ | Tolerancia | Resultado |
+|---|---|---|---|---|---|---|
+| 1 | `01_wav24_pico_menos1.wav` | +0,53 | +0,20 | **−0,33** | ±0,30 | **FAIL** |
+| 2 | `02_wav24_bandlimitada_15k.wav` | +0,14 | +0,10 | −0,04 | ±0,30 | PASS |
+| 3 | `03_isp_fs4_sobre_0.wav` (44,1 nativo) | +2,91 | +2,80 | −0,11 | ±0,15 | PASS |
+| 4 | `04_isp_fs4_48000.wav` | +2,91 | — | — | ±0,15 | sin medir a 48 kHz nativo |
+| 5 | `05_isp_fs4_96000.wav` (96 nativo) | +2,91 | +2,70 | **−0,21** | ±0,15 | **FAIL** |
+| 6 | `06_wav24_muestras_0dbfs.wav` | +1,53 | +1,20 | **−0,33** | ±0,30 | **FAIL** |
+| 7 | `07_wav32f_sobre_0.wav` | +4,53 | +4,30 | −0,23 | ±0,30 | PASS |
+| 8 | `08_wav24_clip_solo_L.wav` | +3,83 | +3,70 | −0,13 | ±0,30 | PASS |
+| 9 | `09_mp3_320.mp3` | −0,01 | −0,10 | −0,09 | informativo | — |
+| 10 | `10_dc_salto_interno_menos6.wav` | −4,90 | −4,80 | +0,10 | informativo | — |
+
+## Interpretación
+
+**Los fallos 01 y 06 son el hallazgo.** Material de banda completa con energía
+hasta Nyquist. Youlean y el FIR normativo (`tests/itu_bs1770.py`) coinciden
+dentro de **0,02 dB** (+0,20 vs +0,22 · +1,20 vs +1,22); soxr_hq_4x está 0,33
+por encima de ambos. Es la tercera y cuarta referencia independiente que
+apuntan en la misma dirección: la reconstrucción sinc por FFT ya daba +0,17.
+
+Comparativa sobre las filas limpias:
+
+```
+Youlean vs soxr_hq_4x : media −0,195 · máx 0,33
+Youlean vs FIR ITU    : media −0,012 · máx 0,09   (excluyendo el fixture 08)
+```
+
+**El fallo 05 es otro fenómeno.** Contra la verdad analítica (+2,8103):
+Youlean −0,11, Mentotrack +0,10. Se desvían los dos, en direcciones opuestas
+y por magnitudes parecidas; su suma (0,21) revienta la tolerancia estrecha.
+No demuestra que soxr esté mal, sino que a 96 kHz las implementaciones
+divergen en señales patológicas — BS.1770 especifica el sobremuestreo 4×
+pensando en 44,1 y 48 kHz. La misma señal a 44,1 nativo (fixture 03) da
+−0,01 en Youlean.
+
+**Los fixtures 04 y 05 no son medibles a través de un DAW salvo a su rate
+nativo.** Son tonos a exactamente fs/4: al reconvertir el sample rate, el
+tono deja de estar en fs/4 del nuevo rate, cambia el patrón de muestreo y con
+él el pico entre muestras. Medido, el 04 dio +2,70 y +2,90 según el rate del
+proyecto — con el mismo archivo.
+
+## Consecuencia y decisión tomada
+
+El sesgo afecta a los análisis con true peak entre 0 y +0,2 dBTP: **162 del
+histórico (7,4%)**, que hoy se clasifican por encima de 0 y probablemente no
+lo están.
+
+**El sesgo es preexistente**: está en producción desde mayo de 2026 y la
+versión v0.5.71 no altera ningún valor de true peak (lo garantiza el golden).
+Decisión de Alex el 2026-08-07: desplegar v0.5.71, que arregla otros cinco
+problemas reales, dejando `true_peak_validated=false` registrado en cada
+análisis, y atacar el sesgo en la fase 2B.
+
+## Para repetir la validación
+
+Los 10 fixtures se generan con `python tests/fixtures.py <destino>`; el
+script `preparar_validacion.py` del histórico de trabajo los deja numerados.
+Al repetirla hay que medir cada archivo **a su sample rate nativo**.
 
 ## Por qué hace falta
 
@@ -59,30 +134,6 @@ hizo con el falso positivo de la continua (ver `RESULTADOS_VALIDACION.md`).
 | Sistema operativo | *(por rellenar)* |
 | Fecha de la medición | *(por rellenar)* |
 | Persona | *(por rellenar)* |
-
-## Tabla
-
-Las columnas «Mentotrack», «FIR ITU» y «FFmpeg» salen de `auto.json`. Las
-demás se rellenan a mano.
-
-| # | Archivo | SR | Formato | SP Mento (dBFS) | TP Mento (dBTP) | FIR ITU | FFmpeg | **Medidor externo** | **Δ ext−Mento** | **Resultado** | Observaciones |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | `wav24_pico_menos1.wav` | 44100 | WAV PCM_24 | −1,00 | **+0,53** | +0,22 | +0,40 | | | ⬜ | Ruido hasta Nyquist: los métodos divergen aquí a propósito (§6 de RESULTADOS_VALIDACION) |
-| 2 | `wav24_bandlimitada_15k.wav` | 44100 | WAV PCM_24 | −1,00 | **+0,14** | +0,11 | +0,10 | | | ⬜ | **El más representativo de música real.** Tolerancia ±0,30. Decide |
-| 3 | `isp_fs4_sobre_0.wav` | 44100 | WAV PCM_24 | −0,20 | **+2,91** | +2,89 | +3,40 | | | ⬜ | Analítico **+2,81**. Tolerancia ±0,15. Decide |
-| 4 | `isp_fs4_48000.wav` | 48000 | WAV PCM_24 | −0,20 | **+2,91** | +2,89 | +3,40 | | | ⬜ | Analítico **+2,81**. Decide |
-| 5 | `isp_fs4_96000.wav` | 96000 | WAV PCM_24 | −0,20 | **+2,91** | +2,89 | +3,40 | | | ⬜ | Analítico **+2,81**. Decide |
-| 6 | `wav24_muestras_0dbfs.wav` | 44100 | WAV PCM_24 | 0,00 | **+1,53** | +1,22 | +1,40 | | | ⬜ | Normalizado exacto a fondo de escala |
-| 7 | `wav32f_sobre_0.wav` | 44100 | WAV FLOAT 32 | **+3,00** | **+4,53** | +4,22 | +4,40 | | | ⬜ | Comprobar que el medidor lee el float sin recortarlo a 0 |
-| 8 | `wav24_clip_solo_L.wav` | 44100 | WAV PCM_24 | 0,00 | **+3,83** | +3,32 | +3,70 | | | ⬜ | Anotar si el medidor distingue L de R |
-| 9 | `mp3_320.mp3` | 44100 | MP3 320 | −1,40 | **−0,01** | −0,08 | −0,00 | | | ⬜ | Decodificadores distintos: informativo, no decide |
-| 10 | `dc_salto_interno_menos6.wav` | 44100 | WAV PCM_24 | −6,00 | **−4,90** | −5,05 | −4,90 | | | ⬜ | Escalón interno. **No decide**: cada implementación asume algo distinto en los bordes |
-
-Valores de Mentotrack medidos el 2026-08-07 con `peak-soxr_hq_4x-1`, verificados
-idénticos en la imagen de Docker de CI. Si al repetir la medición salieran
-otros, hay que investigar el entorno antes de seguir.
-
-Resultado: ⬜ pendiente · ✅ dentro de tolerancia · ⚠️ fuera (investigar) · ➖ no decide
 
 ## Al terminar
 

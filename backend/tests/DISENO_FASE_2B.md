@@ -2,6 +2,54 @@
 
 **Diseño. Nada de esto está implementado.**
 
+---
+
+## PRIORIDAD 0 (nueva, 2026-08-07): corregir el sesgo del medidor de true peak
+
+Antes que cualquier campo nuevo. La validación externa con Youlean Loudness
+Meter 2.5.14 (ver `VALIDACION_MANUAL.md`) confirmó lo que ya apuntaban la
+reconstrucción sinc por FFT y el FIR normativo:
+
+**`soxr_hq_4x` lee entre 0,2 y 0,33 dB por encima del valor real en material
+con energía cerca de Nyquist.**
+
+Cuatro referencias independientes coinciden en la dirección. En los dos
+fixtures donde el sesgo es mayor, Youlean y el FIR de la ITU coinciden entre
+sí dentro de **0,02 dB** y soxr está 0,33 por encima de los dos.
+
+Impacto medido: **162 análisis del histórico (7,4%)** tienen el true peak
+entre 0 y +0,2 dBTP. Son los que hoy se clasifican como `true_peak_over` y
+que probablemente están por debajo del techo.
+
+### Qué hacer
+
+Sustituir el sobremuestreo de producción por el FIR 4× del anexo 2 de
+BS.1770-5, que **ya está implementado** en `tests/itu_bs1770.py` (solo se usa
+en tests). Está verificado estructuralmente y ahora también respaldado por un
+medidor profesional.
+
+Antes de moverlo hay que resolver dos cosas medidas y documentadas:
+
+1. **El fixture 08** (recorte solo en el canal izquierdo) es el único donde el
+   FIR se descuelga: +3,32 frente a +3,70 de Youlean y de ffmpeg. Investigar
+   antes de adoptarlo como algoritmo de producción.
+2. **A 96 kHz** las implementaciones divergen en señales patológicas (fixture
+   05: Youlean −0,11 y soxr +0,10 respecto al valor analítico). La norma
+   especifica 4× pensando en 44,1 y 48 kHz. Decidir qué se hace a rates altos.
+
+### Consecuencias del cambio
+
+* Sube `PEAK_ALGORITHM_VERSION` a `peak-itu_fir_4x-1`, y con ello los tres
+  estados de validación caen a `False` solos: **hay que revalidar entero**,
+  incluida otra ronda manual con el medidor externo.
+* Los análisis nuevos dejan de ser numéricamente comparables con los
+  anteriores. Es justo para eso que cada fila guarda su
+  `peak_algorithm_version`.
+* Alrededor del 7% del histórico cambiaría de categoría si se recalculara —
+  cosa que **no** se hará automáticamente: los archivos no se conservan.
+
+---
+
 La fase 2A dejó de llamar "clipping" a lo que no lo demuestra. La 2B es lo que
 permitirá afirmarlo cuando de verdad lo sea: medir las muestras.
 
