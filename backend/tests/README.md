@@ -94,6 +94,7 @@ cambiar la configuración del repositorio.
 | `golden_loudness.json` | Comportamiento congelado ANTES de v0.5.71. No regenerar a la ligera |
 | `capturar_golden.py` | Compara contra el golden. Los cambios aprobados se declaran uno a uno en `CAMBIOS_AUTORIZADOS` |
 | `itu_bs1770.py` | FIR 4× de referencia del anexo 2 de BS.1770-5. **Solo tests**, no es el de producción |
+| `reconstruccion_exacta.py` | La verdad, no otra implementación: interpolación sinc exacta. Es el árbitro cuando los medidores discrepan. **Solo tests** |
 | `validar_true_peak.py` | Contrasta contra valor analítico, ffmpeg, sinc por FFT y polifásico de scipy |
 | `estudio_continua.py` | Compara los cuatro métodos sobre señales con discontinuidad |
 | `reporte_entorno.py` | Versiones + toda la batería en un comando |
@@ -101,6 +102,7 @@ cambiar la configuración del repositorio.
 | `test_formato.py` | Metadatos del archivo; separación storage_bits / pcm_bit_depth |
 | `test_sin_senal.py` | 422 en silencio; un archivo bajo pero real se analiza igual |
 | `test_itu_referencia.py` | soxr contra el FIR normativo |
+| `test_reconstruccion.py` | Qué mide de verdad cada medidor. Verifica la referencia exacta y acota el error de cada candidato |
 | `test_versiones.py` | Versionado de algoritmos y dependencias fijadas |
 | `test_frontend.py` | Guards estáticos sobre `index.html` |
 
