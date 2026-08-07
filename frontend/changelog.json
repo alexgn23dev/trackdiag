@@ -1,6 +1,27 @@
 {
   "entries": [
     {
+      "version": "0.5.72",
+      "date": "2026-08-07",
+      "title": "El true peak, medido más fino",
+      "changes": [
+        "Hemos afinado cómo se mide el true peak: donde antes podía quedarse hasta 0,1 dB corto, ahora el error es prácticamente cero. Si comparas un análisis nuevo con uno anterior del mismo track, puede que el número suba un poco — el nuevo es el bueno.",
+        "Cada análisis guarda con qué versión del medidor se hizo, para que dos informes de fechas distintas se puedan comparar sabiendo qué cambió entre medias."
+      ]
+    },
+    {
+      "version": "0.5.71",
+      "date": "2026-08-07",
+      "title": "Revisión a fondo del análisis de picos y loudness",
+      "changes": [
+        "Un archivo de 32 bits en coma flotante con picos por encima de 0 ya no se describe como clipping: en ese formato no se recorta nada y se arregla bajando el gain. Antes se avisaba de un daño que no existía.",
+        "Los archivos mono se medían con 3 LU de más. Ya no.",
+        "Si un track no tiene un pulso claro, ahora se dice que no se ha detectado el tempo en vez de inventar un BPM.",
+        "Subir un archivo en silencio da un mensaje claro en vez de un error.",
+        "La línea de true peak faltaba en algunos informes. Arreglado."
+      ]
+    },
+    {
       "version": "0.5.70",
       "date": "2026-08-03",
       "title": "Tu track, versión a versión",

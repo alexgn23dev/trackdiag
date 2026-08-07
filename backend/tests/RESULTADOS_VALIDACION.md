@@ -330,3 +330,65 @@ Nyquist — energía que no tiene un bounce normal.
 Esto **no** anula el FAIL registrado: el criterio que se acordó era coincidir
 con un medidor externo, y no se cumplió. Lo que dice es que el criterio medía
 lo que no era. La propuesta está en `DISENO_FASE_2B.md`.
+
+---
+
+## 9. Lo que se cambió: 4× → 8× (v0.5.72, 2026-08-07)
+
+Aprobado por Alex tras el §8. **No se cambió el filtro** —el FIR de la norma
+queda descartado por lo medido arriba— sino el factor de sobremuestreo.
+
+| | |
+|---|---|
+| `PEAK_ALGORITHM_VERSION` | `peak-soxr_hq_4x-1` → **`peak-soxr_hq_8x-1`** |
+| Validación interna | **re-ejecutada, PASA** (`tests/validar_true_peak.py`) |
+| Validación externa | **`False`** — caducó al cambiar el algoritmo. Hay que repetirla |
+| `_TRUE_PEAK_VALIDATED` | `False` |
+| Error con material realista | 0,114 dB → **0,001 dB** |
+| Coste, pista de 6 min estéreo | 0,40 s → 0,85 s |
+
+### Cuánto se movió de verdad
+
+De los 30 fixtures del golden, **solo 3 cambian a 1 decimal**:
+
+| fixture | 4× | 8× | exacta | qué es |
+|---|---|---|---|---|
+| `wav24_96000_pico_menos1` | −0,9 | **−0,7** | −0,2 | Mejora real: se subestimaba 0,75 dB, ahora 0,53 |
+| `dc_estable_menos6` | −4,9 | −4,5 | −4,9 | Borde del archivo: ni mejor ni peor, ver abajo |
+| `dc_bordes_menos6` | −4,9 | −4,5 | −4,9 | Ídem |
+
+**El resto de fixtures no se mueve.** Que el cambio sea casi invisible en el
+golden y muy visible en material limitado en banda no es contradictorio: los
+fixtures tienen los hats hechos de ruido blanco hasta Nyquist, y ahí manda el
+filtro, no la rejilla.
+
+### El aviso sobre los dos fixtures de continua
+
+**No leerlos como una regresión.** Su máximo cae en el borde del archivo,
+donde el valor depende de qué se asuma fuera y **no converge con el factor**:
+
+```
+x4 −4,90 · x8 −4,52 · x16 −4,84 · x24 −4,52 · x32 −4,89
+```
+
+Salta sin tendencia. En cambio un escalón **dentro** del archivo
+(`dc_salto_interno_menos6`) da −4,94 con todos los factores, sin excepción.
+La conclusión es la misma del §5b: en el borde no hay nada bien definido que
+medir, y por eso esos fixtures son informativos y no deciden. Congelado en
+`test_reconstruccion.py::test_en_el_borde_del_archivo_ningun_factor_converge`.
+
+### Por qué 8 y no 16
+
+Con material realista los dos dan 0,001 dB. 16× cuesta el doble (1,83 s
+frente a 0,85 s en una pista de 6 minutos) y no compra nada. Los factores
+intermedios no son monótonos —x6 da 0,020 y x12 da 0,009, ambos peores que
+x8— porque por debajo de 8 el error de rejilla todavía depende de dónde caiga
+el máximo respecto a la retícula.
+
+### Lo que sigue sin arreglarse, y no se puede
+
+Material con energía por encima de 20 kHz: soxr descarta esa zona y se queda
+~0,39 dB corto, **suba lo que suba el sobremuestreo**. Es error del filtro.
+Ningún medidor comercial acierta ahí tampoco. La consecuencia de producto
+—que la frontera de `true_peak_over` en 0,0 dBTP es más fina de lo que la
+medida resuelve en ese material— sigue abierta en `DISENO_FASE_2B.md`.

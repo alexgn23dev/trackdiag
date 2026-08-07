@@ -7,7 +7,7 @@ regímenes de evaluación:
   * máximo SIN ASENTAMIENTO — descartando la zona donde el filtro arranca
 
 Métodos:
-  soxr_hq_4x   el de producción (engine/extractor.py)
+  soxr_hq_8x   el de producción (engine/extractor.py)
   itu_fir_4x   implementación de referencia del Anexo 2 de BS.1770-5
   fft_sinc_32x interpolación sinc exacta (numpy)
   ffmpeg       ebur128=peak=true
@@ -44,13 +44,15 @@ def tp_soxr(ruta: str, descartar_asentamiento: bool = False) -> float:
 
     El descarte es SOLO para este estudio: producción no recorta nada.
     """
+    from engine.extractor import OVERSAMPLING_PICOS
     native, sr = sf.read(ruta, always_2d=True, dtype="float32")
     picos = []
     for ch in range(native.shape[1]):
-        up = librosa.resample(native[:, ch], orig_sr=sr, target_sr=sr * 4,
+        up = librosa.resample(native[:, ch], orig_sr=sr,
+                              target_sr=sr * OVERSAMPLING_PICOS,
                               res_type="soxr_hq")
         if descartar_asentamiento:
-            r = ASENTAMIENTO_SOXR_ENTRADA * 4
+            r = ASENTAMIENTO_SOXR_ENTRADA * OVERSAMPLING_PICOS
             if len(up) > 2 * r:
                 up = up[r:-r]
         picos.append(float(np.max(np.abs(up))))
@@ -95,14 +97,14 @@ def estudiar(destino: str) -> list:
             "sample_peak": _db(float(np.max(np.abs(data)))),
             "objetivo_estable": spec.get("tp_regimen_estable"),
             "global": {
-                "soxr_hq_4x": tp_soxr(ruta, False),
+                "soxr_hq_8x": tp_soxr(ruta, False),
                 "itu_fir_4x_cero": itu.true_peak_desde_archivo(ruta, "cero", False),
                 "itu_fir_4x_extender": itu.true_peak_desde_archivo(ruta, "extender", False),
                 "fft_sinc_32x": tp_fft(ruta, False),
                 "ffmpeg": ffm,
             },
             "sin_asentamiento": {
-                "soxr_hq_4x": tp_soxr(ruta, True),
+                "soxr_hq_8x": tp_soxr(ruta, True),
                 "itu_fir_4x_cero": itu.true_peak_desde_archivo(ruta, "cero", True),
                 "itu_fir_4x_extender": itu.true_peak_desde_archivo(ruta, "extender", True),
                 "fft_sinc_32x": tp_fft(ruta, True),
@@ -115,7 +117,7 @@ def estudiar(destino: str) -> list:
 def main():
     destino = os.path.join(tempfile.gettempdir(), "mentotrack_fixtures")
     filas = estudiar(destino)
-    metodos = ["soxr_hq_4x", "itu_fir_4x_cero", "itu_fir_4x_extender",
+    metodos = ["soxr_hq_8x", "itu_fir_4x_cero", "itu_fir_4x_extender",
                "fft_sinc_32x", "ffmpeg"]
     for f in filas:
         print(f"\n=== {f['fixture']}  ({f['regimen']}) ===")

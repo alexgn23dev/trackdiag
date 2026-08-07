@@ -22,7 +22,7 @@ import sys
 # --- Algoritmos -----------------------------------------------------------
 # soxr_hq a 4x sobre el archivo a sample rate nativo, máximo entre canales,
 # con el sample peak como cota inferior. Sin recorte de bordes.
-PEAK_ALGORITHM_VERSION = "peak-soxr_hq_4x-1"
+PEAK_ALGORITHM_VERSION = "peak-soxr_hq_8x-1"
 
 # BS.1770 vía pyloudnorm sobre el audio remuestreado a 22.05 kHz.
 # -2: v0.5.71 dejó de duplicar el canal en archivos mono (antes +3,01 LU).

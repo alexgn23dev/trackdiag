@@ -13,7 +13,7 @@ reconstrucción sinc exacta. Los tests la verifican primero contra la teoría y
 la usan después para acotar el error de cada candidato.
 
 Conclusión que congelan estos tests, y que CONTRADICE el plan aprobado de la
-fase 2B: sustituir soxr_hq_4x por el FIR de 12 taps de la norma empeoraría la
+fase 2B: sustituir soxr_hq_8x por el FIR de 12 taps de la norma empeoraría la
 medición, no la mejoraría.
 """
 
@@ -252,6 +252,52 @@ class TestSampleRatesAltos(unittest.TestCase):
         # El material realista al mismo rate no tiene nada de eso
         self.assertLess(ex.pico_exacto(_banda(18000, sr=96000))
                         - _db(np.max(np.abs(_banda(18000, sr=96000)))), 0.05)
+
+
+class TestElFactorDeProduccion(unittest.TestCase):
+    """Por qué 8x y no otro. v0.5.72."""
+
+    def test_produccion_sobremuestrea_8x(self):
+        from engine.extractor import OVERSAMPLING_PICOS
+        self.assertEqual(OVERSAMPLING_PICOS, 8)
+
+    def test_la_version_del_algoritmo_nombra_el_factor(self):
+        """Si alguien cambia el factor sin tocar la versión, dos análisis
+        distintos quedarían marcados como medidos igual."""
+        from engine.extractor import OVERSAMPLING_PICOS
+        from engine.versiones import PEAK_ALGORITHM_VERSION
+        self.assertIn(f"{OVERSAMPLING_PICOS}x", PEAK_ALGORITHM_VERSION)
+
+    def test_8x_es_donde_el_error_de_rejilla_deja_de_verse(self):
+        peores = {}
+        for factor in (4, 8, 16):
+            peores[factor] = max(
+                abs(_soxr(_banda(c), SR, factor) - ex.pico_exacto(_banda(c)))
+                for c in (12000, 16000, 18000))
+        self.assertGreater(peores[4], 0.05, "a 4x el error es visible")
+        self.assertLess(peores[8], 0.02, "a 8x ya no")
+        # Y 16x no compra nada más, mientras que cuesta el doble.
+        self.assertLess(abs(peores[16] - peores[8]), 0.02)
+
+    def test_en_el_borde_del_archivo_ningun_factor_converge(self):
+        """El aviso importante, para que nadie lea el golden como una
+        regresión: cuando el máximo cae en el borde, el valor depende de qué
+        se asuma FUERA del archivo, y salta con el factor sin tendencia.
+        Un escalón dentro del archivo sí es estable."""
+        d = tempfile.mkdtemp(prefix="rec_borde_")
+        man = fx.generar(d, solo=["dc_estable_menos6", "dc_salto_interno_menos6"])
+        import soundfile as sf
+
+        def _valores(nombre):
+            data, sr = sf.read(man[nombre]["ruta"], always_2d=True, dtype="float64")
+            return [_soxr(data[:, 0], sr, f) for f in (4, 8, 16, 24)]
+
+        borde = _valores("dc_estable_menos6")
+        self.assertGreater(max(borde) - min(borde), 0.2,
+                           "en el borde el valor debería saltar con el factor")
+        dentro = _valores("dc_salto_interno_menos6")
+        self.assertLess(max(dentro) - min(dentro), 0.02,
+                        "dentro del archivo debería ser estable")
 
 
 class TestElMedidorDeProduccionSigueSiendoElBueno(unittest.TestCase):
