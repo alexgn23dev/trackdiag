@@ -328,7 +328,10 @@ def contextualizar_feedback(diagnostico_id: str, contexto: dict, senales: dict) 
                 resultado["prioridades_extra"].append(info_objetivo["prioridad_extra_mezcla"])
 
     # --- Referencia temporal (BPM → compases en segundos) ---
-    bpm = senales.get("bpm", 0)
+    # `bpm` es None cuando no hay pulso detectable: sin tempo no se puede dar
+    # una referencia en compases, así que se omite la métrica en vez de
+    # inventarla. `or 0` porque None > 0 lanza TypeError.
+    bpm = senales.get("bpm") or 0
     if bpm > 0:
         seg_8_compases = round((60.0 / bpm) * 4 * 8, 1)
         seg_16_compases = round(seg_8_compases * 2, 1)
@@ -503,7 +506,7 @@ def _generar_tips_genero(diagnostico_id: str, info_genero: dict, genero: str, se
             f"Escucha una referencia con un medidor de volumen y fíjate en cómo "
             f"la energía baja justo antes del drop y sube al entrar."
         )
-        bpm = senales.get("bpm", 0)
+        bpm = senales.get("bpm") or 0
         if bpm > 0:
             compas_seg = 4 * 60 / bpm
             tips.append(
@@ -930,7 +933,9 @@ def _generar_nota_contextual(
             )
 
     # --- Dato contextual temporal ---
-    bpm = senales.get("bpm", 0)
+    # None cuando no hay pulso detectable: `or 0` evita el TypeError y
+    # hace que la nota en compases se omita en vez de inventarse.
+    bpm = senales.get("bpm") or 0
     if bpm > 0 and diagnostico_id in ("problema_arreglo", "poco_contraste", "track_verde"):
         seg_16 = round((60.0 / bpm) * 4 * 16)
         seg_32 = round((60.0 / bpm) * 4 * 32)

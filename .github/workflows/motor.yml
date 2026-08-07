@@ -84,11 +84,18 @@ jobs:
           docker run --rm -w /app/backend mentotrack:ci \
             python tests/estudio_continua.py
 
+      - name: Docker usa el lock (reproducibilidad)
+        if: always()
+        run: |
+          docker run --rm -w /app/backend mentotrack:ci \
+            python scripts/verificar_lock.py
+
       - name: Bloques de tests por área
         if: always()
         run: |
           for m in test_picos test_formato test_sin_senal test_itu_referencia \
-                   test_versiones test_frontend; do
+                   test_versiones test_frontend test_entorno test_tempo \
+                   test_taxonomia_picos test_compat_legacy_v2; do
             echo "::group::$m"
             docker run --rm -w /app/backend mentotrack:ci \
               python -m unittest "tests.$m" -v 2>&1 | tail -25
@@ -98,7 +105,7 @@ jobs:
       # Lock de versiones REALMENTE instaladas en la imagen (incluidas las
       # transitivas). requirements.txt fija las directas; esto captura el
       # resto, que hoy pueden resolverse distinto entre dos builds.
-      - name: Generar lock de versiones instaladas
+      - name: Volcar el pip freeze de la imagen
         if: always()
         run: |
           docker run --rm mentotrack:ci pip freeze > requirements.lock.generado.txt
@@ -108,17 +115,18 @@ jobs:
 
       - name: Comparar el lock generado con el del repo
         if: always()
+        shell: bash
         run: |
-          if [ -f requirements.lock.txt ]; then
-            if diff -u requirements.lock.txt requirements.lock.generado.txt; then
+          if [ -f backend/requirements.lock.txt ]; then
+            if diff -u <(grep -v '^#' backend/requirements.lock.txt) requirements.lock.generado.txt; then
               echo "El lock del repo coincide con lo instalado en la imagen."
             else
-              echo "::warning::El lock del repo no coincide con la imagen. "\
-          "Regenera con: docker run --rm mentotrack:ci pip freeze > requirements.lock.txt"
+              echo "::error::El lock del repo no coincide con la imagen."
+              exit 1
             fi
           else
-            echo "::notice::No hay requirements.lock.txt en el repo. "\
-          "Se puede crear con el artefacto de este job."
+            echo "::error::No hay backend/requirements.lock.txt: el build no es reproducible."
+            exit 1
           fi
 
       - name: Publicar reporte y lock

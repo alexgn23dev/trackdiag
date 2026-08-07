@@ -13,9 +13,25 @@ RUN useradd -m -r appuser
 
 WORKDIR /app
 
-# Instalar dependencias Python
-COPY backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Instalar dependencias Python DESDE EL LOCK.
+#
+# El lock (`requirements.lock.txt`) es el `pip freeze` de una imagen ya
+# validada: incluye las transitivas, que sin él pueden resolverse distinto
+# entre dos builds del mismo commit. En este motor eso importa — `soxr`
+# calcula el sobremuestreo del true peak y `numba` afecta al rendimiento.
+#
+# `--no-deps` es la parte que de verdad hace reproducible el build: sin él,
+# pip volvería a resolver el árbol y podría traer versiones distintas de las
+# congeladas. Con él, se instala exactamente lo que dice el lock.
+COPY backend/requirements.txt backend/requirements.lock.txt ./
+RUN pip install --no-cache-dir --no-deps -r requirements.lock.txt
+
+# Verificación de reproducibilidad. Falla el build si:
+#   1. lo instalado no coincide con el lock;
+#   2. el lock no cubre alguna dependencia declarada en requirements.txt;
+#   3. una dependencia directa está declarada sin `==`.
+COPY backend/scripts/verificar_lock.py ./scripts/verificar_lock.py
+RUN python scripts/verificar_lock.py
 
 # Copiar código
 COPY backend/ ./backend/

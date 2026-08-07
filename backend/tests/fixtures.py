@@ -312,6 +312,66 @@ def _catalogo():
             patologico=True,
             notas=f"Caso analítico de inter-sample peak a {sr} Hz.")
 
+    # --- 19b. Material sin pulso detectable --------------------------------
+    # `beat_track` devuelve 0 BPM con estas señales. Antes eso era una división
+    # entre cero → HTTP 500. Ahora se publica bpm = None y el análisis sigue
+    # con una ventana de bloque en segundos.
+    def _drone(rng):
+        n = int(SR_DEFAULT * 12.0)
+        t = np.arange(n) / SR_DEFAULT
+        # Tres parciales con batido lento y un barrido de filtro simulado
+        x = (np.sin(2 * np.pi * 55 * t) + 0.6 * np.sin(2 * np.pi * 82.5 * t)
+             + 0.4 * np.sin(2 * np.pi * 110.3 * t))
+        x *= 1.0 + 0.15 * np.sin(2 * np.pi * 0.05 * t)
+        return _a_estereo(_escalar_a_sample_peak(x, -3.0)), SR_DEFAULT, "PCM_24", "WAV"
+    reg("sin_pulso_drone", _drone, sp_esperado=-3.0, sin_pulso=True,
+        notas="Drone de parciales graves con batido lento. Sin transitorios: "
+              "no hay pulso que detectar.")
+
+    def _seno_sostenido(rng):
+        x = _seno(1000.0, SR_DEFAULT, 12.0)
+        return _a_estereo(_escalar_a_sample_peak(x, -6.0)), SR_DEFAULT, "PCM_24", "WAV"
+    reg("sin_pulso_seno", _seno_sostenido, sp_esperado=-6.0, sin_pulso=True,
+        notas="Seno de 1 kHz sostenido. El caso que destapó el ZeroDivisionError.")
+
+    def _pad(rng):
+        n = int(SR_DEFAULT * 14.0)
+        t = np.arange(n) / SR_DEFAULT
+        x = np.zeros(n)
+        for f in (220.0, 261.6, 329.6, 392.0):        # acorde de La menor 7
+            x += np.sin(2 * np.pi * f * t + rng.uniform(0, 2 * np.pi))
+        # Envolvente muy lenta: ataque de 4 s, sin ningún transitorio
+        env = np.clip(t / 4.0, 0, 1) * np.clip((14.0 - t) / 4.0, 0, 1)
+        x *= env
+        x += 0.02 * _ruido_rosa(SR_DEFAULT, 14.0, rng)
+        return _a_estereo(_escalar_a_sample_peak(x, -4.0)), SR_DEFAULT, "PCM_24", "WAV"
+    reg("sin_pulso_pad", _pad, sp_esperado=-4.0, sin_pulso=True,
+        notas="Pad de acorde con ataque de 4 s. Sin percusión ni transitorios.")
+
+    def _ambiguo(rng):
+        """Golpes espaciados de forma irregular: puede detectarse pulso o no.
+        No se afirma cuál de las dos cosas; el test solo exige coherencia."""
+        n = int(SR_DEFAULT * 14.0)
+        x = 0.05 * _ruido_rosa(SR_DEFAULT, 14.0, rng)
+        posicion = 0.4
+        while posicion < 13.0:
+            i0 = int(posicion * SR_DEFAULT)
+            largo = int(0.12 * SR_DEFAULT)
+            env = np.exp(-np.linspace(0, 8, largo))
+            x[i0:i0 + largo] += 0.8 * env * np.sin(
+                2 * np.pi * np.cumsum(np.linspace(140, 60, largo)) / SR_DEFAULT)
+            posicion += 0.55 + 0.5 * ((posicion * 7919) % 1.0)   # irregular, determinista
+        return _a_estereo(_escalar_a_sample_peak(x, -3.0)), SR_DEFAULT, "PCM_24", "WAV"
+    reg("pulso_ambiguo", _ambiguo, sp_esperado=-3.0, ambiguo=True,
+        notas="Golpes irregulares. Puede salir con o sin pulso: lo que se exige "
+              "es que no se invente un BPM y que no reviente.")
+
+    def _con_pulso(rng):
+        x = _musical(SR_DEFAULT, 14.0, rng)
+        return _a_estereo(_escalar_a_sample_peak(x, -1.0)), SR_DEFAULT, "PCM_24", "WAV"
+    reg("pulso_claro_128", _con_pulso, sp_esperado=-1.0, con_pulso=True,
+        notas="Kick 4x4 a 128 BPM. Control: aquí sí tiene que detectar tempo.")
+
     # --- 20. Silencio ------------------------------------------------------
     def _silencio(rng):
         n = int(SR_DEFAULT * DUR_DEFAULT)
@@ -357,6 +417,9 @@ def generar(destino: str, solo: list | None = None) -> dict:
             "regimen": spec.get("regimen", ""),
             "sp_esperado": spec.get("sp_esperado"),
             "patologico": bool(spec.get("patologico", False)),
+            "sin_pulso": bool(spec.get("sin_pulso", False)),
+            "con_pulso": bool(spec.get("con_pulso", False)),
+            "ambiguo": bool(spec.get("ambiguo", False)),
             "mono": bool(spec.get("mono", False)),
             "notas": spec.get("notas", ""),
         }

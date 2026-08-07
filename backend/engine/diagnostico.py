@@ -108,7 +108,11 @@ def generar_diagnostico(senales: dict, contexto: dict) -> dict:
         "estado_track": estado,
         "estado_texto": estado_texto,
         "datos_audio": {
-            "bpm": senales["bpm"],
+            # None si no hay pulso detectable. La interfaz debe mostrar
+            # "no detectado", nunca un valor por defecto.
+            "bpm": senales.get("bpm"),
+            "tempo_detectado": senales.get("tempo_detectado", True),
+            "tempo_fuente": senales.get("tempo_fuente", ""),
             "duracion": senales["duracion_fmt"],
             "contraste": senales["contraste_energetico"],
             "balance_grave": senales["balance_grave"],
@@ -160,6 +164,11 @@ def generar_diagnostico(senales: dict, contexto: dict) -> dict:
                 "aviso_true_peak": senales["loudness"].get("aviso_true_peak", ""),
                 # Taxonomía de picos (fase 2A) — lo que se muestra al usuario
                 "categoria_picos": senales["loudness"].get("categoria_picos", ""),
+                "peak_taxonomy_version": senales["loudness"].get("peak_taxonomy_version"),
+                # Valor cuantizado con el que se decide la taxonomía y que se
+                # muestra. La medición cruda sigue en `true_peak_dbtp`.
+                "true_peak_classification_value": senales["loudness"].get("true_peak_classification_value"),
+                "sample_peak_classification_value": senales["loudness"].get("sample_peak_classification_value"),
                 "severidad_picos": senales["loudness"].get("severidad_picos", ""),
                 "titulo_picos": senales["loudness"].get("titulo_picos", ""),
                 "aviso_picos": senales["loudness"].get("aviso_picos", ""),

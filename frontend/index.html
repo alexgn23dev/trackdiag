@@ -3798,7 +3798,7 @@
                 if (dx.alcance_analisis) informe += `QUÉ EVALÚA: ${dx.alcance_analisis}\n`;
                 // Datos de mezcla
                 informe += `--- MEZCLA ---\n`;
-                informe += `BPM: ${da.bpm || '?'} | Duración: ${da.duracion || '?'}\n`;
+                informe += `BPM: ${da.bpm != null ? da.bpm : 'no detectado'} | Duración: ${da.duracion || '?'}\n`;
                 informe += `Balance grave: ${da.balance_grave || '?'}\n`;
                 informe += `Densidad: ${da.densidad || '?'}\n`;
                 if (da.loudness) {
@@ -3808,18 +3808,23 @@
                     // se perdieron ~4-5% de análisis, justo los del filo.
                     const _tp = da.loudness.true_peak_dbtp;
                     const _sp = da.loudness.sample_peak_dbfs;
+                    const _cat = da.loudness.categoria_picos;
                     if (_tp != null && !isNaN(_tp) && _tp > -99) {
-                        // El backend ya no redondea: el formato es cosa de aquí.
-                        informe += `True peak: ${_tp.toFixed(1)} dBTP${da.loudness.nivel_true_peak ? ` (${da.loudness.nivel_true_peak})` : ''}\n`;
+                        // Taxonomía v2: la línea NO lleva "(clipping)". Ese
+                        // vocabulario era incorrecto y contaminaría los datos
+                        // nuevos con una definición que ya sabemos falsa.
+                        // Sin taxonomía (no debería pasar) se mantiene el
+                        // formato antiguo para no perder el dato.
+                        informe += _cat
+                            ? `True peak: ${_tp.toFixed(1)} dBTP\n`
+                            : `True peak: ${_tp.toFixed(1)} dBTP${da.loudness.nivel_true_peak ? ` (${da.loudness.nivel_true_peak})` : ''}\n`;
                     }
                     if (_sp != null && !isNaN(_sp) && _sp > -99) {
                         informe += `Sample peak: ${_sp.toFixed(1)} dBFS\n`;
                     }
-                    // La línea "True peak: X dBTP (nivel)" de arriba mantiene el
-                    // vocabulario antiguo a propósito: la parsean el dashboard y
-                    // el estudio histórico. La categoría nueva va aparte.
-                    if (da.loudness.categoria_picos) {
-                        informe += `Categoría de picos: ${da.loudness.categoria_picos}\n`;
+                    if (_cat) {
+                        informe += `Categoría de picos: ${_cat}\n`;
+                        informe += `Taxonomía de picos: v${da.loudness.peak_taxonomy_version || 2}\n`;
                     }
                 }
                 if (da.mono_compat) {
@@ -3844,6 +3849,8 @@
                 const senales = {
                     // Identificación
                     bpm: da.bpm,
+                    tempo_detectado: da.tempo_detectado,
+                    tempo_fuente: da.tempo_fuente,
                     duracion: da.duracion,
                     // Espectro y balance
                     balance_grave: da.balance_grave,
@@ -3888,6 +3895,10 @@
                     // Taxonomía de picos (fase 2A). El campo de arriba se
                     // conserva para no romper parsers ni el histórico.
                     categoria_picos: da.loudness?.categoria_picos,
+                    peak_taxonomy_version: da.loudness?.peak_taxonomy_version,
+                    peak_algorithm_version: dx.versiones?.peak_algorithm_version,
+                    true_peak_classification_value: da.loudness?.true_peak_classification_value,
+                    sample_peak_classification_value: da.loudness?.sample_peak_classification_value,
                     severidad_picos: da.loudness?.severidad_picos,
                     // Estado del método de medición (no del archivo)
                     sample_peak_source: da.loudness?.sample_peak_source,

@@ -10,6 +10,8 @@ import numpy as np
 import pyloudnorm as pyln
 import soundfile as sf
 
+from .versiones import PEAK_ALGORITHM_VERSION
+
 # ===========================================================================
 # Estado de validación del medidor de true peak
 # ===========================================================================
@@ -24,10 +26,37 @@ import soundfile as sf
 #   ajena. Se registra en tests/VALIDACION_MANUAL.md.
 # GLOBAL — solo puede ser True si las dos anteriores lo son. No se pone a
 #   mano: se deriva.
-TRUE_PEAK_INTERNAL_VALIDATION_PASSED = True   # 2026-08-06, ver RESULTADOS_VALIDACION.md
-TRUE_PEAK_EXTERNAL_VALIDATION_PASSED = False  # pendiente: tests/VALIDACION_MANUAL.md
+#
+# Y las tres están ATADAS A LA VERSIÓN DEL ALGORITMO. Una validación dice
+# "este método, medido así, da estos números". Si el método cambia, la
+# validación deja de aplicar: no se hereda. `_VALIDADO_PARA_ALGORITMO` es la
+# versión contra la que se validó; si `PEAK_ALGORITHM_VERSION` deja de
+# coincidir, los tres estados caen a False solos y hay que revalidar.
+_VALIDADO_PARA_ALGORITMO = "peak-soxr_hq_4x-1"
+
+_VALIDACION_INTERNA_DECLARADA = True    # 2026-08-06, ver RESULTADOS_VALIDACION.md
+_VALIDACION_EXTERNA_DECLARADA = False   # pendiente: tests/VALIDACION_MANUAL.md
+
+_ALGORITMO_COINCIDE = PEAK_ALGORITHM_VERSION == _VALIDADO_PARA_ALGORITMO
+
+TRUE_PEAK_INTERNAL_VALIDATION_PASSED = _VALIDACION_INTERNA_DECLARADA and _ALGORITMO_COINCIDE
+TRUE_PEAK_EXTERNAL_VALIDATION_PASSED = _VALIDACION_EXTERNA_DECLARADA and _ALGORITMO_COINCIDE
 _TRUE_PEAK_VALIDATED = (TRUE_PEAK_INTERNAL_VALIDATION_PASSED
                         and TRUE_PEAK_EXTERNAL_VALIDATION_PASSED)
+
+if not _ALGORITMO_COINCIDE:
+    print(f"[PICOS] El algoritmo es {PEAK_ALGORITHM_VERSION} pero la validación "
+          f"se hizo para {_VALIDADO_PARA_ALGORITMO}: los estados de validación "
+          f"quedan en False hasta revalidar (tests/validar_true_peak.py y "
+          f"tests/VALIDACION_MANUAL.md).")
+
+# Versión de la TAXONOMÍA de picos, independiente de la del algoritmo: una
+# cambia cómo se mide, la otra cómo se nombra lo medido.
+#   1 — hasta v0.5.70: ok | streaming | clipping  (llamaba clipping a un over)
+#   2 — desde v0.5.72: ok | margen_streaming | true_peak_over |
+#                      overs_float_recuperables
+PEAK_TAXONOMY_VERSION = 2
+
 #
 # PRIORIDAD DE FASE 2A, registrada aquí a propósito: un WAV 32-bit float con
 # picos por encima de 0 dBFS se sigue clasificando como "clipping" y se le
@@ -64,6 +93,11 @@ _UMBRAL_PICO_SIN_SENAL_DBFS = -80.0
 # Segundo criterio, para señales con un chasquido aislado sobre silencio:
 # si la energía media es despreciable, tampoco hay nada que analizar.
 _UMBRAL_RMS_SIN_SENAL_DBFS = -90.0
+
+# Ventana de bloque cuando no hay tempo detectable. 15 s son ~8 compases a
+# 128 BPM, el mismo orden que el camino con tempo, para que los umbrales
+# calibrados de contraste y estructura sigan siendo comparables.
+_BLOQUE_SIN_TEMPO_SEG = 15.0
 
 
 class AudioSinSenalAnalizable(Exception):
@@ -140,19 +174,45 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None,
     # Duración calculada del array cargado (evita re-lectura del archivo)
     duracion_seg = librosa.get_duration(y=y, sr=sr)
 
-    # Tempo — usa BPM manual si se proporciona, si no detecta automáticamente
+    # Tempo — manual si el usuario lo declara, si no detección automática.
+    #
+    # Si no hay pulso detectable (un drone, un pad sostenido, una toma
+    # ambiental) NO se inventa un tempo: se publica `bpm = None` y
+    # `tempo_detectado = False`. Antes esto era además un crash: `beat_track`
+    # devuelve 0 y la línea de abajo dividía entre cero → HTTP 500.
+    tempo = None
+    tempo_fuente = "no_detectado"
     if bpm_manual and bpm_manual > 0:
-        tempo = bpm_manual
+        tempo = int(round(bpm_manual))
+        tempo_fuente = "manual"
     else:
-        tempo, _ = librosa.beat.beat_track(y=y, sr=sr, start_bpm=128)
-        tempo = float(tempo[0]) if hasattr(tempo, '__len__') else float(tempo)
-        # En electrónica los BPM son siempre enteros; redondear al más cercano
-        tempo = round(tempo)
+        try:
+            tempo_bruto, _ = librosa.beat.beat_track(y=y, sr=sr, start_bpm=128)
+            tempo_bruto = (float(tempo_bruto[0]) if hasattr(tempo_bruto, "__len__")
+                           else float(tempo_bruto))
+        except Exception:
+            tempo_bruto = 0.0
+        # Rango de cordura: fuera de 30-300 BPM la detección no es creíble en
+        # este dominio, y `beat_track` devuelve 0 cuando no encuentra pulso.
+        if np.isfinite(tempo_bruto) and 30.0 <= tempo_bruto <= 300.0:
+            # En electrónica los BPM son enteros: se redondea al más cercano.
+            tempo = int(round(tempo_bruto))
+            tempo_fuente = "detectado"
 
-    # RMS por bloques de ~8 compases
+    tempo_detectado = tempo is not None
+
+    # RMS por bloques. Con tempo se usan ~8 compases; sin tempo, una ventana
+    # fija en SEGUNDOS. El análisis de estructura, contraste y distribución
+    # sigue funcionando: solo deja de estar alineado a compás, que es
+    # información que en este material no existe de todas formas.
     compases_por_bloque = 8
     beats_por_bloque = compases_por_bloque * 4
-    duracion_bloque_seg = (60.0 / tempo) * beats_por_bloque
+    if tempo_detectado:
+        duracion_bloque_seg = (60.0 / tempo) * beats_por_bloque
+    else:
+        # 15 s ≈ 8 compases a 128 BPM: el mismo orden de magnitud que el
+        # camino normal, para que los umbrales calibrados sigan valiendo.
+        duracion_bloque_seg = _BLOQUE_SIN_TEMPO_SEG
     hop_length = 512
 
     rms = librosa.feature.rms(y=y, hop_length=hop_length)[0]
@@ -397,7 +457,10 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None,
     return {
         "duracion_seg": round(duracion_seg, 1),
         "duracion_fmt": f"{int(duracion_seg // 60)}:{int(duracion_seg % 60):02d}",
-        "bpm": round(tempo, 1),
+        # None cuando no hay pulso detectable: no se inventa un valor.
+        "bpm": tempo,
+        "tempo_detectado": tempo_detectado,
+        "tempo_fuente": tempo_fuente,
         "bloques_rms": [round(b, 4) for b in bloques_rms],
         "n_bloques": n_bloques,
         "varianza_energia": round(varianza_energia, 4),
@@ -632,6 +695,9 @@ def _clasificar_picos(loudness: dict, formato: dict) -> dict:
         r = round(v, 1)
         return 0.0 if abs(r) < 0.05 else r   # evita el "-0.0"
 
+    # `true_peak_dbtp` NO se toca: sigue siendo la medición cruda. Lo que se
+    # cuantiza es una variable aparte, que es la que decide la categoría y la
+    # que se enseña. Las dos viajan en la respuesta.
     tp = _mostrable(loudness.get("true_peak_dbtp", -99.0))
     sp = _mostrable(loudness.get("sample_peak_dbfs", -99.0))
     fmt = formato or {}
@@ -645,8 +711,14 @@ def _clasificar_picos(loudness: dict, formato: dict) -> dict:
         "titulo_picos": "",
         "aviso_picos": "",
         "nota_lossy_picos": "",
+        # Valor cuantizado a 0,1 dB con el que se decide la taxonomía y que
+        # se muestra al usuario. NO sustituye a `true_peak_dbtp`.
+        "true_peak_classification_value": tp if tp > -99.0 else None,
+        "sample_peak_classification_value": sp if sp > -99.0 else None,
+        "peak_taxonomy_version": PEAK_TAXONOMY_VERSION,
     }
     if tp <= -99.0:
+        salida["peak_taxonomy_version"] = None
         return salida
 
     # Coletilla para formatos con pérdida: el pico medido es el del audio
@@ -655,8 +727,9 @@ def _clasificar_picos(loudness: dict, formato: dict) -> dict:
         salida["nota_lossy_picos"] = (
             "Has subido un archivo con pérdida (MP3, OGG…). Parte de estos picos "
             "puede venir de la propia codificación o de la decodificación, no de "
-            "tu máster: los codecs generan picos entre muestras que no estaban en "
-            "el original. Para un dato exacto, analiza el WAV o AIFF del que salió."
+            "tu máster: la codificación con pérdida puede generar picos entre muestras "
+            "que no estaban en el original. Para un dato exacto, analiza el WAV o "
+            "AIFF del que salió."
         )
 
     # --- A. Overs en coma flotante: recuperables, no son daño ---------------
@@ -690,7 +763,7 @@ def _clasificar_picos(loudness: dict, formato: dict) -> dict:
                 "el sample peak está en {:+.1f} dBFS. "
                 "Sí implica riesgo de distorsión en la reproducción — el conversor del "
                 "oyente puede no tener margen para esos picos — y al codificar a MP3 o "
-                "AAC, que añaden picos propios. "
+                "AAC, que puede generar picos adicionales. "
                 "Qué hacer: baja el ceiling del limiter (prueba -1 dBTP) y vuelve a "
                 "analizar para ver cuánto se mueve."
             ).format(sp) if sp > -99.0 else (
@@ -712,8 +785,8 @@ def _clasificar_picos(loudness: dict, formato: dict) -> dict:
             "aviso_picos": (
                 f"El true peak está en {tp:+.1f} dBTP: por debajo de 0, pero por encima "
                 "de -1. No es un error. Es una recomendación de margen — las "
-                "plataformas sugieren dejar el techo en -1 dBTP para que la codificación "
-                "con pérdida, que genera picos adicionales, no se quede sin sitio. "
+                "plataformas sugieren dejar el techo en -1 dBTP porque la codificación "
+                "con pérdida puede generar picos adicionales y conviene dejarles sitio. "
                 "Si vas a distribuir en streaming, bajar el ceiling a -1 dBTP te da ese "
                 "colchón. Si es un máster para club o para pinchar, puede quedarse así."
             ),

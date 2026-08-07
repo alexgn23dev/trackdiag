@@ -13,6 +13,7 @@ import json
 import math
 import os
 import re
+import sys
 import sqlite3
 import statistics as st
 from datetime import datetime
@@ -36,7 +37,12 @@ DIFICULTADES = {"Que la mezcla suene bien": "mezcla", "Terminar tracks": "termin
 MEZCLA_DX = {"carencia_espectral", "harshness_mezcla", "exceso_lowend", "exceso_densidad", "enmascaramiento_bajo"}
 ESTRUCT_DX = {"problema_arreglo", "poco_contraste", "falta_impacto", "break_sin_payoff",
               "arreglo_repetitivo", "mezcla_prematura", "track_verde"}
-TP_RE = re.compile(r"True peak:\s*(-?[\d.]+)\s*dBTP\s*\((\w+)\)")
+# Picos: el parser vive en engine/picos_parser.py para que lo compartan el
+# estudio, los tests y cualquier otro consumidor, en vez de tener tres regex
+# distintas que se desincronizan.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                "..", "..", ""))
+from engine.picos_parser import leer_picos  # noqa: E402
 
 
 def seccion(n, titulo):
@@ -97,6 +103,7 @@ db.execute("""CREATE TABLE flat (
     fase TEXT, objetivo TEXT, genero TEXT, experiencia TEXT, dificultad TEXT,
     diag TEXT, diag_sec TEXT, estado TEXT, madurez TEXT,
     lufs REAL, rango_loudness REAL, true_peak REAL, tp_nivel TEXT,
+    sample_peak REAL, tp_categoria_v2 TEXT, tp_fuente TEXT,
     diff_grave_media REAL, balance_grave TEXT, densidad TEXT,
     bpm REAL, duracion_seg REAL, contraste TEXT,
     correlacion_lr REAL, nivel_loudness TEXT, scores TEXT, fue_util TEXT)""")
@@ -104,11 +111,13 @@ for r in db.execute("SELECT * FROM analisis WHERE id NOT IN (SELECT id FROM excl
     f = json.loads(r["formulario"])
     s = json.loads(r["senales"])
     gen = f.get("genero", "")
-    tp, tpn = None, None
-    m = TP_RE.search(r["diagnostico"] or "")
-    if m:
-        tp, tpn = float(m.group(1)), m.group(2)
-    db.execute("INSERT INTO flat VALUES (" + ",".join("?" * 30) + ")", (
+    picos = leer_picos(r["diagnostico"])
+    tp = picos["tp"]
+    # `tp_nivel` mantiene el vocabulario legacy para no romper las series ya
+    # publicadas; `tp_fuente` dice si esa etiqueta viene del texto antiguo o
+    # de la taxonomía v2, para poder separarlas en cualquier análisis.
+    tpn = picos["nivel_legacy"] or picos["categoria"]
+    db.execute("INSERT INTO flat VALUES (" + ",".join("?" * 33) + ")", (
         r["id"], r["usuario_id"], r["email"], r["ts"], r["ts"][:7],
         r["proyecto_id"], r["version_num"],
         FASES.get(f.get("fase")), OBJETIVOS.get(f.get("objetivo")),
@@ -116,6 +125,7 @@ for r in db.execute("SELECT * FROM analisis WHERE id NOT IN (SELECT id FROM excl
         EXPERIENCIAS.get(f.get("experiencia")), DIFICULTADES.get(f.get("dificultad_habitual")),
         s.get("diag_principal"), s.get("diag_secundario"), s.get("estado"), s.get("madurez"),
         s.get("lufs_integrado"), s.get("rango_loudness"), tp, tpn,
+        picos["sp"], picos["categoria"], picos["fuente"],
         s.get("diff_grave_media"), s.get("balance_grave"), s.get("densidad"),
         s.get("bpm"), dur_seg(s.get("duracion")), s.get("contraste"),
         s.get("correlacion_lr"), s.get("nivel_loudness"),

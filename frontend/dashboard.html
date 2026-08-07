@@ -311,6 +311,31 @@
             loudness.rango = (loudnessRaw.match(/Rango:\s*([-\d.]+)/) || [])[1] || '';
         }
 
+        // Picos. Prioridad explícita: taxonomía v2 si está, legacy si no.
+        // No se traduce un análisis antiguo a la taxonomía nueva: el dato
+        // original no permite distinguir un over de true peak de un archivo
+        // float con overs recuperables, que es justo lo que v2 separa.
+        const picos = { fuente: 'ninguna' };
+        const catV2 = get(/^Categoría de picos:\s*(\S+)$/m);
+        const tpVal = get(/^True peak:\s*([-+\d.]+)\s*dBTP/m);
+        const spVal = get(/^Sample peak:\s*([-+\d.]+)\s*dBFS/m);
+        if (tpVal) picos.true_peak = tpVal;
+        if (spVal) picos.sample_peak = spVal;
+        if (catV2) {
+            picos.fuente = 'v2';
+            picos.categoria = catV2;
+            picos.taxonomia = get(/^Taxonomía de picos:\s*v(\d+)$/m) || '2';
+        } else {
+            // Legacy: el nivel iba entre paréntesis en la propia línea.
+            const nivelLegacy = get(/^True peak:\s*[-+\d.]+\s*dBTP\s*\((\w+)\)/m);
+            if (nivelLegacy) {
+                picos.fuente = 'legacy';
+                picos.nivel_legacy = nivelLegacy;
+            } else if (tpVal) {
+                picos.fuente = 'legacy_sin_nivel';
+            }
+        }
+
         // Mono compat
         const monoRaw = get(/^Mono compat:\s*(.+)$/m);
         let mono = {};
@@ -345,7 +370,7 @@
         return { estado, diagPrincipalTitulo, diagPrincipalId, explicacion, diagSecundarioTitulo,
                  prioridades, notaContextual, motivacion, tipsGenero, noTocar, tipObjetivo,
                  siguienteSesion, atencion, refTemporal, disclaimer,
-                 bpm, duracion, balanceGrave, densidad, loudness, mono, harshness, scores };
+                 bpm, duracion, balanceGrave, densidad, loudness, picos, mono, harshness, scores };
     }
 
     function estadoSemaforo(estado) {
@@ -578,6 +603,31 @@
                                     </div>
                                 </div>
                                 {d.loudness.nivel && <p className="text-center text-xs mt-2" style={{ color: d.loudness.nivel.includes('ok') || d.loudness.nivel.includes('competitivo') ? '#4ade80' : d.loudness.nivel.includes('bajo') || d.loudness.nivel.includes('alto') ? '#facc15' : '#6b7280' }}>{d.loudness.nivel}</p>}
+                                {d.picos && d.picos.fuente !== 'ninguna' && (
+                                    <div className="mt-3 pt-2" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div>
+                                                <p className="text-gray-500 text-xs">True peak</p>
+                                                <p className="text-white text-sm font-semibold">{d.picos.true_peak != null ? d.picos.true_peak + ' dBTP' : '—'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-gray-500 text-xs">Sample peak</p>
+                                                <p className="text-white text-sm font-semibold">{d.picos.sample_peak != null ? d.picos.sample_peak + ' dBFS' : '—'}</p>
+                                            </div>
+                                        </div>
+                                        {/* Se dice de qué fuente sale, para no mezclar en el mismo
+                                            vistazo un análisis con taxonomía v2 y uno antiguo. */}
+                                        {d.picos.fuente === 'v2' ? (
+                                            <p className="text-center text-xs mt-2" style={{ color: '#a78bfa' }}>
+                                                {d.picos.categoria} · taxonomía v{d.picos.taxonomia}
+                                            </p>
+                                        ) : (
+                                            <p className="text-center text-xs mt-2 text-gray-500">
+                                                {d.picos.nivel_legacy ? `«${d.picos.nivel_legacy}» (dato legacy, definición antigua)` : 'dato legacy'}
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         )}
 

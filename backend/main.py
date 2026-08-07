@@ -146,13 +146,39 @@ async def _shutdown_db():
 # Ruta al frontend
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
-# CORS — solo orígenes confiables
-ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "").split(",") if os.environ.get("ALLOWED_ORIGINS") else [
+# CORS — solo orígenes confiables. Configurable por entorno porque preview y
+# producción tienen dominios distintos: el de preview NO se pone aquí a mano.
+#
+#   ALLOWED_ORIGINS="https://mentotrack-preview.up.railway.app,http://localhost:8000"
+#
+# El comodín está prohibido a propósito: con `*` cualquier web podría llamar a
+# la API desde el navegador de un usuario. Si alguien lo pone, se descarta y
+# se cae a la lista por defecto dejando aviso en el log.
+_ORIGENES_POR_DEFECTO = [
     "https://mentotrack.com",
     "https://www.mentotrack.com",
     "http://localhost:8000",
     "http://localhost:3000",
 ]
+
+
+def _leer_allowed_origins() -> list:
+    bruto = (os.environ.get("ALLOWED_ORIGINS") or "").strip()
+    if not bruto:
+        return list(_ORIGENES_POR_DEFECTO)
+    origenes = [o.strip() for o in bruto.split(",") if o.strip()]
+    comodines = [o for o in origenes if o == "*" or o.endswith("*")]
+    if comodines:
+        print(f"[CORS] ALLOWED_ORIGINS contiene comodines {comodines}: se "
+              f"descartan. CORS abierto es una vulnerabilidad, no una opción.")
+        origenes = [o for o in origenes if o not in comodines]
+    if not origenes:
+        print("[CORS] ALLOWED_ORIGINS quedó vacía tras filtrar: se usa la lista por defecto.")
+        return list(_ORIGENES_POR_DEFECTO)
+    return origenes
+
+
+ALLOWED_ORIGINS = _leer_allowed_origins()
 
 app.add_middleware(
     CORSMiddleware,
