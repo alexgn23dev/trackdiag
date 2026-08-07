@@ -147,6 +147,58 @@ por error a Cloudflare.
 
 ---
 
+## 5b. Estado actual del preview (2026-08-07)
+
+Creado y en marcha. Recursos reales en el proyecto `extraordinary-tranquility`:
+
+| Recurso | Nombre | Notas |
+|---|---|---|
+| App | `Mentotrack-Preview` | https://mentotrack-preview-production.up.railway.app |
+| Base de datos | `Postgres-2sCz` | Volumen `postgres-volume-yn7C`. Sin proxy TCP público |
+| Código desplegado | `feature/motor-picos-fase2a` | Subido con `railway up`, no por enlace de GitHub |
+
+**Dos cosas que hay que saber para volver a tocarlo:**
+
+1. **No se redespliega solo al hacer push.** `railway add --branch` no llegó a
+   aplicar la rama (la CLI entró en modo interactivo), así que el servicio no
+   está enlazado a una rama de GitHub. Para actualizarlo:
+
+   ```bash
+   git checkout <la-rama-que-quieras-probar>
+   railway service Mentotrack-Preview     # ¡verificar antes de desplegar!
+   railway up --service Mentotrack-Preview --detach
+   ```
+
+   **`railway up` sin `--service` despliega al servicio enlazado, que puede
+   ser producción.** Comprobar siempre con `railway status` antes.
+   Alternativa: enlazar la rama en el dashboard, y entonces sí se
+   redespliega solo.
+
+2. **El Postgres del preview no es accesible desde fuera.** No tiene
+   `DATABASE_PUBLIC_URL`. Para inspeccionar filas se usan los endpoints de la
+   propia app (`/api/auth/historial`, `/api/tecnico/versiones`), o se activa
+   el TCP proxy en el dashboard.
+
+## 5c. Protección de `main` (2026-08-07)
+
+`main` está protegida desde el deploy de v0.5.71:
+
+```
+check obligatorio : tests del motor en la imagen de producción
+PR obligatorio    : sí, con 0 aprobaciones
+aplica a admins   : NO  ← un push directo de Alex sigue funcionando
+force push        : bloqueado
+```
+
+El camino normal pasa a ser `push a dev` → PR de `dev` a `main` → CI → merge.
+`enforce_admins` está en `false` a propósito: deja una salida para un hotfix
+sin esperar los ~8 minutos de CI. Consultar o revertir:
+
+```bash
+gh api repos/alexgn23dev/trackdiag/branches/main/protection
+gh api repos/alexgn23dev/trackdiag/branches/main/protection -X DELETE
+```
+
 ## 6. Lo que NO cubre esta protección
 
 - **CORS.** `main.py` limita los orígenes a `mentotrack.com`,
