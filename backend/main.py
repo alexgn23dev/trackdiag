@@ -39,22 +39,29 @@ from slowapi.errors import RateLimitExceeded
 _extraer_senales = None
 _generar_diagnostico = None
 _comparar_senales = None
+# Excepción de "audio sin señal analizable". Vive en engine.extractor, que se
+# carga en diferido; se cachea aquí para poder capturarla en el endpoint.
+AudioSinSenalAnalizable = None
 
 
 def _load_engine():
     """Carga los módulos pesados de análisis de audio bajo demanda."""
     global _extraer_senales, _generar_diagnostico, _comparar_senales
+    global AudioSinSenalAnalizable
     if _extraer_senales is None:
-        from engine.extractor import extraer_senales
+        from engine.extractor import extraer_senales, AudioSinSenalAnalizable as _AudioSinSenal
         from engine.diagnostico import generar_diagnostico
         from engine.comparador import comparar_senales
         _extraer_senales = extraer_senales
         _generar_diagnostico = generar_diagnostico
         _comparar_senales = comparar_senales
+        AudioSinSenalAnalizable = _AudioSinSenal
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Mentotrack API", version="0.5.70")
+APP_VERSION = "0.5.71"
+
+app = FastAPI(title="Mentotrack API", version=APP_VERSION)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -93,6 +100,11 @@ async def _startup_db():
     Lanza también la tarea de cron del reporte mensual.
     """
     global _reporte_task_handle, _encuesta_task_handle, _reenganche_task_handle
+    # Antes de abrir el pool: si esto es un preview apuntando a la base o a
+    # las credenciales de producción, no arrancamos. Preferimos caerse a
+    # escribir en la base real o mandar correos a usuarios de verdad.
+    from entorno import proteger_arranque
+    proteger_arranque()
     if os.environ.get("DATABASE_URL"):
         # Migraciones primero (sync, rápido si no hay nada que aplicar).
         await asyncio.to_thread(_run_alembic_upgrade)
@@ -134,13 +146,39 @@ async def _shutdown_db():
 # Ruta al frontend
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
-# CORS — solo orígenes confiables
-ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "").split(",") if os.environ.get("ALLOWED_ORIGINS") else [
+# CORS — solo orígenes confiables. Configurable por entorno porque preview y
+# producción tienen dominios distintos: el de preview NO se pone aquí a mano.
+#
+#   ALLOWED_ORIGINS="https://mentotrack-preview.up.railway.app,http://localhost:8000"
+#
+# El comodín está prohibido a propósito: con `*` cualquier web podría llamar a
+# la API desde el navegador de un usuario. Si alguien lo pone, se descarta y
+# se cae a la lista por defecto dejando aviso en el log.
+_ORIGENES_POR_DEFECTO = [
     "https://mentotrack.com",
     "https://www.mentotrack.com",
     "http://localhost:8000",
     "http://localhost:3000",
 ]
+
+
+def _leer_allowed_origins() -> list:
+    bruto = (os.environ.get("ALLOWED_ORIGINS") or "").strip()
+    if not bruto:
+        return list(_ORIGENES_POR_DEFECTO)
+    origenes = [o.strip() for o in bruto.split(",") if o.strip()]
+    comodines = [o for o in origenes if o == "*" or o.endswith("*")]
+    if comodines:
+        print(f"[CORS] ALLOWED_ORIGINS contiene comodines {comodines}: se "
+              f"descartan. CORS abierto es una vulnerabilidad, no una opción.")
+        origenes = [o for o in origenes if o not in comodines]
+    if not origenes:
+        print("[CORS] ALLOWED_ORIGINS quedó vacía tras filtrar: se usa la lista por defecto.")
+        return list(_ORIGENES_POR_DEFECTO)
+    return origenes
+
+
+ALLOWED_ORIGINS = _leer_allowed_origins()
 
 app.add_middleware(
     CORSMiddleware,
@@ -288,7 +326,48 @@ SESIONES_PATH = os.environ.get("SESIONES_PATH", "sesiones.jsonl")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.5.70"}
+    # `entorno` va aquí a propósito: es lo único que permite al frontend
+    # pintar la banda de "PREVIEW" sin exponer nada. No es un secreto y evita
+    # el peor accidente de un preview: creer que estás mirando producción.
+    respuesta = {"status": "ok", "version": APP_VERSION}
+    # Se lee del módulo en cada llamada (no se cachea en una constante) para
+    # que recargar `entorno` en los tests no deje la app en un estado mentiroso.
+    import entorno as _entorno
+    if not _entorno.ES_PRODUCCION:
+        respuesta["entorno"] = _entorno.ENV
+    return respuesta
+
+
+@app.get("/api/tecnico/versiones")
+@limiter.limit("30/minute")
+def tecnico_versiones(request: Request):
+    """Inventario de versiones: backend, algoritmos y librerías que
+    determinan las mediciones. Sirve para reproducir un análisis y para
+    comprobar que un contenedor trae lo que se validó.
+
+    Bajo cookie admin: enumerar versiones exactas de dependencias facilita
+    emparejarlas con CVEs conocidas, así que no se expone públicamente.
+    """
+    if not _admin_email_from_cookie(request):
+        return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
+    from engine.versiones import algoritmos, dependencias, ffmpeg_version
+    from entorno import resumen as resumen_entorno
+    from engine.extractor import (
+        TRUE_PEAK_EXTERNAL_VALIDATION_PASSED, TRUE_PEAK_INTERNAL_VALIDATION_PASSED,
+        _TRUE_PEAK_VALIDATED,
+    )
+    return {
+        "backend_version": APP_VERSION,
+        **algoritmos(),
+        "validacion_true_peak": {
+            "true_peak_internal_validation_passed": TRUE_PEAK_INTERNAL_VALIDATION_PASSED,
+            "true_peak_external_validation_passed": TRUE_PEAK_EXTERNAL_VALIDATION_PASSED,
+            "true_peak_validated": _TRUE_PEAK_VALIDATED,
+        },
+        "dependencias": dependencias(),
+        "ffmpeg": ffmpeg_version(),
+        "entorno": resumen_entorno(),
+    }
 
 
 # Validación compartida de uploads de audio (track principal y referencia)
@@ -444,6 +523,24 @@ async def diagnosticar(
                 status_code=504,
                 content={"error": "El análisis tardó demasiado. El archivo puede estar corrupto. Inténtalo con otro archivo."}
             )
+        except AudioSinSenalAnalizable as e:
+            # Salida controlada: el archivo se decodifica pero está mudo. Antes
+            # esto llegaba hasta pyloudnorm, devolvía -inf y Starlette
+            # respondía 500 con `Out of range float values are not JSON
+            # compliant`. Ahora es un 422 legible y NO se genera ni se guarda
+            # ningún diagnóstico: el frontend corta en `if (!resp.ok)`, así que
+            # no llega a llamar a /api/sheets/registro.
+            print(f"[AUDIO-SIN-SENAL] {session_id}: {e.motivo} {e.detalle}")
+            return JSONResponse(
+                status_code=422,
+                content={
+                    "error": (f"{e.motivo} Comprueba que exportaste el bounce con "
+                              "audio (a veces se exporta con el master en mute o "
+                              "con la selección vacía) y vuelve a subirlo."),
+                    "codigo": AudioSinSenalAnalizable.codigo,
+                    "detalle": e.detalle,
+                },
+            )
 
         # Extraer señales de la referencia — EN SERIE (no en paralelo: el worker de
         # Railway comparte CPU) y sin armonía (~90% más rápido). Si falla, el
@@ -457,6 +554,9 @@ async def diagnosticar(
             except asyncio.TimeoutError:
                 print(f"[ERROR] diagnosticar: Timeout en referencia ({session_id})")
                 comparacion_error = "No se pudo analizar el track de referencia (tardó demasiado). Tu diagnóstico se generó igualmente, sin la comparación."
+            except AudioSinSenalAnalizable:
+                # La referencia está muda: el diagnóstico del usuario sale igual.
+                comparacion_error = "El track de referencia está en silencio o no tiene señal analizable. Tu diagnóstico se generó igualmente, sin la comparación."
             except Exception as e:
                 print(f"[ERROR] diagnosticar: referencia {type(e).__name__}: {e}")
                 comparacion_error = "No se pudo analizar el track de referencia. Tu diagnóstico se generó igualmente, sin la comparación."
@@ -477,6 +577,9 @@ async def diagnosticar(
 
         # Generar diagnóstico
         resultado = _generar_diagnostico(senales, contexto)
+        # El motor no conoce la versión del backend: se añade aquí para que la
+        # fila guardada tenga el juego completo de versiones.
+        resultado.setdefault("versiones", {})["backend_version"] = APP_VERSION
 
         # Comparación contra la referencia (si la hay)
         if senales_ref is not None:
@@ -5482,7 +5585,17 @@ async def comunidad_marcar_util(request: Request, comentario_id: str):
 
 @app.get("/")
 def serve_frontend():
-    return FileResponse(FRONTEND_DIR / "index.html")
+    # `/` se servía SIN Cache-Control (v0.5.70 y anteriores). Sin directiva, el
+    # navegador aplica caché heurística sobre Last-Modified y se queda con un
+    # index.html viejo días o semanas — que es exactamente lo que hizo que
+    # tras el deploy del true peak un 10,8% de los análisis de mayo llegaran
+    # sin los campos nuevos. El catch-all sí ponía no-cache; la home no.
+    # `no-cache` no significa "no guardar": significa revalidar antes de usar,
+    # así que el 304 sigue siendo barato.
+    return FileResponse(
+        FRONTEND_DIR / "index.html",
+        headers={"Cache-Control": "no-cache, must-revalidate"},
+    )
 
 
 # Extensiones de assets inmutables → cache largo (7 días)

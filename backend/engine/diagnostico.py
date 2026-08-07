@@ -7,6 +7,7 @@ v0.3: feedback contextualizado por experiencia, género, objetivo y fase.
 from .reglas import evaluar_diagnosticos, aplicar_jerarquia, UMBRAL_MINIMO_CONFIANZA
 from .templates import TEMPLATES
 from .contextualizador import contextualizar_feedback, generar_sugerencias_estructura
+from .versiones import algoritmos as _versiones_algoritmos
 
 # Umbrales por dx para contar "puntos pendientes" en el estado.
 # Coincide con aplicar_jerarquia en reglas.py: armónicos exigen más evidencia.
@@ -107,7 +108,11 @@ def generar_diagnostico(senales: dict, contexto: dict) -> dict:
         "estado_track": estado,
         "estado_texto": estado_texto,
         "datos_audio": {
-            "bpm": senales["bpm"],
+            # None si no hay pulso detectable. La interfaz debe mostrar
+            # "no detectado", nunca un valor por defecto.
+            "bpm": senales.get("bpm"),
+            "tempo_detectado": senales.get("tempo_detectado", True),
+            "tempo_fuente": senales.get("tempo_fuente", ""),
             "duracion": senales["duracion_fmt"],
             "contraste": senales["contraste_energetico"],
             "balance_grave": senales["balance_grave"],
@@ -135,15 +140,39 @@ def generar_diagnostico(senales: dict, contexto: dict) -> dict:
                 "lufs_integrado": senales["loudness"]["lufs_integrado"],
                 "lufs_short_term_max": senales["loudness"]["lufs_short_term_max"],
                 "rango_loudness": senales["loudness"]["rango_loudness"],
+                # Picos sin redondear: el redondeo lo hace la interfaz.
                 "true_peak_dbtp": senales["loudness"].get("true_peak_dbtp", -99.0),
+                "sample_peak_dbfs": senales["loudness"].get("sample_peak_dbfs", -99.0),
+                # Estado del método de medición (no del archivo)
+                "sample_peak_source": senales["loudness"].get("sample_peak_source", ""),
+                "true_peak_method": senales["loudness"].get("true_peak_method", ""),
+                "true_peak_oversampling": senales["loudness"].get("true_peak_oversampling", 0),
+                "true_peak_internal_validation_passed": senales["loudness"].get("true_peak_internal_validation_passed", False),
+                "true_peak_external_validation_passed": senales["loudness"].get("true_peak_external_validation_passed", False),
+                "true_peak_validated": senales["loudness"].get("true_peak_validated", False),
+                "peak_measurement_sample_rate": senales["loudness"].get("peak_measurement_sample_rate", 0),
+                "peak_measurement_channels": senales["loudness"].get("peak_measurement_channels", 0),
                 "nivel": senales["loudness"]["nivel"],
                 "referencia": senales["loudness"]["referencia"],
                 "consejo_master": senales["loudness"].get("consejo_master", ""),
                 "referencia_genero": feedback_ctx.get("referencia_lufs_genero", ""),
                 "saturacion_dinamica": senales["loudness"].get("saturacion_dinamica", ""),
                 "aviso_saturacion": senales["loudness"].get("aviso_saturacion", ""),
+                # Campos antiguos: se conservan para parsers e histórico.
+                # La interfaz NO los usa desde la fase 2A.
                 "nivel_true_peak": senales["loudness"].get("nivel_true_peak", ""),
                 "aviso_true_peak": senales["loudness"].get("aviso_true_peak", ""),
+                # Taxonomía de picos (fase 2A) — lo que se muestra al usuario
+                "categoria_picos": senales["loudness"].get("categoria_picos", ""),
+                "peak_taxonomy_version": senales["loudness"].get("peak_taxonomy_version"),
+                # Valor cuantizado con el que se decide la taxonomía y que se
+                # muestra. La medición cruda sigue en `true_peak_dbtp`.
+                "true_peak_classification_value": senales["loudness"].get("true_peak_classification_value"),
+                "sample_peak_classification_value": senales["loudness"].get("sample_peak_classification_value"),
+                "severidad_picos": senales["loudness"].get("severidad_picos", ""),
+                "titulo_picos": senales["loudness"].get("titulo_picos", ""),
+                "aviso_picos": senales["loudness"].get("aviso_picos", ""),
+                "nota_lossy_picos": senales["loudness"].get("nota_lossy_picos", ""),
             },
             "mono_compat": {
                 "es_stereo": senales["mono_compat"]["es_stereo"],
@@ -163,7 +192,12 @@ def generar_diagnostico(senales: dict, contexto: dict) -> dict:
                 "peak_freq_hz": senales["harshness"].get("peak_freq_hz", 0),
                 "caracter": senales["harshness"].get("caracter", ""),
             },
+            # Metadatos del archivo — solo registro en fase 1, nada los usa.
+            "formato": senales.get("formato", {}),
         },
+        # Con qué se midió esto. Permite saber después qué análisis son
+        # comparables entre sí sin deducirlo por la fecha.
+        "versiones": _versiones_algoritmos(),
         # Señales crudas para calibración del motor (el frontend las guarda en el Sheet)
         "senales": {
             "db_grave": senales.get("db_grave"),

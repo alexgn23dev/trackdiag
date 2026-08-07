@@ -199,6 +199,47 @@
         ? 'http://localhost:8000'
         : '';
 
+    // Versión de este index.html. Tiene que coincidir con la que devuelve
+    // /api/health. Si no coincide, este fichero viene de la caché del
+    // navegador y puede estar dejando de enviar campos que el backend ya
+    // espera — se recarga una sola vez y, si aun así no cuadra, se avisa.
+    const APP_VERSION = '0.5.71';
+
+    function comprobarVersionFrontend(onDesfase, onEntorno) {
+        fetch(`${API_URL}/api/health`, { cache: 'no-store' })
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                // /api/health solo devuelve `entorno` cuando NO es producción.
+                // Evita el peor accidente de un preview: creer que miras prod.
+                if (data && data.entorno) onEntorno && onEntorno(data.entorno);
+                const backend = data && data.version;
+                if (!backend || backend === APP_VERSION) return;
+                // Guarda contra bucles: solo se recarga una vez por versión.
+                const yaIntentado = sessionStorage.getItem('mt_reload_version');
+                if (yaIntentado !== backend) {
+                    sessionStorage.setItem('mt_reload_version', backend);
+                    window.location.reload();
+                    return;
+                }
+                // Recargamos y sigue sin cuadrar: hay una caché intermedia.
+                // No insistimos, avisamos.
+                onDesfase && onDesfase(backend);
+            })
+            .catch(() => {});
+    }
+
+    // Formatea una medida numérica para la UI, o devuelve "—".
+    // Un análisis antiguo no trae los campos nuevos (undefined), un fallo de
+    // medición los deja en el centinela -99, y un JSON raro puede colar NaN o
+    // null. Ninguno de esos debe llegar nunca a pantalla como tal.
+    const SENTINELA_SIN_DATO = -99;
+    function fmtMedida(valor, decimales = 1, sufijo = '') {
+        const n = typeof valor === 'number' ? valor : parseFloat(valor);
+        if (valor === null || valor === undefined || !isFinite(n)) return '—';
+        if (n <= SENTINELA_SIN_DATO) return '—';
+        return n.toFixed(decimales) + sufijo;
+    }
+
     // =========================================================================
     // Componentes de UI
     // =========================================================================
@@ -1821,15 +1862,29 @@
                                                 <p className="text-gray-300 text-xs mt-1">{d.loudness.aviso_saturacion}</p>
                                             </div>
                                         )}
-                                        {d.loudness.aviso_true_peak && (
-                                            <div className={`mt-3 p-2 rounded border-l-2 ${d.loudness.nivel_true_peak === 'clipping' ? 'border-red-400 bg-red-400/5' : 'border-yellow-400 bg-yellow-400/5'}`}>
-                                                <p className={`text-xs font-medium ${d.loudness.nivel_true_peak === 'clipping' ? 'text-red-400' : 'text-yellow-400'}`}>
-                                                    {d.loudness.nivel_true_peak === 'clipping' ? '⚠ True peak: clipping digital' : 'True peak por encima del ceiling de streaming'}
+                                        {/* Taxonomía de picos (fase 2A). Sustituye al aviso
+                                            antiguo, que llamaba "clipping digital" a un over de
+                                            true peak sin haber contado una sola muestra recortada.
+                                            Los campos viejos siguen viajando en la respuesta para
+                                            los parsers, pero ya no se pintan.
+                                            Fallback: un análisis anterior a 2A no trae
+                                            `aviso_picos`, así que se muestra el texto que tenía. */}
+                                        {d.loudness.aviso_picos ? (
+                                            <div className={`mt-3 p-2 rounded border-l-2 ${d.loudness.severidad_picos === 'atencion' ? 'border-yellow-400 bg-yellow-400/5' : 'border-gray-600 bg-white/5'}`}>
+                                                <p className={`text-xs font-medium ${d.loudness.severidad_picos === 'atencion' ? 'text-yellow-400' : 'text-gray-300'}`}>
+                                                    {d.loudness.titulo_picos}
                                                 </p>
-                                                <p className="text-gray-300 text-xs mt-1">{d.loudness.aviso_true_peak}</p>
-                                                <p className="text-gray-500 text-xs mt-1">Si subiste un mp3, parte del pico puede venir del propio códec (genera picos entre muestras al recodificar). Para el dato exacto, analiza el WAV.</p>
+                                                <p className="text-gray-300 text-xs mt-1">{d.loudness.aviso_picos}</p>
+                                                {d.loudness.nota_lossy_picos && (
+                                                    <p className="text-gray-500 text-xs mt-1">{d.loudness.nota_lossy_picos}</p>
+                                                )}
                                             </div>
-                                        )}
+                                        ) : d.loudness.aviso_true_peak ? (
+                                            <div className="mt-3 p-2 rounded border-l-2 border-yellow-400 bg-yellow-400/5">
+                                                <p className="text-xs font-medium text-yellow-400">True peak</p>
+                                                <p className="text-gray-300 text-xs mt-1">{d.loudness.aviso_true_peak}</p>
+                                            </div>
+                                        ) : null}
                                         {loudnessTip && (
                                             <p className={`text-xs mt-1 ${loudnessColor.replace('text-', 'text-').replace('400', '400/70')}`}>{loudnessTip}</p>
                                         )}
@@ -1838,13 +1893,29 @@
                                     <div className="mt-3 grid grid-cols-2 gap-3">
                                         <div>
                                             <span className="text-gray-500 text-xs">Pico short-term</span>
-                                            <p className="text-gray-300 text-sm">{d.loudness.lufs_short_term_max} LUFS</p>
+                                            <p className="text-gray-300 text-sm">{fmtMedida(d.loudness.lufs_short_term_max, 1, ' LUFS')}</p>
                                             <p className="text-gray-600 text-xs">El momento más fuerte del track.</p>
                                         </div>
                                         <div>
                                             <span className="text-gray-500 text-xs">Rango</span>
-                                            <p className="text-gray-300 text-sm">{d.loudness.rango_loudness} LU</p>
+                                            <p className="text-gray-300 text-sm">{fmtMedida(d.loudness.rango_loudness, 1, ' LU')}</p>
                                             <p className="text-gray-600 text-xs">Diferencia entre lo más fuerte y lo más suave. Más rango = más dinámica.</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Picos — siempre visibles. El true peak es el dato
+                                        principal; el sample peak va como técnico secundario.
+                                        Fase 1: solo se muestran, sin color ni juicio nuevo. */}
+                                    <div className="mt-3 grid grid-cols-2 gap-3">
+                                        <div>
+                                            <span className="text-gray-500 text-xs">True peak</span>
+                                            <p className="text-gray-300 text-sm">{fmtMedida(d.loudness.true_peak_dbtp, 1, ' dBTP')}</p>
+                                            <p className="text-gray-600 text-xs">El pico real reconstruido, incluyendo lo que ocurre entre muestras.</p>
+                                        </div>
+                                        <div>
+                                            <span className="text-gray-600 text-xs">Sample peak</span>
+                                            <p className="text-gray-500 text-sm">{fmtMedida(d.loudness.sample_peak_dbfs, 1, ' dBFS')}</p>
+                                            <p className="text-gray-600 text-xs">El valor más alto de las muestras del archivo.</p>
                                         </div>
                                     </div>
                                 </div>
@@ -2880,6 +2951,8 @@
         // Proyecto que llega en la URL (/?proyecto=<id>), desde el email de
         // re-enganche: al cargar los proyectos se preselecciona solo.
         const [proyectoDeepLink, setProyectoDeepLink] = useState('');
+        const [versionDesfasada, setVersionDesfasada] = useState('');
+        const [entorno, setEntorno] = useState('');
 
         // Detecta ?compartir=1 / ?proyecto=<id> al cargar y limpia la URL.
         useEffect(() => {
@@ -2908,6 +2981,11 @@
                     window.history.replaceState({}, '', window.location.pathname + (qs ? '?' + qs : ''));
                 }
             } catch (e) { /* noop */ }
+        }, []);
+
+        // Compatibilidad frontend ↔ backend: detecta un index.html cacheado.
+        useEffect(() => {
+            comprobarVersionFrontend(setVersionDesfasada, setEntorno);
         }, []);
 
         // Cargar opciones al inicio
@@ -3720,13 +3798,33 @@
                 if (dx.alcance_analisis) informe += `QUÉ EVALÚA: ${dx.alcance_analisis}\n`;
                 // Datos de mezcla
                 informe += `--- MEZCLA ---\n`;
-                informe += `BPM: ${da.bpm || '?'} | Duración: ${da.duracion || '?'}\n`;
+                informe += `BPM: ${da.bpm != null ? da.bpm : 'no detectado'} | Duración: ${da.duracion || '?'}\n`;
                 informe += `Balance grave: ${da.balance_grave || '?'}\n`;
                 informe += `Densidad: ${da.densidad || '?'}\n`;
                 if (da.loudness) {
                     informe += `Loudness: ${da.loudness.lufs_integrado} LUFS (${da.loudness.nivel}) | Pico: ${da.loudness.lufs_short_term_max} LUFS | Rango: ${da.loudness.rango_loudness} LU\n`;
-                    if (da.loudness.true_peak_dbtp && da.loudness.true_peak_dbtp > -99) {
-                        informe += `True peak: ${da.loudness.true_peak_dbtp} dBTP${da.loudness.nivel_true_peak ? ` (${da.loudness.nivel_true_peak})` : ''}\n`;
+                    // OJO: `!= null` y no truthiness. Con `&&`, un true peak de
+                    // 0.0 (o -0.0) es falsy y la línea desaparecía del informe:
+                    // se perdieron ~4-5% de análisis, justo los del filo.
+                    const _tp = da.loudness.true_peak_dbtp;
+                    const _sp = da.loudness.sample_peak_dbfs;
+                    const _cat = da.loudness.categoria_picos;
+                    if (_tp != null && !isNaN(_tp) && _tp > -99) {
+                        // Taxonomía v2: la línea NO lleva "(clipping)". Ese
+                        // vocabulario era incorrecto y contaminaría los datos
+                        // nuevos con una definición que ya sabemos falsa.
+                        // Sin taxonomía (no debería pasar) se mantiene el
+                        // formato antiguo para no perder el dato.
+                        informe += _cat
+                            ? `True peak: ${_tp.toFixed(1)} dBTP\n`
+                            : `True peak: ${_tp.toFixed(1)} dBTP${da.loudness.nivel_true_peak ? ` (${da.loudness.nivel_true_peak})` : ''}\n`;
+                    }
+                    if (_sp != null && !isNaN(_sp) && _sp > -99) {
+                        informe += `Sample peak: ${_sp.toFixed(1)} dBFS\n`;
+                    }
+                    if (_cat) {
+                        informe += `Categoría de picos: ${_cat}\n`;
+                        informe += `Taxonomía de picos: v${da.loudness.peak_taxonomy_version || 2}\n`;
                     }
                 }
                 if (da.mono_compat) {
@@ -3751,6 +3849,8 @@
                 const senales = {
                     // Identificación
                     bpm: da.bpm,
+                    tempo_detectado: da.tempo_detectado,
+                    tempo_fuente: da.tempo_fuente,
                     duracion: da.duracion,
                     // Espectro y balance
                     balance_grave: da.balance_grave,
@@ -3788,6 +3888,39 @@
                     lufs_short_term_max: da.loudness?.lufs_short_term_max,
                     rango_loudness: da.loudness?.rango_loudness,
                     nivel_loudness: da.loudness?.nivel,
+                    // Picos — sin redondear, tal cual los mide el backend
+                    true_peak_dbtp: da.loudness?.true_peak_dbtp,
+                    sample_peak_dbfs: da.loudness?.sample_peak_dbfs,
+                    nivel_true_peak: da.loudness?.nivel_true_peak,
+                    // Taxonomía de picos (fase 2A). El campo de arriba se
+                    // conserva para no romper parsers ni el histórico.
+                    categoria_picos: da.loudness?.categoria_picos,
+                    peak_taxonomy_version: da.loudness?.peak_taxonomy_version,
+                    peak_algorithm_version: dx.versiones?.peak_algorithm_version,
+                    true_peak_classification_value: da.loudness?.true_peak_classification_value,
+                    sample_peak_classification_value: da.loudness?.sample_peak_classification_value,
+                    severidad_picos: da.loudness?.severidad_picos,
+                    // Estado del método de medición (no del archivo)
+                    sample_peak_source: da.loudness?.sample_peak_source,
+                    true_peak_method: da.loudness?.true_peak_method,
+                    true_peak_oversampling: da.loudness?.true_peak_oversampling,
+                    true_peak_validated: da.loudness?.true_peak_validated,
+                    true_peak_internal_validation_passed: da.loudness?.true_peak_internal_validation_passed,
+                    true_peak_external_validation_passed: da.loudness?.true_peak_external_validation_passed,
+                    peak_measurement_sample_rate: da.loudness?.peak_measurement_sample_rate,
+                    peak_measurement_channels: da.loudness?.peak_measurement_channels,
+                    // Metadatos del archivo — solo registro, nada los usa aún
+                    archivo_extension: da.formato?.archivo_extension,
+                    archivo_container: da.formato?.archivo_container,
+                    archivo_codec: da.formato?.archivo_codec,
+                    archivo_subtype: da.formato?.archivo_subtype,
+                    archivo_sample_format: da.formato?.archivo_sample_format,
+                    archivo_storage_bits: da.formato?.archivo_storage_bits,
+                    archivo_pcm_bit_depth: da.formato?.archivo_pcm_bit_depth,
+                    archivo_sample_rate: da.formato?.archivo_sample_rate,
+                    archivo_canales: da.formato?.archivo_canales,
+                    archivo_lossy: da.formato?.archivo_lossy,
+                    archivo_metadata_source: da.formato?.archivo_metadata_source,
                     // Mono compatibility
                     es_stereo: da.mono_compat?.es_stereo,
                     correlacion_lr: da.mono_compat?.correlacion_lr,
@@ -3805,6 +3938,14 @@
                     // Carencias
                     carencia_medios: dx.senales?.carencia_medios,
                     carencia_agudos: dx.senales?.carencia_agudos,
+                    // Con qué se midió esta fila. Permite saber qué análisis son
+                    // comparables entre sí sin deducirlo por la fecha, y medir
+                    // cuánto tarda en propagarse un deploy.
+                    frontend_version: APP_VERSION,
+                    backend_version: dx.versiones?.backend_version,
+                    analysis_engine_version: dx.versiones?.analysis_engine_version,
+                    peak_algorithm_version: dx.versiones?.peak_algorithm_version,
+                    loudness_algorithm_version: dx.versiones?.loudness_algorithm_version,
                     // Diagnósticos emitidos y scores
                     diag_principal: dx.diagnostico_principal?.id,
                     diag_secundario: dx.diagnostico_secundario?.id || null,
@@ -4053,6 +4194,30 @@
 
         return (
             <div>
+                {/* Banda de entorno: solo si NO es producción. Un preview tiene
+                    que gritarlo — es lo que impide confundirlo con la app real. */}
+                {entorno && (
+                    <div className="fixed bottom-0 left-0 right-0 z-50 px-4 py-1 text-center text-xs font-bold tracking-wide"
+                         style={{ background: '#b45309', color: '#fff' }}>
+                        ENTORNO: {entorno.toUpperCase()} — los datos de aquí no son reales
+                    </div>
+                )}
+                {/* Aviso de versión desfasada: solo aparece si tras recargar una
+                    vez el index.html sigue siendo más viejo que el backend, lo
+                    que indica una caché intermedia (navegador o CDN). */}
+                {versionDesfasada && (
+                    <div className="fixed top-0 left-0 right-0 z-50 px-4 py-2 text-center text-xs"
+                         style={{ background: 'rgba(109,16,255,0.9)', color: '#fff' }}>
+                        Estás viendo una versión antigua de la app (v{APP_VERSION} frente a v{versionDesfasada}).
+                        {' '}
+                        <button type="button"
+                                onClick={() => window.location.reload(true)}
+                                style={{ background: 'transparent', border: 0, color: '#fff', textDecoration: 'underline', cursor: 'pointer', padding: 0 }}>
+                            Recargar
+                        </button>
+                        {' '}— si persiste, vacía la caché del navegador.
+                    </div>
+                )}
                 {/* Botón Mi panel — siempre visible arriba a la derecha (no en panel) */}
                 {screen !== 'panel' && (
                     <div className="fixed top-4 right-4 z-40">
