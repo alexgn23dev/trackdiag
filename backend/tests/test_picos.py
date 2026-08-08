@@ -64,8 +64,8 @@ class TestContratoCampos(unittest.TestCase):
             self.assertIn(r["sample_peak_source"],
                           ("archivo_nativo", "audio_remuestreado_22k", "no_disponible"), nombre)
             self.assertIn(r["true_peak_method"],
-                          ("soxr_hq_4x", "sample_peak_22k_fallback", "no_disponible"), nombre)
-            self.assertIn(r["true_peak_oversampling"], (0, 1, 4), nombre)
+                          ("soxr_hq_8x", "sample_peak_22k_fallback", "no_disponible"), nombre)
+            self.assertIn(r["true_peak_oversampling"], (0, 1, 8), nombre)
             self.assertIsInstance(r["true_peak_validated"], bool, nombre)
 
     def test_validated_es_false_hasta_pasar_la_validacion(self):

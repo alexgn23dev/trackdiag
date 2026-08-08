@@ -27,8 +27,9 @@ class TestConstantes(unittest.TestCase):
             self.assertTrue(valor and isinstance(valor, str), nombre)
 
     def test_identifican_el_metodo(self):
-        self.assertIn("soxr_hq_4x", PEAK_ALGORITHM_VERSION,
-                      "la versión del algoritmo de picos debe nombrar el método")
+        self.assertIn("soxr_hq_8x", PEAK_ALGORITHM_VERSION,
+                      "la versión del algoritmo de picos debe nombrar el método "
+                      "y el factor de sobremuestreo")
         self.assertIn("pyloudnorm", LOUDNESS_ALGORITHM_VERSION)
         self.assertTrue(ANALYSIS_ENGINE_VERSION.startswith("engine-"))
 

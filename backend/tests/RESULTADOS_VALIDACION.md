@@ -233,3 +233,162 @@ ruido hasta 48 kHz, 0,30 dB por debajo. Los tests fijan el signo y una cota de
 3. Decidir qué se considera correcto en el borde del archivo (§5b): asumir
    silencio fuera, como ahora, o régimen estable. Es una decisión de producto,
    no de corrección.
+
+---
+
+## 8. Una referencia que sí es la verdad (2026-08-07)
+
+Todo lo anterior compara implementaciones entre sí. Cuando discrepan no hay
+forma de saber cuál acierta, y eso es lo que dejó bloqueada la fase 2B.
+
+Ahora existe `tests/reconstruccion_exacta.py`, que **no es otra
+implementación**: es la definición. El teorema de muestreo dice que la señal
+continua detrás de un archivo es única; su máximo se obtiene rellenando de
+ceros el espectro, sin elegir filtro ni número de taps. Los tests de
+`test_reconstruccion.py` la verifican antes de usarla: reproduce el valor
+analítico del seno a fs/4, converge al subir el factor, y nunca queda por
+debajo del sample peak.
+
+### Ningún medidor real es plano
+
+Pico medido de un seno de amplitud 1,0, cuyo pico real es 0,000 dB a
+cualquier frecuencia. Lo que se aparta de 0 es error del reconstructor:
+
+| frecuencia | % Nyquist | exacta | FIR ITU 4× | soxr_hq 4× |
+|---|---|---|---|---|
+| 1 kHz | 4,5 % | 0,000 | +0,008 | 0,000 |
+| 5 kHz | 22,7 % | 0,000 | **+0,115** | 0,000 |
+| 10 kHz | 45,3 % | 0,000 | **+0,120** | 0,000 |
+| 15 kHz | 68,0 % | 0,000 | +0,032 | 0,000 |
+| 19 kHz | 86,2 % | 0,000 | −0,213 | 0,000 |
+| 20 kHz | 90,7 % | 0,000 | −0,458 | 0,000 |
+| 21 kHz | 95,2 % | 0,000 | −0,688 | −3,792 |
+| 22 kHz | 99,8 % | 0,000 | **−0,791** | **−98,8** |
+
+Los dos fallan, de formas distintas: **el FIR de 12 taps tiene rizado en toda
+la banda de paso y cae cerca de Nyquist; soxr es exacto hasta el 90 % de
+Nyquist y a partir de ahí borra el contenido.**
+
+### Esto contesta las dos preguntas que bloqueaban la fase 2B
+
+**Pregunta 1 — el fixture 08.** No es un caso raro ni un error de
+transcripción: un recorte duro llena el espectro hasta Nyquist, justo donde el
+FIR ya no llega. Frente a la reconstrucción exacta (+4,050 dBTP en el canal
+izquierdo), el FIR se queda en −0,729 y soxr en −0,222.
+
+**Pregunta 2 — 96 kHz.** El problema desaparece solo. Con material realista a
+88,2 o 96 kHz, el pico entre muestras es menor de 0,05 dB y los dos medidores
+coinciden con la reconstrucción exacta dentro de 0,05 dB. El fixture 05 es un
+tono a fs/4 de 96 kHz, es decir **24 kHz**: por encima de lo audible y de lo
+que produce cualquier instrumento. Que las implementaciones discrepen ahí no
+dice nada sobre música real.
+
+### El error de cada candidato, medido
+
+Frente a la reconstrucción exacta. Material realista = el mismo bounce
+limitado en banda a 8/12/16/18/19/20 kHz, que es lo que sale de un DAW:
+
+| | material realista | con energía hasta Nyquist |
+|---|---|---|
+| FIR ITU 4× | 0,100 | **0,850** |
+| soxr_hq 4× (producción) | 0,114 | 0,387 |
+| soxr_hq **8×** | **0,004** | 0,387 |
+| soxr_hq 16× | 0,004 | 0,387 |
+
+### Dos conclusiones que invierten el plan de la fase 2B
+
+**1. Cambiar a el FIR normativo empeoraría la medición.** El plan aprobado
+partía de que soxr tenía un sesgo alto y el FIR era la referencia buena.
+Medido contra la verdad, es al revés: el FIR es el peor de los candidatos.
+
+**2. Parte del error de producción no es del filtro, es de la rejilla.**
+Sobremuestrear 4× da cuatro puntos por muestra y el máximo real cae entre
+ellos. Subiendo a **8×**, sin tocar el filtro, el error con material realista
+baja de 0,114 dB a **0,004 dB**. Por encima de 8× ya no aporta nada. Coste
+medido en una pista de 6 minutos estéreo: 0,40 s → 0,85 s.
+
+Lo que **no** arregla subir el factor: el material con energía por encima de
+20 kHz (masters muy saturados). Ahí el error es del filtro y se queda en
+0,387 dB, suba lo que suba el sobremuestreo.
+
+### Y por qué Youlean no puede ser el juez
+
+La validación externa dio FAIL porque soxr leía 0,33 dB por encima de Youlean
+en los fixtures 01 y 06. Con la referencia exacta en la mano, el reparto de
+culpas es otro:
+
+| fixture | exacto | soxr_hq 4× | Youlean |
+|---|---|---|---|
+| 01 | +0,360 | +0,531 (+0,17) | +0,20 (**−0,16**) |
+| 06 | +1,360 | +1,531 (+0,17) | +1,20 (**−0,16**) |
+
+**Los dos se desvían, en direcciones opuestas y por la misma magnitud.**
+Youlean no es la verdad: es otro filtro finito, con su propio compromiso cerca
+de Nyquist. Ambos fixtures tienen los hats hechos de ruido blanco hasta
+Nyquist — energía que no tiene un bounce normal.
+
+Esto **no** anula el FAIL registrado: el criterio que se acordó era coincidir
+con un medidor externo, y no se cumplió. Lo que dice es que el criterio medía
+lo que no era. La propuesta está en `DISENO_FASE_2B.md`.
+
+---
+
+## 9. Lo que se cambió: 4× → 8× (v0.5.72, 2026-08-07)
+
+Aprobado por Alex tras el §8. **No se cambió el filtro** —el FIR de la norma
+queda descartado por lo medido arriba— sino el factor de sobremuestreo.
+
+| | |
+|---|---|
+| `PEAK_ALGORITHM_VERSION` | `peak-soxr_hq_4x-1` → **`peak-soxr_hq_8x-1`** |
+| Validación interna | **re-ejecutada, PASA** (`tests/validar_true_peak.py`) |
+| Validación externa | **`False`** — caducó al cambiar el algoritmo. Hay que repetirla |
+| `_TRUE_PEAK_VALIDATED` | `False` |
+| Error con material realista | 0,114 dB → **0,001 dB** |
+| Coste, pista de 6 min estéreo | 0,40 s → 0,85 s |
+
+### Cuánto se movió de verdad
+
+De los 30 fixtures del golden, **solo 3 cambian a 1 decimal**:
+
+| fixture | 4× | 8× | exacta | qué es |
+|---|---|---|---|---|
+| `wav24_96000_pico_menos1` | −0,9 | **−0,7** | −0,2 | Mejora real: se subestimaba 0,75 dB, ahora 0,53 |
+| `dc_estable_menos6` | −4,9 | −4,5 | −4,9 | Borde del archivo: ni mejor ni peor, ver abajo |
+| `dc_bordes_menos6` | −4,9 | −4,5 | −4,9 | Ídem |
+
+**El resto de fixtures no se mueve.** Que el cambio sea casi invisible en el
+golden y muy visible en material limitado en banda no es contradictorio: los
+fixtures tienen los hats hechos de ruido blanco hasta Nyquist, y ahí manda el
+filtro, no la rejilla.
+
+### El aviso sobre los dos fixtures de continua
+
+**No leerlos como una regresión.** Su máximo cae en el borde del archivo,
+donde el valor depende de qué se asuma fuera y **no converge con el factor**:
+
+```
+x4 −4,90 · x8 −4,52 · x16 −4,84 · x24 −4,52 · x32 −4,89
+```
+
+Salta sin tendencia. En cambio un escalón **dentro** del archivo
+(`dc_salto_interno_menos6`) da −4,94 con todos los factores, sin excepción.
+La conclusión es la misma del §5b: en el borde no hay nada bien definido que
+medir, y por eso esos fixtures son informativos y no deciden. Congelado en
+`test_reconstruccion.py::test_en_el_borde_del_archivo_ningun_factor_converge`.
+
+### Por qué 8 y no 16
+
+Con material realista los dos dan 0,001 dB. 16× cuesta el doble (1,83 s
+frente a 0,85 s en una pista de 6 minutos) y no compra nada. Los factores
+intermedios no son monótonos —x6 da 0,020 y x12 da 0,009, ambos peores que
+x8— porque por debajo de 8 el error de rejilla todavía depende de dónde caiga
+el máximo respecto a la retícula.
+
+### Lo que sigue sin arreglarse, y no se puede
+
+Material con energía por encima de 20 kHz: soxr descarta esa zona y se queda
+~0,39 dB corto, **suba lo que suba el sobremuestreo**. Es error del filtro.
+Ningún medidor comercial acierta ahí tampoco. La consecuencia de producto
+—que la frontera de `true_peak_over` en 0,0 dBTP es más fina de lo que la
+medida resuelve en ese material— sigue abierta en `DISENO_FASE_2B.md`.

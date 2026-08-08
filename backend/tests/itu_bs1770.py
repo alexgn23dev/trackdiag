@@ -4,7 +4,7 @@ Implementación de referencia del medidor de true-peak que describe la norma:
 un banco polifásico de 4 fases × 12 coeficientes (48 taps) que reconstruye la
 señal a 4× y toma el máximo absoluto.
 
-NO sustituye al algoritmo de producción (`soxr_hq_4x` en engine/extractor.py).
+NO sustituye al algoritmo de producción (`soxr_hq_8x` en engine/extractor.py).
 Existe para poder comparar contra algo que sigue la letra de la norma en vez
 de contra otra aproximación.
 

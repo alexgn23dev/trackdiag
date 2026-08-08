@@ -1,6 +1,27 @@
 # Validación externa del true peak — registro manual
 
-**Estado: EJECUTADA EL 2026-08-07 · RESULTADO: NO PASA.**
+> ## ⚠️ CADUCADA — hay que repetirla (2026-08-07)
+>
+> Todo lo que hay debajo se midió con `peak-soxr_hq_4x-1`. La v0.5.72 pasa el
+> sobremuestreo a 8×, así que la versión del algoritmo es ahora
+> **`peak-soxr_hq_8x-1`** y esta validación **ya no aplica**: no se hereda.
+> Los tres estados están en `False` por ese mecanismo.
+>
+> **Antes de repetirla, leer `RESULTADOS_VALIDACION.md §8`.** El criterio de
+> aprobación que se usó abajo —coincidir con un medidor comercial— resultó
+> estar mal planteado: medido contra la reconstrucción exacta, Youlean se
+> desvía 0,16 dB en los fixtures 01 y 06, en dirección contraria a soxr. Los
+> dos fallan; ninguno es la verdad. Hay una propuesta de árbitro nuevo en
+> `DISENO_FASE_2B.md` pendiente de decidir.
+>
+> Qué cambia numéricamente con el 8×, para saber qué esperar: de los 30
+> fixtures, **solo 3 se mueven a 1 decimal**. Los dos de continua tienen el
+> máximo en el borde del archivo y ahí el valor no converge con ningún factor;
+> el de 96 kHz sube de −0,9 a −0,7, acercándose al valor exacto de −0,2.
+
+---
+
+**Estado del registro histórico: EJECUTADA EL 2026-08-07 · RESULTADO: NO PASA.**
 
 `TRUE_PEAK_EXTERNAL_VALIDATION_PASSED` permanece en `False` en
 `backend/engine/extractor.py`, y por tanto `_TRUE_PEAK_VALIDATED` también.
