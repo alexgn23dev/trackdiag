@@ -54,6 +54,29 @@ CAMBIOS_AUTORIZADOS = {
         "un HTTP 500. Ahora se sustituye por el centinela -99.0. En el flujo "
         "real este archivo ni siquiera llega hasta aquí: extraer_senales lo "
         "corta antes con AudioSinSenalAnalizable → HTTP 422."),
+
+    # --- v0.5.72: sobremuestreo 4x → 8x --------------------------------------
+    # Solo tres fixtures se mueven a 1 decimal. Los dos primeros son el mismo
+    # fenómeno y NO son una mejora ni un empeoramiento: son la zona donde la
+    # medida no está definida.
+    ("dc_estable_menos6", "true_peak_dbtp_1dec"): (
+        "v0.5.72 — sobremuestreo 8x. El máximo de este fixture cae en el BORDE "
+        "del archivo, donde el valor depende de qué se asuma fuera y no "
+        "converge con el factor: x4 -4,9 · x8 -4,5 · x16 -4,8 · x24 -4,5. Un "
+        "escalón DENTRO del archivo (dc_salto_interno) da -4,94 con todos los "
+        "factores. No es una regresión: es que ahí no hay nada bien definido "
+        "que medir. Ver RESULTADOS_VALIDACION.md §5b y §8."),
+    ("dc_bordes_menos6", "true_peak_dbtp_1dec"): (
+        "Mismo caso que dc_estable_menos6: el máximo está en el borde."),
+
+    ("wav24_96000_pico_menos1", "true_peak_dbtp_1dec"): (
+        "v0.5.72 — sobremuestreo 8x: -0,9 → -0,7. Aquí sí es una mejora real. "
+        "La reconstrucción exacta da -0,2: a 4x se estaba subestimando 0,75 dB "
+        "y a 8x la subestimación baja a 0,53. El resto lo causa el filtro de "
+        "soxr, que descarta el contenido por encima del 90% de Nyquist — este "
+        "fixture tiene los hats de ruido blanco hasta 48 kHz."),
+    ("wav24_96000_pico_menos1", "aviso_true_peak"): (
+        "Texto asociado: lleva el valor dentro."),
 }
 
 

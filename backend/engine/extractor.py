@@ -32,10 +32,15 @@ from .versiones import PEAK_ALGORITHM_VERSION
 # validación deja de aplicar: no se hereda. `_VALIDADO_PARA_ALGORITMO` es la
 # versión contra la que se validó; si `PEAK_ALGORITHM_VERSION` deja de
 # coincidir, los tres estados caen a False solos y hay que revalidar.
-_VALIDADO_PARA_ALGORITMO = "peak-soxr_hq_4x-1"
+_VALIDADO_PARA_ALGORITMO = "peak-soxr_hq_8x-1"
 
-_VALIDACION_INTERNA_DECLARADA = True    # 2026-08-06, ver RESULTADOS_VALIDACION.md
+_VALIDACION_INTERNA_DECLARADA = True    # 2026-08-07, ver RESULTADOS_VALIDACION.md §8
 _VALIDACION_EXTERNA_DECLARADA = False   # pendiente: tests/VALIDACION_MANUAL.md
+
+# Factor de sobremuestreo para la medida de picos. Ver la nota en
+# `_analizar_loudness` y tests/test_reconstruccion.py: 8 no es un número
+# elegido a ojo, es donde el error de rejilla deja de ser medible.
+OVERSAMPLING_PICOS = 8
 
 _ALGORITMO_COINCIDE = PEAK_ALGORITHM_VERSION == _VALIDADO_PARA_ALGORITMO
 
@@ -819,7 +824,7 @@ def _analizar_loudness(audio_path: str, y_preloaded=None, sr_preloaded=None,
     Sobre el true peak — qué parte de la norma se implementa realmente:
     referencia objetivo ITU-R BS.1770-5 (2023), Anexo 2 "Sampling-rate
     conversion for the measurement of true-peak level". De ahí se implementa
-    el sobremuestreo 4x y la toma del máximo absoluto sobre la señal
+    el sobremuestreo y la toma del máximo absoluto sobre la señal
     reconstruida, canal a canal, quedándose con el mayor de los canales.
     NO se implementan: el filtro FIR polifásico concreto que especifica la
     norma (aquí se usa el resampler genérico soxr_hq), la atenuación previa
@@ -827,6 +832,17 @@ def _analizar_loudness(audio_path: str, y_preloaded=None, sr_preloaded=None,
     paso-bajo posterior. Es una aproximación al método, no el método literal;
     por eso `true_peak_validated` arranca en False y solo puede pasar a True
     tras superar backend/tests/validar_true_peak.py.
+
+    Dos desviaciones deliberadas respecto a la letra de la norma, las dos
+    medidas contra la reconstrucción exacta en tests/test_reconstruccion.py:
+
+    * Se sobremuestrea **8x, no 4x**. El 4x de la norma deja un error de
+      rejilla de hasta 0,11 dB con material realista, porque el máximo cae
+      entre los puntos calculados. A 8x baja a 0,004 dB.
+    * No se usa el FIR de 12 taps del anexo 2. Se probó: tiene rizado de
+      +0,12 dB en la banda de paso y cae 0,79 dB cerca de Nyquist, lo que lo
+      convierte en el peor de los candidatos evaluados. soxr_hq es plano
+      hasta el 90% de Nyquist.
     """
     resultado = {
         "lufs_integrado": -99.0,
@@ -839,8 +855,8 @@ def _analizar_loudness(audio_path: str, y_preloaded=None, sr_preloaded=None,
         "sample_peak_dbfs": -99.0,    # máximo absoluto de las muestras, dBFS
         # --- Estado del método de medición (no del archivo) ---
         "sample_peak_source": "no_disponible",   # archivo_nativo | audio_remuestreado_22k | no_disponible
-        "true_peak_method": "no_disponible",     # soxr_hq_4x | sample_peak_22k_fallback | no_disponible
-        "true_peak_oversampling": 0,             # 4 | 1 | 0
+        "true_peak_method": "no_disponible",     # soxr_hq_8x | sample_peak_22k_fallback | no_disponible
+        "true_peak_oversampling": 0,             # 8 | 1 | 0  (4 en análisis <= v0.5.71)
         "true_peak_internal_validation_passed": TRUE_PEAK_INTERNAL_VALIDATION_PASSED,
         "true_peak_external_validation_passed": TRUE_PEAK_EXTERNAL_VALIDATION_PASSED,
         "true_peak_validated": _TRUE_PEAK_VALIDATED,
@@ -887,7 +903,7 @@ def _analizar_loudness(audio_path: str, y_preloaded=None, sr_preloaded=None,
         resultado["lufs_integrado"] = round(lufs_i, 1) if np.isfinite(lufs_i) else -99.0
 
         # True Peak (dBTP) — ITU-R BS.1770 exige medirlo sobre el archivo a su
-        # sample rate nativo con oversampling 4x. Reusar el audio ya
+        # sample rate nativo, con sobremuestreo. Reusar el audio ya
         # resampleado a 22050 introduce overshoot del filtro de antialiasing
         # y falsea el valor (lo eleva 2-3 dB típicos).
         # Por eso releemos el archivo aquí desde disco, fuera del flujo
@@ -898,13 +914,24 @@ def _analizar_loudness(audio_path: str, y_preloaded=None, sr_preloaded=None,
             sample_peak_lin = float(np.max(np.abs(native)))
             sample_peak_db = 20.0 * float(np.log10(sample_peak_lin)) if sample_peak_lin > 1e-9 else -99.0
 
-            # Oversampling 4x con filtro polifásico de alta calidad para captar
-            # inter-sample peaks. Procesamos canal a canal en sr nativo.
+            # Sobremuestreo 8x con filtro polifásico de alta calidad, canal a
+            # canal y a sample rate nativo.
+            #
+            # Por qué 8x y no el 4x de la norma: sobremuestrear da PUNTOS, y el
+            # máximo real cae entre ellos. Con 4x el error de rejilla llega a
+            # 0,11 dB en material realista; con 8x baja a 0,004 dB. Por encima
+            # de 8x ya no aporta nada, y cuesta el doble. Medido en
+            # tests/test_reconstruccion.py contra la reconstrucción exacta.
+            #
+            # Lo que 8x NO arregla: soxr_hq borra el contenido por encima del
+            # 90% de Nyquist, así que en masters muy saturados se queda ~0,39 dB
+            # corto. Eso es error del FILTRO, no de la rejilla, y no lo cambia
+            # ningún factor de sobremuestreo.
             tp_per_channel = []
             for ch in range(native.shape[1]):
                 up = librosa.resample(
                     native[:, ch],
-                    orig_sr=native_sr, target_sr=native_sr * 4,
+                    orig_sr=native_sr, target_sr=native_sr * OVERSAMPLING_PICOS,
                     res_type="soxr_hq",
                 )
                 tp_per_channel.append(float(np.max(np.abs(up))))
@@ -919,8 +946,8 @@ def _analizar_loudness(audio_path: str, y_preloaded=None, sr_preloaded=None,
             resultado["true_peak_dbtp"] = float(max(tp_db, sample_peak_db))
             resultado["sample_peak_dbfs"] = float(sample_peak_db)
             resultado["sample_peak_source"] = "archivo_nativo"
-            resultado["true_peak_method"] = "soxr_hq_4x"
-            resultado["true_peak_oversampling"] = 4
+            resultado["true_peak_method"] = f"soxr_hq_{OVERSAMPLING_PICOS}x"
+            resultado["true_peak_oversampling"] = OVERSAMPLING_PICOS
             resultado["peak_measurement_sample_rate"] = int(native_sr)
             resultado["peak_measurement_channels"] = int(native.shape[1])
         except Exception:

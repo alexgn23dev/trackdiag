@@ -1,7 +1,7 @@
 """Contraste contra el FIR de referencia de ITU-R BS.1770-5, Anexo 2.
 
 El FIR de referencia NO es el algoritmo de producción: sirve para comparar
-soxr_hq_4x contra algo que sigue la letra de la norma. Las diferencias
+soxr_hq_8x contra algo que sigue la letra de la norma. Las diferencias
 encontradas se documentan en RESULTADOS_VALIDACION.md.
 """
 
@@ -23,7 +23,7 @@ from tests import itu_bs1770 as itu  # noqa: E402
 _DIR = tempfile.mkdtemp(prefix="mentotrack_itu_")
 _MANIFIESTO = None
 
-# Margen entre soxr_hq_4x y el FIR de la ITU sobre material de banda limitada
+# Margen entre soxr_hq_8x y el FIR de la ITU sobre material de banda limitada
 # (música real). Medido: con el espectro recortado a 10 kHz los dos coinciden
 # dentro de 0,013 dB; a 15 kHz, dentro de 0,03.
 TOL_BANDA_LIMITADA = 0.10

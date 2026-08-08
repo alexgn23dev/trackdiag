@@ -4,49 +4,111 @@
 
 ---
 
-## PRIORIDAD 0 (nueva, 2026-08-07): corregir el sesgo del medidor de true peak
+## PRIORIDAD 0 — RETIRADA el 2026-08-07, antes de implementarse
 
-Antes que cualquier campo nuevo. La validación externa con Youlean Loudness
-Meter 2.5.14 (ver `VALIDACION_MANUAL.md`) confirmó lo que ya apuntaban la
-reconstrucción sinc por FFT y el FIR normativo:
+> **Lo que decía este apartado era incorrecto.** Proponía sustituir
+> `soxr_hq_4x` por el FIR 4× del anexo 2 de BS.1770-5, dando por hecho que
+> soxr tenía un sesgo alto y que el FIR era la referencia buena. Al investigar
+> las dos preguntas abiertas que el propio plan dejaba (el fixture 08 y el
+> comportamiento a 96 kHz) resultó que **el FIR es el peor de los candidatos**
+> y que hacer el cambio habría empeorado la medición.
+>
+> El texto original queda al final de esta sección, tachado, para que se vea
+> de dónde salía. La evidencia completa está en `RESULTADOS_VALIDACION.md §8`
+> y congelada en `tests/test_reconstruccion.py` (18 tests).
 
-**`soxr_hq_4x` lee entre 0,2 y 0,33 dB por encima del valor real en material
-con energía cerca de Nyquist.**
+### Qué cambió
 
-Cuatro referencias independientes coinciden en la dirección. En los dos
-fixtures donde el sesgo es mayor, Youlean y el FIR de la ITU coinciden entre
-sí dentro de **0,02 dB** y soxr está 0,33 por encima de los dos.
+Apareció una referencia que no es otra implementación con sus propios
+compromisos, sino la definición: `tests/reconstruccion_exacta.py`. La señal
+continua detrás de un archivo muestreado es única, y su máximo se calcula sin
+elegir filtro ni taps. Contra ella, medido:
 
-Impacto medido: **162 análisis del histórico (7,4%)** tienen el true peak
-entre 0 y +0,2 dBTP. Son los que hoy se clasifican como `true_peak_over` y
-que probablemente están por debajo del techo.
+| | material realista | con energía hasta Nyquist |
+|---|---|---|
+| FIR ITU 4× (lo que proponía el plan) | 0,100 | **0,850** |
+| soxr_hq 4× (lo que hay en producción) | 0,114 | 0,387 |
+| soxr_hq **8×** | **0,004** | 0,387 |
 
-### Qué hacer
+Las dos preguntas abiertas quedan contestadas:
 
-Sustituir el sobremuestreo de producción por el FIR 4× del anexo 2 de
-BS.1770-5, que **ya está implementado** en `tests/itu_bs1770.py` (solo se usa
-en tests). Está verificado estructuralmente y ahora también respaldado por un
-medidor profesional.
+1. **Fixture 08** — el FIR no "se descuelga" por un caso raro: un recorte duro
+   llena el espectro hasta Nyquist y ahí el filtro de 12 taps cae 0,79 dB.
+   Es su respuesta en frecuencia, medida tono a tono.
+2. **96 kHz** — no hay nada que decidir. Con material realista a 88,2 o 96 kHz
+   el pico entre muestras es menor de 0,05 dB y los dos medidores coinciden
+   con la reconstrucción exacta. El fixture 05 es un tono de 24 kHz: por
+   encima de lo audible.
 
-Antes de moverlo hay que resolver dos cosas medidas y documentadas:
+Y aparece un hallazgo que el plan no contemplaba: **parte del error no es del
+filtro, es de la rejilla.** 4× da cuatro puntos por muestra y el máximo cae
+entre ellos.
 
-1. **El fixture 08** (recorte solo en el canal izquierdo) es el único donde el
-   FIR se descuelga: +3,32 frente a +3,70 de Youlean y de ffmpeg. Investigar
-   antes de adoptarlo como algoritmo de producción.
-2. **A 96 kHz** las implementaciones divergen en señales patológicas (fixture
-   05: Youlean −0,11 y soxr +0,10 respecto al valor analítico). La norma
-   especifica 4× pensando en 44,1 y 48 kHz. Decidir qué se hace a rates altos.
+### Lo que sí conviene hacer — PENDIENTE DE APROBACIÓN
 
-### Consecuencias del cambio
+**Subir el sobremuestreo de 4× a 8×, sin cambiar de filtro.** Con material
+realista el error baja de 0,114 dB a 0,004 dB. Por encima de 8× no aporta
+nada. Coste medido en una pista de 6 min estéreo: 0,40 s → 0,85 s.
 
-* Sube `PEAK_ALGORITHM_VERSION` a `peak-itu_fir_4x-1`, y con ello los tres
+Consecuencias, que son reales y hay que aceptarlas a propósito:
+
+* Sube `PEAK_ALGORITHM_VERSION` a `peak-soxr_hq_8x-1`, y con ello los tres
   estados de validación caen a `False` solos: **hay que revalidar entero**,
   incluida otra ronda manual con el medidor externo.
-* Los análisis nuevos dejan de ser numéricamente comparables con los
-  anteriores. Es justo para eso que cada fila guarda su
+* Los análisis nuevos leerán **hasta 0,11 dB más alto** que los anteriores, no
+  más bajo. La dirección es la contraria a la que suponía el plan retirado:
+  a 4× se estaba subestimando.
+* Por tanto los 162 análisis entre 0 y +0,2 dBTP **no se "rescatan"**. Si
+  acaso, algún análisis más cruzaría el 0. La comparabilidad con el histórico
+  se rompe, que es justo para lo que cada fila guarda su
   `peak_algorithm_version`.
-* Alrededor del 7% del histórico cambiaría de categoría si se recalculara —
-  cosa que **no** se hará automáticamente: los archivos no se conservan.
+
+### Lo que queda irreducible
+
+Con material que tiene energía por encima de 20 kHz (masters muy saturados),
+soxr se queda 0,39 dB corto **y subir el factor no lo arregla**: ahí el error
+es del filtro. Ningún medidor comercial acierta tampoco — Youlean se desvía
+0,16 dB en la dirección opuesta sobre los mismos fixtures.
+
+Eso no es un fallo que se pueda cerrar: es la incertidumbre de la medida. La
+consecuencia de producto es que **la frontera de `true_peak_over` está clavada
+en 0,0 dBTP, que es más fino de lo que la medición puede resolver en ese
+material.** Opciones, para decidir aparte del cambio de factor:
+
+* Una banda intermedia entre 0 y ~+0,3 dBTP con lenguaje de "está en el
+  límite", en vez de afirmar que pasa del techo.
+* Publicar la energía cerca de Nyquist como señal de confianza: cuando es
+  alta, el true peak tiene más incertidumbre y el texto puede decirlo.
+
+### Y qué hacer con la validación externa
+
+El FAIL registrado en `VALIDACION_MANUAL.md` **se mantiene**: el criterio
+acordado era coincidir con un medidor externo y no se cumplió. Lo que la
+investigación demuestra es que ese criterio medía lo que no era — Youlean se
+desvía de la verdad tanto como soxr, en sentido contrario.
+
+Propuesta, que es más estricta que la que había y no más laxa: **juzgar contra
+la reconstrucción exacta**, que sí es ground truth, con tolerancia ±0,05 dB en
+material realista; y dejar la comparación con medidores comerciales como
+documentación de la dispersión entre implementaciones, no como aprobado o
+suspenso. No es tocar la tolerancia: es cambiar el árbitro por uno demostrable.
+
+<details>
+<summary>Texto original de la prioridad 0, retirado</summary>
+
+> ~~La validación externa con Youlean Loudness Meter 2.5.14 confirmó lo que ya
+> apuntaban la reconstrucción sinc por FFT y el FIR normativo: `soxr_hq_4x` lee
+> entre 0,2 y 0,33 dB por encima del valor real en material con energía cerca
+> de Nyquist. Cuatro referencias independientes coinciden en la dirección.
+> Qué hacer: sustituir el sobremuestreo de producción por el FIR 4× del anexo 2
+> de BS.1770-5. Sube `PEAK_ALGORITHM_VERSION` a `peak-itu_fir_4x-1`. Alrededor
+> del 7% del histórico cambiaría de categoría si se recalculara.~~
+
+El error de razonamiento, para no repetirlo: se tomó como "valor real" el
+acuerdo entre dos medidores (Youlean y el FIR) sobre dos fixtures. Coincidían
+porque ambos atenúan la zona alta del espectro, no porque acertaran.
+
+</details>
 
 ---
 
