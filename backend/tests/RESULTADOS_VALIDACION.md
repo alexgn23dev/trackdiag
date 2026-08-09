@@ -393,6 +393,59 @@ Congelado en `test_reconstruccion.py::TestContraUnaVerdadConstruida`.
 
 ---
 
+## 8c. El árbitro cambia: la verdad construida, no un medidor comercial (v0.5.73)
+
+Decidido por Alex el 2026-08-09, sobre la evidencia del §8b.
+
+### Qué se cambia
+
+`_TRUE_PEAK_VALIDATED` deja de depender del contraste manual con un medidor
+de escritorio. Pasa a ser:
+
+```python
+_TRUE_PEAK_VALIDATED = (TRUE_PEAK_GROUND_TRUTH_VALIDATION_PASSED
+                        and TRUE_PEAK_INTERNAL_VALIDATION_PASSED)
+```
+
+| estado | valor | qué comprueba | ¿decide? |
+|---|---|---|---|
+| `true_peak_ground_truth_validation_passed` | **True** | Recuperar un pico construido de antemano | **Sí** |
+| `true_peak_internal_validation_passed` | **True** | Batería contra analítico, ffmpeg, FIR, scipy | **Sí** |
+| `true_peak_external_validation_passed` | False | Distancia a un medidor comercial | **No, informativa** |
+| `true_peak_validated` | **True** | Las dos primeras | — |
+
+### Por qué el medidor comercial deja de decidir
+
+No es que Youlean mida mal. Es que **no es un patrón**. Sobre los fixtures 01
+y 06, frente al pico real: Youlean −0,16 dB, soxr +0,17 dB. Los dos se
+desvían, en direcciones opuestas y por la misma magnitud. Certificar contra
+Youlean era corregir un examen con las respuestas de otro alumno.
+
+El registro de `VALIDACION_MANUAL.md` **se conserva** y sigue siendo útil: 
+documenta cuánto se separan entre sí las implementaciones reales, que es
+exactamente el dato que hace falta para hablarle al usuario de incertidumbre.
+Lo que ya no hace es conceder ni bloquear el aprobado.
+
+### Lo que impide que esto sea un autoaprobado
+
+`_VALIDACION_VERDAD_DECLARADA = True` es una constante que escribe una
+persona. Sola no vale nada. Lo que la sostiene es
+`test_picos.py::test_la_declaracion_de_validado_no_puede_mentir`, que
+**vuelve a hacer la medición** con el medidor desplegado y exige que el
+resultado coincida con lo declarado.
+
+Comprobado que el seguro muerde en las dos direcciones:
+
+```
+declaración a False con la medida acertando  → FALLA
+tolerancia imposible (0,0001 dB)             → FALLA
+```
+
+Error real del medidor desplegado contra la verdad construida: **0,0033 dB**,
+frente a una tolerancia de 0,01.
+
+---
+
 ## 9. Lo que se cambió: 4× → 8× (v0.5.72, 2026-08-07)
 
 Aprobado por Alex tras el §8. **No se cambió el filtro** —el FIR de la norma

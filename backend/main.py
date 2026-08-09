@@ -59,7 +59,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-APP_VERSION = "0.5.72"
+APP_VERSION = "0.5.73"
 
 app = FastAPI(title="Mentotrack API", version=APP_VERSION)
 app.state.limiter = limiter
@@ -353,13 +353,16 @@ def tecnico_versiones(request: Request):
     from engine.versiones import algoritmos, dependencias, ffmpeg_version
     from entorno import resumen as resumen_entorno
     from engine.extractor import (
-        TRUE_PEAK_EXTERNAL_VALIDATION_PASSED, TRUE_PEAK_INTERNAL_VALIDATION_PASSED,
+        TRUE_PEAK_EXTERNAL_VALIDATION_PASSED,
+        TRUE_PEAK_GROUND_TRUTH_VALIDATION_PASSED,
+        TRUE_PEAK_INTERNAL_VALIDATION_PASSED,
         _TRUE_PEAK_VALIDATED,
     )
     return {
         "backend_version": APP_VERSION,
         **algoritmos(),
         "validacion_true_peak": {
+            "true_peak_ground_truth_validation_passed": TRUE_PEAK_GROUND_TRUTH_VALIDATION_PASSED,
             "true_peak_internal_validation_passed": TRUE_PEAK_INTERNAL_VALIDATION_PASSED,
             "true_peak_external_validation_passed": TRUE_PEAK_EXTERNAL_VALIDATION_PASSED,
             "true_peak_validated": _TRUE_PEAK_VALIDATED,

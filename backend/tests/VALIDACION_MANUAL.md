@@ -1,31 +1,38 @@
-# Validación externa del true peak — registro manual
+# Contraste contra un medidor comercial — registro manual
 
-> ## ⚠️ CADUCADA — hay que repetirla (2026-08-07)
+> ## ℹ️ INFORMATIVO. Ya no decide, y no hay que repetirlo (2026-08-09)
 >
-> Todo lo que hay debajo se midió con `peak-soxr_hq_4x-1`. La v0.5.72 pasa el
-> sobremuestreo a 8×, así que la versión del algoritmo es ahora
-> **`peak-soxr_hq_8x-1`** y esta validación **ya no aplica**: no se hereda.
-> Los tres estados están en `False` por ese mecanismo.
+> Este documento nació como "validación externa": el aprobado final del
+> medidor dependía de coincidir con un medidor profesional de escritorio.
+> **Ese planteamiento era incorrecto y se retiró en la v0.5.73.**
 >
-> **Antes de repetirla, leer `RESULTADOS_VALIDACION.md §8`.** El criterio de
-> aprobación que se usó abajo —coincidir con un medidor comercial— resultó
-> estar mal planteado: medido contra la reconstrucción exacta, Youlean se
-> desvía 0,16 dB en los fixtures 01 y 06, en dirección contraria a soxr. Los
-> dos fallan; ninguno es la verdad. Hay una propuesta de árbitro nuevo en
-> `DISENO_FASE_2B.md` pendiente de decidir.
+> El motivo, medido: un medidor comercial no es un patrón. Frente al pico
+> real, sobre los fixtures 01 y 06, **Youlean se desvía −0,16 dB y soxr
+> +0,17 dB**. Los dos fallan, en direcciones opuestas y por la misma
+> magnitud. Certificar contra Youlean era corregir un examen con las
+> respuestas de otro alumno.
 >
-> Qué cambia numéricamente con el 8×, para saber qué esperar: de los 30
-> fixtures, **solo 3 se mueven a 1 decimal**. Los dos de continua tienen el
-> máximo en el borde del archivo y ahí el valor no converge con ningún factor;
-> el de 96 kHz sube de −0,9 a −0,7, acercándose al valor exacto de −0,2.
+> **Quién decide ahora:** la capacidad de recuperar un pico *construido de
+> antemano* — se fabrica una señal a 44100×64 limitada en banda, se anota su
+> máximo real, se decima y se mide. Ver `RESULTADOS_VALIDACION.md §8b y §8c`.
+>
+> **Qué sigue valiendo de aquí abajo:** es la mejor medida que tenemos de
+> cuánto se separan entre sí las implementaciones reales. Ese número es justo
+> el que hace falta para hablarle al usuario de incertidumbre — y para no
+> extrañarse cuando su medidor y Mentotrack no den lo mismo.
+>
+> **Los datos de abajo se tomaron con `peak-soxr_hq_4x-1`.** Desde la v0.5.72
+> el algoritmo es `peak-soxr_hq_8x-1`. Si alguna vez se repite el contraste,
+> hay que rehacer la tabla — pero **no bloquea nada**.
 
 ---
 
 **Estado del registro histórico: EJECUTADA EL 2026-08-07 · RESULTADO: NO PASA.**
 
-`TRUE_PEAK_EXTERNAL_VALIDATION_PASSED` permanece en `False` en
-`backend/engine/extractor.py`, y por tanto `_TRUE_PEAK_VALIDATED` también.
-**No se ha tocado ninguna tolerancia ni el algoritmo para forzar el paso.**
+`TRUE_PEAK_EXTERNAL_VALIDATION_PASSED` permanece en `False`. **No se tocó
+ninguna tolerancia ni el algoritmo para forzar el paso** — se investigó, y la
+investigación acabó demostrando que el árbitro estaba mal elegido. Desde la
+v0.5.73 este estado ya no arrastra a `_TRUE_PEAK_VALIDATED`.
 
 ## Resultado
 
@@ -102,13 +109,18 @@ Los 10 fixtures se generan con `python tests/fixtures.py <destino>`; el
 script `preparar_validacion.py` del histórico de trabajo los deja numerados.
 Al repetirla hay que medir cada archivo **a su sample rate nativo**.
 
-## Por qué hace falta
+## Por qué se montó así, y por qué era insuficiente
 
-Las cuatro referencias de `validar_true_peak.py` (valor analítico, FIR de la
-ITU, sinc por FFT, ffmpeg) viven todas dentro del mismo ecosistema
-Python/ffmpeg y comparten decodificador de archivo. Un medidor profesional de
-escritorio es la única referencia realmente ajena: otro decodificador, otra
-implementación, otro fabricante.
+El razonamiento original: las cuatro referencias de `validar_true_peak.py`
+(valor analítico, FIR de la ITU, sinc por FFT, ffmpeg) viven dentro del mismo
+ecosistema Python/ffmpeg y comparten decodificador. Un medidor profesional de
+escritorio es otro decodificador, otra implementación, otro fabricante.
+
+Eso es cierto y sigue siendo útil. **El error fue confundir "ajeno" con
+"correcto".** Un segundo medidor independiente detecta que discrepáis, pero no
+dice quién acierta — y aquí resultó que no acertaba ninguno de los dos. Lo que
+faltaba no era otra implementación, sino un **patrón**: un pico conocido de
+antemano que el medidor tenga que recuperar. Eso es lo que hay ahora.
 
 ## Cómo rellenarla
 
@@ -134,17 +146,20 @@ implementación, otro fabricante.
 
 4. Rellenar la tabla, calcular las diferencias y marcar el resultado.
 
-## Criterio de aprobación
+## Criterio de aprobación — RETIRADO
 
-| Tipo de fixture | Tolerancia frente al medidor externo |
+Estas eran las tolerancias con las que este documento decidía. **Ya no
+deciden nada**; se conservan para poder leer la tabla de arriba.
+
+| Tipo de fixture | Tolerancia que se usó |
 |---|---|
 | Con valor analítico conocido (`isp_fs4`, continua) | ±0,15 dB |
 | Material musical | ±0,30 dB |
-| Señales con discontinuidad (`dc_*`) | Solo se registra; **no** decide, porque cada implementación asume algo distinto fuera del archivo |
+| Señales con discontinuidad (`dc_*`) | Solo se registraba |
 
-Aprueba si **todas** las filas que deciden quedan dentro de tolerancia. Si
-alguna se sale: **no tocar la tolerancia**. Investigar primero, igual que se
-hizo con el falso positivo de la continua (ver `RESULTADOS_VALIDACION.md`).
+La regla de "si alguna se sale, **no tocar la tolerancia**, investigar
+primero" se cumplió — y la investigación es justo lo que acabó retirando el
+criterio entero. Ver `RESULTADOS_VALIDACION.md §8b`.
 
 ## Medidor utilizado
 
@@ -158,14 +173,14 @@ hizo con el falso positivo de la continua (ver `RESULTADOS_VALIDACION.md`).
 
 ## Al terminar
 
-Si todas las filas que deciden salen ✅:
+**Ya no hay nada que activar.** Este contraste no concede el aprobado desde la
+v0.5.73 — ver el aviso del principio.
 
-1. Rellenar la sección «Medidor utilizado».
-2. Poner en `backend/engine/extractor.py`:
-   ```python
-   TRUE_PEAK_EXTERNAL_VALIDATION_PASSED = True   # ver tests/VALIDACION_MANUAL.md
-   ```
-   `_TRUE_PEAK_VALIDATED` pasará a `True` solo, porque se deriva de las dos.
-3. Actualizar `test_entorno.py::test_externa_no_pasa_todavia`, que hoy
-   comprueba justo lo contrario y fallará a propósito.
-4. Anotarlo en `RESULTADOS_VALIDACION.md`.
+Si alguna vez se repite, lo único que hay que hacer es rehacer la tabla y
+anotar la desviación observada en `RESULTADOS_VALIDACION.md`. Sirve para
+saber cuánta distancia hay con lo que ve el usuario en su DAW, no para
+decidir si el motor está bien.
+
+**Lo que NO hay que hacer:** poner `_VALIDACION_EXTERNA_DECLARADA = True`
+esperando que eso cambie `true_peak_validated`. Ya no entra en esa cuenta, y
+`test_entorno.py::test_la_externa_es_informativa_y_no_decide` lo comprueba.

@@ -40,8 +40,14 @@ def main():
     for k, v in algos.items():
         print(f"  {k:28} {v}")
     try:
-        from engine.extractor import _TRUE_PEAK_VALIDATED
-        print(f"  {'true_peak_validated':28} {_TRUE_PEAK_VALIDATED}")
+        from engine import extractor as _ex
+        print(f"  {'validación verdad construida':28} "
+              f"{_ex.TRUE_PEAK_GROUND_TRUTH_VALIDATION_PASSED}   <- la que decide")
+        print(f"  {'validación interna':28} "
+              f"{_ex.TRUE_PEAK_INTERNAL_VALIDATION_PASSED}")
+        print(f"  {'validación externa':28} "
+              f"{_ex.TRUE_PEAK_EXTERNAL_VALIDATION_PASSED}   <- informativa, no decide")
+        print(f"  {'true_peak_validated':28} {_ex._TRUE_PEAK_VALIDATED}")
     except Exception:
         pass
 

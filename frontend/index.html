@@ -203,7 +203,7 @@
     // /api/health. Si no coincide, este fichero viene de la caché del
     // navegador y puede estar dejando de enviar campos que el backend ya
     // espera — se recarga una sola vez y, si aun así no cuadra, se avisa.
-    const APP_VERSION = '0.5.72';
+    const APP_VERSION = '0.5.73';
 
     function comprobarVersionFrontend(onDesfase, onEntorno) {
         fetch(`${API_URL}/api/health`, { cache: 'no-store' })
@@ -3905,6 +3905,7 @@
                     true_peak_method: da.loudness?.true_peak_method,
                     true_peak_oversampling: da.loudness?.true_peak_oversampling,
                     true_peak_validated: da.loudness?.true_peak_validated,
+                    true_peak_ground_truth_validation_passed: da.loudness?.true_peak_ground_truth_validation_passed,
                     true_peak_internal_validation_passed: da.loudness?.true_peak_internal_validation_passed,
                     true_peak_external_validation_passed: da.loudness?.true_peak_external_validation_passed,
                     peak_measurement_sample_rate: da.loudness?.peak_measurement_sample_rate,

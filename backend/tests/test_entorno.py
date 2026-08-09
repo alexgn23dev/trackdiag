@@ -182,32 +182,42 @@ class TestResumen(BaseEntorno):
 
 
 class TestEstadosDeValidacion(BaseEntorno):
-    """Los tres estados no pueden colapsarse en uno."""
+    """Los cuatro estados no pueden colapsarse en uno."""
 
-    def test_son_tres_campos_distintos(self):
+    def test_son_cuatro_campos_distintos(self):
         from engine import extractor
+        self.assertIsInstance(extractor.TRUE_PEAK_GROUND_TRUTH_VALIDATION_PASSED, bool)
         self.assertIsInstance(extractor.TRUE_PEAK_INTERNAL_VALIDATION_PASSED, bool)
         self.assertIsInstance(extractor.TRUE_PEAK_EXTERNAL_VALIDATION_PASSED, bool)
         self.assertIsInstance(extractor._TRUE_PEAK_VALIDATED, bool)
+
+    def test_la_verdad_construida_pasa(self):
+        from engine import extractor
+        self.assertTrue(extractor.TRUE_PEAK_GROUND_TRUTH_VALIDATION_PASSED,
+                        "ver RESULTADOS_VALIDACION.md §8b")
 
     def test_interna_pasa(self):
         from engine import extractor
         self.assertTrue(extractor.TRUE_PEAK_INTERNAL_VALIDATION_PASSED,
                         "la batería automatizada pasa: ver RESULTADOS_VALIDACION.md")
 
-    def test_externa_no_pasa_todavia(self):
+    def test_la_externa_es_informativa_y_no_decide(self):
+        """v0.5.73. Se montó creyendo que un medidor comercial era el árbitro
+        definitivo; medido contra la verdad construida, Youlean se desvía
+        -0,16 dB donde soxr se desvía +0,17. Los dos fallan. Sigue registrada
+        porque documenta la dispersión real entre implementaciones, pero no
+        puede bloquear ni conceder el aprobado."""
         from engine import extractor
-        self.assertFalse(extractor.TRUE_PEAK_EXTERNAL_VALIDATION_PASSED,
-                         "falta el contraste manual con un medidor profesional")
+        self.assertFalse(extractor.TRUE_PEAK_EXTERNAL_VALIDATION_PASSED)
+        self.assertTrue(extractor._TRUE_PEAK_VALIDATED,
+                        "la global no debe depender ya del medidor comercial")
 
     def test_la_global_es_la_conjuncion_y_no_se_pone_a_mano(self):
         from engine import extractor
         self.assertEqual(
             extractor._TRUE_PEAK_VALIDATED,
-            extractor.TRUE_PEAK_INTERNAL_VALIDATION_PASSED
-            and extractor.TRUE_PEAK_EXTERNAL_VALIDATION_PASSED)
-        self.assertFalse(extractor._TRUE_PEAK_VALIDATED,
-                         "sin validación externa, la global no puede ser True")
+            extractor.TRUE_PEAK_GROUND_TRUTH_VALIDATION_PASSED
+            and extractor.TRUE_PEAK_INTERNAL_VALIDATION_PASSED)
 
     def test_la_global_se_deriva_en_el_codigo(self):
         """Debe ser una expresión, no un literal: así no se puede poner a True
@@ -216,7 +226,8 @@ class TestEstadosDeValidacion(BaseEntorno):
                             "engine", "extractor.py")
         with open(ruta, encoding="utf-8") as f:
             codigo = f.read()
-        self.assertIn("_TRUE_PEAK_VALIDATED = (TRUE_PEAK_INTERNAL_VALIDATION_PASSED", codigo)
+        self.assertIn("_TRUE_PEAK_VALIDATED = (TRUE_PEAK_GROUND_TRUTH_VALIDATION_PASSED",
+                      codigo)
 
     def test_llegan_al_analisis(self):
         import tempfile
@@ -232,7 +243,8 @@ class TestEstadosDeValidacion(BaseEntorno):
         ruta = os.path.join(tempfile.mkdtemp(), "e.wav")
         sf.write(ruta, np.column_stack([x, x]), 44100, subtype="PCM_24")
         lo = extraer_senales(ruta, omitir_armonia=True)["loudness"]
-        for campo in ("true_peak_internal_validation_passed",
+        for campo in ("true_peak_ground_truth_validation_passed",
+                      "true_peak_internal_validation_passed",
                       "true_peak_external_validation_passed", "true_peak_validated"):
             self.assertIn(campo, lo)
 

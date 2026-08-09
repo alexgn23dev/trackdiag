@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "version": "0.5.73",
+      "date": "2026-08-09",
+      "title": "El medidor de picos, certificado",
+      "changes": [
+        "El medidor de true peak ya está certificado: se le da una señal cuyo pico exacto conocemos de antemano y tiene que acertarlo. Lo hace con un error de 0,003 dB.",
+        "Si tu medidor favorito y Mentotrack no dan exactamente lo mismo, es normal: entre medidores profesionales hay diferencias de hasta 0,3 dB en másters muy saturados. Lo tenemos medido."
+      ]
+    },
+    {
       "version": "0.5.72",
       "date": "2026-08-07",
       "title": "El true peak, medido más fino",

@@ -43,7 +43,8 @@ class TestPersistencia(unittest.TestCase):
     CAMPOS = [
         "true_peak_dbtp", "sample_peak_dbfs", "nivel_true_peak",
         "sample_peak_source", "true_peak_method", "true_peak_oversampling",
-        "true_peak_validated", "peak_measurement_sample_rate",
+        "true_peak_validated", "true_peak_ground_truth_validation_passed",
+        "peak_measurement_sample_rate",
         "peak_measurement_channels",
         "archivo_extension", "archivo_container", "archivo_codec",
         "archivo_subtype", "archivo_sample_format", "archivo_storage_bits",
