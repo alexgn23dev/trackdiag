@@ -87,8 +87,17 @@ def medir_completo(ruta: str) -> dict:
     es_stereo = y_stereo.ndim == 2 and y_stereo.shape[0] == 2
     y = np.mean(y_stereo, axis=0) if es_stereo else (
         y_stereo if y_stereo.ndim == 1 else y_stereo[0])
-    return _analizar_loudness(ruta, y_preloaded=y, sr_preloaded=sr,
-                              y_stereo_preloaded=y_stereo if es_stereo else None)
+    from engine.extractor import _analizar_formato, _clasificar_recorte
+    formato = _analizar_formato(ruta)
+    try:
+        onsets = librosa.onset.onset_detect(y=y, sr=sr, units="time")
+    except Exception:
+        onsets = None
+    res = _analizar_loudness(ruta, y_preloaded=y, sr_preloaded=sr,
+                             y_stereo_preloaded=y_stereo if es_stereo else None,
+                             formato=formato, onsets_seg=onsets)
+    res.update(_clasificar_recorte(res, formato))
+    return res
 
 
 def medir(ruta: str) -> dict:

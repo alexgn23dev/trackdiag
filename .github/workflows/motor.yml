@@ -90,11 +90,21 @@ jobs:
           docker run --rm -w /app/backend mentotrack:ci \
             python scripts/verificar_lock.py
 
+      # El frontend no tiene build step: el JSX se transforma en el navegador.
+      # Un error de sintaxis no se ve al desplegar, se ve cuando un usuario
+      # abre la página y encuentra una pantalla en blanco. Aquí se compila con
+      # el mismo Babel que carga la página por CDN.
+      - name: El JSX del frontend compila
+        if: always()
+        run: |
+          npm install --no-audit --no-fund --no-save @babel/standalone
+          node frontend/verificar_jsx.js frontend/index.html
+
       - name: Bloques de tests por área
         if: always()
         run: |
           for m in test_picos test_formato test_sin_senal test_itu_referencia \
-                   test_reconstruccion test_versiones test_frontend \
+                   test_reconstruccion test_recorte test_versiones test_frontend \
                    test_entorno test_tempo test_taxonomia_picos \
                    test_compat_legacy_v2; do
             echo "::group::$m"

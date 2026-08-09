@@ -103,6 +103,7 @@ cambiar la configuración del repositorio.
 | `test_sin_senal.py` | 422 en silencio; un archivo bajo pero real se analiza igual |
 | `test_itu_referencia.py` | soxr contra el FIR normativo |
 | `test_reconstruccion.py` | Qué mide de verdad cada medidor. Verifica la referencia exacta y acota el error de cada candidato |
+| `test_recorte.py` | Fase 2B: contar muestras a fondo de escala. Qué se puede afirmar, qué no se acusa y que el texto enseñe |
 | `test_versiones.py` | Versionado de algoritmos y dependencias fijadas |
 | `test_frontend.py` | Guards estáticos sobre `index.html` |
 
