@@ -47,6 +47,7 @@ class TestContratoCampos(unittest.TestCase):
     CAMPOS = [
         "true_peak_dbtp", "sample_peak_dbfs", "sample_peak_source",
         "true_peak_method", "true_peak_oversampling", "true_peak_validated",
+        "true_peak_ground_truth_validation_passed",
         "peak_measurement_sample_rate", "peak_measurement_channels",
     ]
 
@@ -68,10 +69,48 @@ class TestContratoCampos(unittest.TestCase):
             self.assertIn(r["true_peak_oversampling"], (0, 1, 8), nombre)
             self.assertIsInstance(r["true_peak_validated"], bool, nombre)
 
-    def test_validated_es_false_hasta_pasar_la_validacion(self):
-        # No puede ponerse a True "porque sí": solo tras validar_true_peak.py.
+    def test_la_declaracion_de_validado_no_puede_mentir(self):
+        """El seguro de todo el montaje.
+
+        `_VALIDACION_VERDAD_DECLARADA` es una constante que pone una persona a
+        mano. Si nadie la comprueba, no vale nada: cualquiera puede escribir
+        True y el motor se declara validado sin haber medido.
+
+        Aquí se vuelve a hacer la medición de verdad —fabricar una señal cuyo
+        pico se conoce de antemano, decimarla y pedirle al medidor DESPLEGADO
+        que lo recupere— y se exige que el resultado coincida con lo
+        declarado. Poner True sin que la medida acompañe rompe el CI.
+        """
+        from engine.extractor import (OVERSAMPLING_PICOS,
+                                      TOL_VERDAD_CONSTRUIDA_DB,
+                                      TRUE_PEAK_GROUND_TRUTH_VALIDATION_PASSED)
+        from tests.test_reconstruccion import _fabricar_con_verdad_conocida
+
+        import librosa
+
+        peor = 0.0
+        # Contenido hasta 20 kHz: el rango en el que trabaja un bounce real.
+        for semilla, f_max in ((1, 20000), (2, 20000), (3, 16000),
+                               (4, 10000), (7, 5000)):
+            archivo, verdad = _fabricar_con_verdad_conocida(semilla, f_max)
+            up = librosa.resample(archivo.astype(np.float32), orig_sr=44100,
+                                  target_sr=44100 * OVERSAMPLING_PICOS,
+                                  res_type="soxr_hq")
+            medido = 20.0 * np.log10(max(float(np.max(np.abs(up))), 1e-12))
+            peor = max(peor, abs(medido - 20.0 * np.log10(verdad)))
+
+        acierta = peor <= TOL_VERDAD_CONSTRUIDA_DB
+        self.assertEqual(
+            acierta, TRUE_PEAK_GROUND_TRUTH_VALIDATION_PASSED,
+            f"error máximo medido {peor:.4f} dB frente a una tolerancia de "
+            f"{TOL_VERDAD_CONSTRUIDA_DB} dB, pero la declaración dice "
+            f"{TRUE_PEAK_GROUND_TRUTH_VALIDATION_PASSED}")
+
+    def test_validated_refleja_el_estado_real(self):
         for nombre in _MANIFIESTO:
-            self.assertFalse(medir(nombre)["true_peak_validated"], nombre)
+            from engine.extractor import _TRUE_PEAK_VALIDATED
+            self.assertEqual(medir(nombre)["true_peak_validated"],
+                             _TRUE_PEAK_VALIDATED, nombre)
 
     def test_json_serializable(self):
         """Ningún campo puede ser inf/NaN: Starlette rechaza eso con allow_nan=False."""

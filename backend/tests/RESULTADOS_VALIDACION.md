@@ -333,6 +333,119 @@ lo que no era. La propuesta está en `DISENO_FASE_2B.md`.
 
 ---
 
+## 8b. La referencia, comprobada contra una verdad construida (2026-08-08)
+
+El §8 justificaba la referencia por teoría: "es la definición". Eso es poco, y
+Alex lo señaló. Esta es la comprobación empírica.
+
+**El método.** La verdad no se mide, se construye:
+
+1. Se fabrica una señal a 44100 × 64 = **2,8 MHz** cuyo contenido no pasa de
+   20 kHz. A ese rate está tan sobremuestreada que su máximo discreto ya es el
+   continuo.
+2. Se anota ese máximo. Es la verdad, conocida de antemano.
+3. Se decima quedándose 1 de cada 64 muestras — sin filtrar, porque la señal
+   ya venía limitada en banda. Eso es el archivo de 44,1 kHz.
+4. Se le pide a cada medidor que recupere el número del paso 2 mirando solo el
+   archivo del paso 3.
+
+**Control del patrón:** reinterpolar la verdad 4× más fino la mueve
+**0,00002 dB**. El patrón es sólido.
+
+**Resultado** — error en dB frente al pico real, siete señales:
+
+| señal | exacta 4× | exacta 8× | **exacta 16×** | FIR ITU 4× | soxr 4× | soxr 8× |
+|---|---|---|---|---|---|---|
+| hasta 20 kHz (s1) | −0,021 | −0,002 | −0,002 | +0,025 | −0,021 | −0,002 |
+| hasta 20 kHz (s2) | −0,029 | −0,001 | −0,001 | −0,020 | −0,029 | −0,001 |
+| hasta 16 kHz (s3) | −0,003 | −0,003 | −0,001 | −0,018 | −0,003 | −0,003 |
+| hasta 10 kHz (s4) | −0,016 | −0,002 | −0,002 | **−0,113** | −0,016 | −0,002 |
+| hasta 21,5 kHz (s5) | −0,006 | −0,003 | −0,000 | −0,004 | −0,033 | −0,034 |
+| hasta 21,9 kHz (s6) | −0,012 | −0,006 | −0,000 | +0,012 | +0,073 | +0,085 |
+| hasta 5 kHz (s7) | −0,001 | −0,001 | −0,000 | −0,010 | −0,001 | −0,001 |
+| **máx \|error\|** | 0,029 | 0,006 | **0,002** | 0,113 | 0,073 | 0,085 |
+
+### Qué queda demostrado
+
+1. **La referencia acierta.** Recupera un pico que no conocía, con 0,002 dB de
+   error, en siete señales de anchos de banda distintos. Deja de ser un
+   argumento teórico.
+2. **El error de rejilla es real y se ve solo.** La misma referencia perfecta
+   pierde 0,029 dB a 4× y 0,006 a 8×. Es exactamente lo que corrigió la
+   v0.5.72, medido sin ningún filtro de por medio.
+3. **El FIR de la norma se equivoca 0,113 dB con una señal que no pasa de
+   10 kHz.** No es la zona alta del espectro: es su rizado en la banda de
+   paso, con material completamente benigno. Descartarlo fue lo correcto.
+
+### Dos límites, declarados
+
+* **Con energía pegada a Nyquist (s5, s6) el 8× no rescata nada**, y en un
+  caso queda 0,012 dB por detrás del 4×. Ahí manda el filtro de soxr, no la
+  rejilla. Es inaudible y está muy por debajo de la décima con la que se
+  clasifica, pero el número no es cero y queda acotado en
+  `test_con_energia_pegada_a_nyquist_el_8x_no_rescata_nada`.
+* **Esta prueba valida la interpolación, no los bordes.** Las señales
+  construidas son periódicas, que es el caso favorable para el método de la
+  FFT. Lo que ocurre en el primer y último milisegundo de un archivo real
+  sigue siendo terreno indefinido — ver §5b y el test del borde.
+
+Congelado en `test_reconstruccion.py::TestContraUnaVerdadConstruida`.
+
+---
+
+## 8c. El árbitro cambia: la verdad construida, no un medidor comercial (v0.5.73)
+
+Decidido por Alex el 2026-08-09, sobre la evidencia del §8b.
+
+### Qué se cambia
+
+`_TRUE_PEAK_VALIDATED` deja de depender del contraste manual con un medidor
+de escritorio. Pasa a ser:
+
+```python
+_TRUE_PEAK_VALIDATED = (TRUE_PEAK_GROUND_TRUTH_VALIDATION_PASSED
+                        and TRUE_PEAK_INTERNAL_VALIDATION_PASSED)
+```
+
+| estado | valor | qué comprueba | ¿decide? |
+|---|---|---|---|
+| `true_peak_ground_truth_validation_passed` | **True** | Recuperar un pico construido de antemano | **Sí** |
+| `true_peak_internal_validation_passed` | **True** | Batería contra analítico, ffmpeg, FIR, scipy | **Sí** |
+| `true_peak_external_validation_passed` | False | Distancia a un medidor comercial | **No, informativa** |
+| `true_peak_validated` | **True** | Las dos primeras | — |
+
+### Por qué el medidor comercial deja de decidir
+
+No es que Youlean mida mal. Es que **no es un patrón**. Sobre los fixtures 01
+y 06, frente al pico real: Youlean −0,16 dB, soxr +0,17 dB. Los dos se
+desvían, en direcciones opuestas y por la misma magnitud. Certificar contra
+Youlean era corregir un examen con las respuestas de otro alumno.
+
+El registro de `VALIDACION_MANUAL.md` **se conserva** y sigue siendo útil: 
+documenta cuánto se separan entre sí las implementaciones reales, que es
+exactamente el dato que hace falta para hablarle al usuario de incertidumbre.
+Lo que ya no hace es conceder ni bloquear el aprobado.
+
+### Lo que impide que esto sea un autoaprobado
+
+`_VALIDACION_VERDAD_DECLARADA = True` es una constante que escribe una
+persona. Sola no vale nada. Lo que la sostiene es
+`test_picos.py::test_la_declaracion_de_validado_no_puede_mentir`, que
+**vuelve a hacer la medición** con el medidor desplegado y exige que el
+resultado coincida con lo declarado.
+
+Comprobado que el seguro muerde en las dos direcciones:
+
+```
+declaración a False con la medida acertando  → FALLA
+tolerancia imposible (0,0001 dB)             → FALLA
+```
+
+Error real del medidor desplegado contra la verdad construida: **0,0033 dB**,
+frente a una tolerancia de 0,01.
+
+---
+
 ## 9. Lo que se cambió: 4× → 8× (v0.5.72, 2026-08-07)
 
 Aprobado por Alex tras el §8. **No se cambió el filtro** —el FIR de la norma

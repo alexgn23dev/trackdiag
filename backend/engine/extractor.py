@@ -15,27 +15,53 @@ from .versiones import PEAK_ALGORITHM_VERSION
 # ===========================================================================
 # Estado de validación del medidor de true peak
 # ===========================================================================
-# Tres estados separados, porque significan cosas distintas y mezclarlos
+# Cuatro estados separados, porque significan cosas distintas y mezclarlos
 # permitiría dar por validado algo que solo se ha comprobado contra sí mismo.
 #
+# VERDAD — el que decide. Se le pide al medidor recuperar un pico CONSTRUIDO
+#   de antemano: se fabrica una señal a 44100x64 limitada en banda, se anota
+#   su máximo real, se decima a 44,1 kHz y se mide. No compara contra otra
+#   implementación: comprueba si acierta un número que no conocía.
+#   tests/test_reconstruccion.py::TestContraUnaVerdadConstruida.
 # INTERNA — la batería automatizada: valor analítico, FIR de referencia del
 #   anexo 2 de BS.1770-5, interpolación sinc por FFT, polifásico de scipy y
-#   ffmpeg. Todo dentro del ecosistema Python/ffmpeg.
+#   ffmpeg. Detecta regresiones; no puede certificar, porque todo vive dentro
+#   del mismo ecosistema Python/ffmpeg.
 # EXTERNA — contraste manual contra un medidor profesional de escritorio
-#   (Youlean, iZotope Insight, el del DAW). Es la única referencia realmente
-#   ajena. Se registra en tests/VALIDACION_MANUAL.md.
-# GLOBAL — solo puede ser True si las dos anteriores lo son. No se pone a
-#   mano: se deriva.
+#   (Youlean, iZotope Insight, el del DAW). Se registra en
+#   tests/VALIDACION_MANUAL.md.
 #
-# Y las tres están ATADAS A LA VERSIÓN DEL ALGORITMO. Una validación dice
+#   ATENCIÓN — desde el 2026-08-09 este estado es INFORMATIVO y ya NO decide.
+#   Se montó creyendo que un medidor comercial era la referencia ajena
+#   definitiva. Medido contra la verdad construida, no lo es: sobre los
+#   fixtures 01 y 06, Youlean se desvía -0,16 dB y soxr +0,17 dB. Los dos
+#   fallan, en direcciones opuestas. Certificar contra Youlean era corregir
+#   un examen con las respuestas de otro alumno. Se conserva porque documenta
+#   cuánto se separan las implementaciones reales entre sí, que es un dato
+#   útil de cara al usuario — pero no es un aprobado.
+#
+# GLOBAL — se deriva, no se pone a mano: VERDAD **y** INTERNA.
+#
+# Y los cuatro están ATADOS A LA VERSIÓN DEL ALGORITMO. Una validación dice
 # "este método, medido así, da estos números". Si el método cambia, la
 # validación deja de aplicar: no se hereda. `_VALIDADO_PARA_ALGORITMO` es la
 # versión contra la que se validó; si `PEAK_ALGORITHM_VERSION` deja de
-# coincidir, los tres estados caen a False solos y hay que revalidar.
+# coincidir, todos los estados caen a False solos y hay que revalidar.
 _VALIDADO_PARA_ALGORITMO = "peak-soxr_hq_8x-1"
 
-_VALIDACION_INTERNA_DECLARADA = True    # 2026-08-07, ver RESULTADOS_VALIDACION.md §8
-_VALIDACION_EXTERNA_DECLARADA = False   # pendiente: tests/VALIDACION_MANUAL.md
+# Estas constantes NO son de fiar por sí solas: son una declaración humana.
+# Lo que las hace válidas es que test_reconstruccion.py y test_picos.py
+# vuelven a ejecutar la comprobación y fallan si la declaración no coincide
+# con lo medido. Poner True a mano sin que la medida acompañe rompe el CI.
+_VALIDACION_VERDAD_DECLARADA = True     # 2026-08-08, RESULTADOS_VALIDACION.md §8b
+_VALIDACION_INTERNA_DECLARADA = True    # 2026-08-07, RESULTADOS_VALIDACION.md §8
+_VALIDACION_EXTERNA_DECLARADA = False   # informativa; tests/VALIDACION_MANUAL.md
+
+# Tolerancia de la validación contra la verdad construida, en dB. El error
+# medido con material realista (contenido hasta 20 kHz) es de 0,002 dB con la
+# referencia y 0,002 dB con el medidor de producción; 0,01 deja margen para
+# cambios de versión de numpy o soxr sin dar un falso aprobado.
+TOL_VERDAD_CONSTRUIDA_DB = 0.01
 
 # Factor de sobremuestreo para la medida de picos. Ver la nota en
 # `_analizar_loudness` y tests/test_reconstruccion.py: 8 no es un número
@@ -44,10 +70,14 @@ OVERSAMPLING_PICOS = 8
 
 _ALGORITMO_COINCIDE = PEAK_ALGORITHM_VERSION == _VALIDADO_PARA_ALGORITMO
 
+TRUE_PEAK_GROUND_TRUTH_VALIDATION_PASSED = _VALIDACION_VERDAD_DECLARADA and _ALGORITMO_COINCIDE
 TRUE_PEAK_INTERNAL_VALIDATION_PASSED = _VALIDACION_INTERNA_DECLARADA and _ALGORITMO_COINCIDE
 TRUE_PEAK_EXTERNAL_VALIDATION_PASSED = _VALIDACION_EXTERNA_DECLARADA and _ALGORITMO_COINCIDE
-_TRUE_PEAK_VALIDATED = (TRUE_PEAK_INTERNAL_VALIDATION_PASSED
-                        and TRUE_PEAK_EXTERNAL_VALIDATION_PASSED)
+# Lo que decide es acertar la verdad construida. La batería interna sigue
+# haciendo falta: es la que detecta que una actualización de librería mueva
+# algo. La externa NO entra — ver la nota de arriba.
+_TRUE_PEAK_VALIDATED = (TRUE_PEAK_GROUND_TRUTH_VALIDATION_PASSED
+                        and TRUE_PEAK_INTERNAL_VALIDATION_PASSED)
 
 if not _ALGORITMO_COINCIDE:
     print(f"[PICOS] El algoritmo es {PEAK_ALGORITHM_VERSION} pero la validación "
@@ -857,7 +887,10 @@ def _analizar_loudness(audio_path: str, y_preloaded=None, sr_preloaded=None,
         "sample_peak_source": "no_disponible",   # archivo_nativo | audio_remuestreado_22k | no_disponible
         "true_peak_method": "no_disponible",     # soxr_hq_8x | sample_peak_22k_fallback | no_disponible
         "true_peak_oversampling": 0,             # 8 | 1 | 0  (4 en análisis <= v0.5.71)
+        "true_peak_ground_truth_validation_passed": TRUE_PEAK_GROUND_TRUTH_VALIDATION_PASSED,
         "true_peak_internal_validation_passed": TRUE_PEAK_INTERNAL_VALIDATION_PASSED,
+        # Informativo desde v0.5.73: documenta la distancia a un medidor
+        # comercial, no decide. Ver la nota del principio del módulo.
         "true_peak_external_validation_passed": TRUE_PEAK_EXTERNAL_VALIDATION_PASSED,
         "true_peak_validated": _TRUE_PEAK_VALIDATED,
         "peak_measurement_sample_rate": 0,       # sr al que se midieron los picos
