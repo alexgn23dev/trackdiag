@@ -333,6 +333,66 @@ lo que no era. La propuesta está en `DISENO_FASE_2B.md`.
 
 ---
 
+## 8b. La referencia, comprobada contra una verdad construida (2026-08-08)
+
+El §8 justificaba la referencia por teoría: "es la definición". Eso es poco, y
+Alex lo señaló. Esta es la comprobación empírica.
+
+**El método.** La verdad no se mide, se construye:
+
+1. Se fabrica una señal a 44100 × 64 = **2,8 MHz** cuyo contenido no pasa de
+   20 kHz. A ese rate está tan sobremuestreada que su máximo discreto ya es el
+   continuo.
+2. Se anota ese máximo. Es la verdad, conocida de antemano.
+3. Se decima quedándose 1 de cada 64 muestras — sin filtrar, porque la señal
+   ya venía limitada en banda. Eso es el archivo de 44,1 kHz.
+4. Se le pide a cada medidor que recupere el número del paso 2 mirando solo el
+   archivo del paso 3.
+
+**Control del patrón:** reinterpolar la verdad 4× más fino la mueve
+**0,00002 dB**. El patrón es sólido.
+
+**Resultado** — error en dB frente al pico real, siete señales:
+
+| señal | exacta 4× | exacta 8× | **exacta 16×** | FIR ITU 4× | soxr 4× | soxr 8× |
+|---|---|---|---|---|---|---|
+| hasta 20 kHz (s1) | −0,021 | −0,002 | −0,002 | +0,025 | −0,021 | −0,002 |
+| hasta 20 kHz (s2) | −0,029 | −0,001 | −0,001 | −0,020 | −0,029 | −0,001 |
+| hasta 16 kHz (s3) | −0,003 | −0,003 | −0,001 | −0,018 | −0,003 | −0,003 |
+| hasta 10 kHz (s4) | −0,016 | −0,002 | −0,002 | **−0,113** | −0,016 | −0,002 |
+| hasta 21,5 kHz (s5) | −0,006 | −0,003 | −0,000 | −0,004 | −0,033 | −0,034 |
+| hasta 21,9 kHz (s6) | −0,012 | −0,006 | −0,000 | +0,012 | +0,073 | +0,085 |
+| hasta 5 kHz (s7) | −0,001 | −0,001 | −0,000 | −0,010 | −0,001 | −0,001 |
+| **máx \|error\|** | 0,029 | 0,006 | **0,002** | 0,113 | 0,073 | 0,085 |
+
+### Qué queda demostrado
+
+1. **La referencia acierta.** Recupera un pico que no conocía, con 0,002 dB de
+   error, en siete señales de anchos de banda distintos. Deja de ser un
+   argumento teórico.
+2. **El error de rejilla es real y se ve solo.** La misma referencia perfecta
+   pierde 0,029 dB a 4× y 0,006 a 8×. Es exactamente lo que corrigió la
+   v0.5.72, medido sin ningún filtro de por medio.
+3. **El FIR de la norma se equivoca 0,113 dB con una señal que no pasa de
+   10 kHz.** No es la zona alta del espectro: es su rizado en la banda de
+   paso, con material completamente benigno. Descartarlo fue lo correcto.
+
+### Dos límites, declarados
+
+* **Con energía pegada a Nyquist (s5, s6) el 8× no rescata nada**, y en un
+  caso queda 0,012 dB por detrás del 4×. Ahí manda el filtro de soxr, no la
+  rejilla. Es inaudible y está muy por debajo de la décima con la que se
+  clasifica, pero el número no es cero y queda acotado en
+  `test_con_energia_pegada_a_nyquist_el_8x_no_rescata_nada`.
+* **Esta prueba valida la interpolación, no los bordes.** Las señales
+  construidas son periódicas, que es el caso favorable para el método de la
+  FFT. Lo que ocurre en el primer y último milisegundo de un archivo real
+  sigue siendo terreno indefinido — ver §5b y el test del borde.
+
+Congelado en `test_reconstruccion.py::TestContraUnaVerdadConstruida`.
+
+---
+
 ## 9. Lo que se cambió: 4× → 8× (v0.5.72, 2026-08-07)
 
 Aprobado por Alex tras el §8. **No se cambió el filtro** —el FIR de la norma

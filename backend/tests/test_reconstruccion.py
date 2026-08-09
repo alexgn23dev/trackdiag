@@ -60,6 +60,118 @@ def _banda(corte_hz, sr=SR, dur=3.0, pico_db=-1.0):
     return fx._escalar_a_sample_peak(x, pico_db)
 
 
+def _fabricar_con_verdad_conocida(semilla, f_max_hz, n=4096, sobre=64,
+                                  n_tonos=40):
+    """Devuelve (archivo_44k, pico_real_lineal).
+
+    La verdad NO se mide: se construye. Se fabrica la señal a 44100x64 =
+    2,8 MHz, donde está tan sobremuestreada respecto a su contenido que su
+    máximo discreto ya es el continuo (comprobado: reinterpolarla 4x más
+    mueve el valor 0,00002 dB). Se anota ese máximo y se decima quedándose 1
+    de cada 64 muestras — sin filtrar, porque la señal ya venía limitada en
+    banda.
+
+    Después se le pide a un medidor que recupere ese número mirando solo el
+    archivo decimado. Es la única prueba que no depende de creerse ninguna
+    teoría: o acierta el número o no lo acierta.
+
+    Las frecuencias son bins exactos del buffer corto para que sea periódico
+    y los bordes no contaminen. Eso significa que esta prueba valida la
+    INTERPOLACIÓN, no el tratamiento de bordes — que sigue sin estar definido
+    (ver test_en_el_borde_del_archivo_ningun_factor_converge).
+    """
+    rng = np.random.default_rng(semilla)
+    n_largo = n * sobre
+    t = np.arange(n_largo) / (SR * sobre)
+    x = np.zeros(n_largo)
+    k_max = int(f_max_hz * n / SR)
+    for k in rng.choice(np.arange(1, k_max + 1),
+                        size=min(n_tonos, k_max), replace=False):
+        x += (1.0 / (1.0 + 0.02 * k)) * np.sin(
+            2 * np.pi * (k * SR / n) * t + rng.uniform(0, 2 * np.pi))
+    x /= np.max(np.abs(x))          # pico real = 1,0 exacto → 0,000 dB
+    return x[::sobre], 1.0
+
+
+class TestContraUnaVerdadConstruida(unittest.TestCase):
+    """La validación fuerte: recuperar un pico que se conoce de antemano.
+
+    Todo lo demás en este archivo compara medidores entre sí o contra la
+    teoría. Aquí se les pide acertar un número concreto que no han visto.
+    """
+
+    CASOS = ((1, 20000), (2, 20000), (3, 16000), (4, 10000),
+             (5, 21500), (6, 21900), (7, 5000))
+
+    def test_la_verdad_construida_es_de_fiar(self):
+        """Si el 'patrón' estuviera mal, todo lo demás sobra."""
+        for semilla, f_max in ((1, 20000), (6, 21900)):
+            rng = np.random.default_rng(semilla)
+            n_largo = 4096 * 64
+            t = np.arange(n_largo) / (SR * 64)
+            x = np.zeros(n_largo)
+            k_max = int(f_max * 4096 / SR)
+            for k in rng.choice(np.arange(1, k_max + 1),
+                                size=min(40, k_max), replace=False):
+                x += (1.0 / (1.0 + 0.02 * k)) * np.sin(
+                    2 * np.pi * (k * SR / 4096) * t + rng.uniform(0, 2 * np.pi))
+            grueso = _db(np.max(np.abs(x)))
+            fino = _db(np.max(np.abs(ex.reconstruir(x, 4, "periodico"))))
+            self.assertLess(abs(fino - grueso), 0.001,
+                            "a 2,8 MHz el máximo discreto ya debería ser el continuo")
+
+    def test_la_referencia_recupera_el_pico_real(self):
+        peor = 0.0
+        for semilla, f_max in self.CASOS:
+            archivo, verdad = _fabricar_con_verdad_conocida(semilla, f_max)
+            peor = max(peor, abs(ex.pico_exacto(archivo, 16) - _db(verdad)))
+        self.assertLess(peor, 0.01, f"error máximo {peor:.4f} dB")
+
+    def test_la_rejilla_de_4x_pierde_pico_hasta_con_el_filtro_perfecto(self):
+        """La prueba de que el error que arregló la v0.5.72 era de RESOLUCIÓN:
+        aparece incluso usando la reconstrucción exacta."""
+        peor4 = peor8 = 0.0
+        for semilla, f_max in self.CASOS:
+            archivo, verdad = _fabricar_con_verdad_conocida(semilla, f_max)
+            peor4 = max(peor4, abs(ex.pico_exacto(archivo, 4) - _db(verdad)))
+            peor8 = max(peor8, abs(ex.pico_exacto(archivo, 8) - _db(verdad)))
+        self.assertGreater(peor4, 0.015, "a 4x debería perderse pico")
+        self.assertLess(peor8, 0.01, "a 8x ya casi no")
+
+    def test_produccion_acierta_con_material_realista(self):
+        """Hasta 20 kHz —lo que sale de un DAW— el medidor desplegado acierta.
+
+        Se excluyen a propósito las señales pegadas a Nyquist: ahí manda el
+        filtro de soxr y el error es otro, medido aparte."""
+        peor = 0.0
+        for semilla, f_max in self.CASOS:
+            if f_max > 20000:
+                continue
+            archivo, verdad = _fabricar_con_verdad_conocida(semilla, f_max)
+            peor = max(peor, abs(_soxr(archivo, SR, 8) - _db(verdad)))
+        self.assertLess(peor, 0.01, f"error máximo {peor:.4f} dB")
+
+    def test_con_energia_pegada_a_nyquist_el_8x_no_rescata_nada(self):
+        """Honestidad sobre el límite: ahí el 8x no mejora al 4x, e incluso
+        puede quedar una centésima por detrás. Es error del filtro. Se acota
+        para que no crezca sin que nadie se entere."""
+        peor = 0.0
+        for semilla, f_max in self.CASOS:
+            if f_max <= 20000:
+                continue
+            archivo, verdad = _fabricar_con_verdad_conocida(semilla, f_max)
+            peor = max(peor, abs(_soxr(archivo, SR, 8) - _db(verdad)))
+        self.assertGreater(peor, 0.02, "debería notarse el filtro")
+        self.assertLess(peor, 0.15, "pero sin descontrolarse")
+
+    def test_el_fir_de_la_norma_falla_hasta_con_material_benigno(self):
+        """Se equivoca más de 0,1 dB en una señal que no pasa de 10 kHz. No es
+        la zona alta del espectro: es su rizado en la banda de paso."""
+        archivo, verdad = _fabricar_con_verdad_conocida(4, 10000)
+        error = _db(max(itu.por_canal(archivo[:, None], "extender"))) - _db(verdad)
+        self.assertGreater(abs(error), 0.05, f"medido {error:+.4f} dB")
+
+
 class TestLaReferenciaEsDeFiar(unittest.TestCase):
     """Antes de juzgar a nadie con ella, hay que demostrar que es correcta."""
 
