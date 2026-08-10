@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "version": "0.5.80",
+      "date": "2026-08-10",
+      "title": "Nueva vista del diagnóstico (en pruebas)",
+      "changes": [
+        "Estamos probando una forma nueva de enseñarte el diagnóstico: más ancha, repartida en pestañas y con las explicaciones largas plegadas hasta que las pidas. Nada de información se pierde, solo deja de estar toda a la vez.",
+        "De momento está apagada. Si quieres verla, añade ?v2=1 al final de la dirección; con ?v2=0 vuelves a la de siempre."
+      ]
+    },
+    {
       "version": "0.5.79",
       "date": "2026-08-10",
       "title": "Los tutoriales vuelven a funcionar",

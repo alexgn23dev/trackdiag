@@ -155,6 +155,23 @@
             transform: translateY(-50%);
             pointer-events: none;
         }
+        /* === Rediseño del diagnóstico (v2) ================================
+           Se activa con ?v2=1. Convive con la vista clásica: nada de esto se
+           aplica salvo que el marcado v2 esté en pantalla. */
+        .rotulo-v2 {
+            font-size: 10px; font-weight: 700; letter-spacing: .12em;
+            text-transform: uppercase; color: #7a7a7a;
+        }
+        /* Punto de estado: sustituye a los emojis de semáforo */
+        .punto-v2 { width: 6px; height: 6px; border-radius: 50%; display: inline-block; flex: none; }
+        /* Cifras de ancho fijo, para que las columnas de números no bailen */
+        .cifra-v2 { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+        .tab-v2 { border-bottom: 2px solid transparent; transition: all .18s; white-space: nowrap; }
+        .tab-v2:hover { color: #fff; }
+        .tab-v2.on { border-bottom-color: var(--po-white); color: #fff; }
+        .barra-v2 { background: #1c1c1c; border: 1px solid var(--po-border); border-radius: 3px; overflow: hidden; }
+        .v2-wrap { overflow-x: hidden; max-width: 100%; }
+
         /* Selected option style */
         .opt-selected { background: var(--po-purple) !important; color: var(--po-white) !important; border-color: var(--po-purple) !important; }
         .opt-default { background: var(--po-dark); color: var(--po-light); border: 1px solid var(--po-border); }
@@ -203,7 +220,7 @@
     // /api/health. Si no coincide, este fichero viene de la caché del
     // navegador y puede estar dejando de enviar campos que el backend ya
     // espera — se recarga una sola vez y, si aun así no cuadra, se avisa.
-    const APP_VERSION = '0.5.79';
+    const APP_VERSION = '0.5.80';
 
     function comprobarVersionFrontend(onDesfase, onEntorno) {
         fetch(`${API_URL}/api/health`, { cache: 'no-store' })
@@ -1535,6 +1552,555 @@
     }
 
 
+    // =========================================================================
+    // REDISEÑO DEL DIAGNÓSTICO (v2) — piezas
+    // =========================================================================
+    // Se activa con ?v2=1 y convive con la vista clásica; ninguna de estas
+    // funciones se ejecuta si el interruptor está apagado.
+    //
+    // Qué resuelve, respecto a la vista de siempre:
+    //   * el ancho: 1280 px y rejillas, en vez de una columna de 672;
+    //   * el volumen de texto: cada tarjeta enseña un avance y guarda el resto;
+    //   * la orientación: cinco pestañas en vez de ~25 secciones apiladas.
+    // El prototipo con el que se validó está en docs/rediseno/.
+
+    const V2_COLOR = { neutro: '#3a3a3a', ok: '#25F464', aviso: '#facc15',
+                       alerta: '#f87171', info: '#60a5fa' };
+
+    /** ¿Pide el usuario la vista nueva? Interruptor por URL: ?v2=1 la enciende,
+     *  ?v2=0 la apaga. Se recuerda en la sesión para que no se pierda al
+     *  navegar dentro de la app. */
+    function usarVistaV2() {
+        try {
+            const p = new URLSearchParams(location.search).get('v2');
+            if (p === '1') { sessionStorage.setItem('mt_v2', '1'); return true; }
+            if (p === '0') { sessionStorage.removeItem('mt_v2'); return false; }
+            return sessionStorage.getItem('mt_v2') === '1';
+        } catch (e) { return false; }
+    }
+
+    /** Miles con separador: 253164 es ilegible, 253.164 no. */
+    function v2Num(n) {
+        return typeof n === 'number' ? n.toLocaleString('es-ES') : n;
+    }
+
+    /** Corta un texto largo por la primera frase; el resto queda para desplegar.
+     *  Las prioridades del motor son párrafos de 400 caracteres y algunas son
+     *  UNA sola frase encadenada con puntos y coma: por eso hay, además del
+     *  corte por punto, un tope por longitud. */
+    function v2Partir(texto, minimo, tope) {
+        minimo = minimo || 90; tope = tope || 240;
+        if (!texto || texto.length <= minimo + 40) return [texto || '', ''];
+        const re = /\.\s/g;
+        let m;
+        while ((m = re.exec(texto)) !== null) {
+            if (m.index >= minimo) {
+                const avance = texto.slice(0, m.index + 1);
+                if (avance.length <= tope) return [avance, texto.slice(m.index + 2)];
+                break;
+            }
+        }
+        const trozo = texto.slice(0, tope);
+        const corte = Math.max(trozo.lastIndexOf('; '), trozo.lastIndexOf(', '));
+        const i = corte > minimo ? corte : trozo.lastIndexOf(' ');
+        if (i <= minimo) return [texto, ''];
+        return [texto.slice(0, i) + '…', texto.slice(i + 1)];
+    }
+
+    /** Dato suelto en formato panel: rótulo arriba, valor abajo. */
+    function V2Dato({ etiqueta, valor, tono }) {
+        const color = (!tono || tono === 'neutro') ? '#e5e5e5' : V2_COLOR[tono];
+        return (
+            <div className="px-3 py-1.5 rounded border border-[#333] bg-[#1e1e1e]">
+                <div className="rotulo-v2 leading-tight">{etiqueta}</div>
+                <div className="text-sm font-semibold leading-tight cifra-v2 mt-0.5" style={{ color }}>{valor}</div>
+            </div>
+        );
+    }
+
+    /** Avance visible + resto desplegable. Es lo que resuelve el exceso de texto. */
+    function V2Desplegable({ avance, children, etiqueta }) {
+        const [abierto, setAbierto] = useState(false);
+        const hayResto = React.Children.toArray(children).some(
+            c => c && (typeof c !== 'object' || c.props === undefined || c.props.children));
+        return (
+            <div>
+                {avance && <p className="text-gray-300 text-sm leading-relaxed">{avance}</p>}
+                {abierto && <div className="mt-2.5 text-gray-400 text-sm leading-relaxed space-y-2 fade-in">{children}</div>}
+                {hayResto && (
+                    <button onClick={() => setAbierto(!abierto)}
+                            className="mt-2 text-xs text-gray-500 hover:text-white transition">
+                        {abierto ? '− Ocultar' : '+ ' + (etiqueta || 'Saber más')}
+                    </button>
+                )}
+            </div>
+        );
+    }
+
+    /** Tarjeta. Sin icono: el estado va en un punto de color junto al rótulo, y
+     *  el borde de color aparece SOLO si hay algo que mirar — si todo lleva
+     *  color, el color deja de avisar. */
+    function V2Tarjeta({ titulo, tono, datos, children, ancho }) {
+        const t = tono || 'neutro';
+        return (
+            <div className={`card p-5 ${ancho || ''}`}
+                 style={t === 'neutro' ? undefined : { borderTop: `2px solid ${V2_COLOR[t]}` }}>
+                <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                        {t !== 'neutro' && <span className="punto-v2" style={{ background: V2_COLOR[t] }} />}
+                        <span className="rotulo-v2">{titulo}</span>
+                    </div>
+                    {datos && <div className="flex gap-2 flex-wrap justify-end">{datos}</div>}
+                </div>
+                {children}
+            </div>
+        );
+    }
+
+    /** Barra con la zona objetivo marcada: un número suelto no dice si está bien. */
+    function V2BarraRango({ valor, min, max, objetivoMin, objetivoMax }) {
+        const pct = v => Math.max(0, Math.min(100, ((v - min) / (max - min)) * 100));
+        const dentro = valor >= objetivoMin && valor <= objetivoMax;
+        return (
+            <div>
+                <div className="relative h-5 barra-v2">
+                    <div className="absolute top-0 bottom-0"
+                         style={{ left: `${pct(objetivoMin)}%`, width: `${pct(objetivoMax) - pct(objetivoMin)}%`,
+                                  background: 'rgba(37,244,100,0.12)', borderLeft: '1px solid rgba(37,244,100,0.3)',
+                                  borderRight: '1px solid rgba(37,244,100,0.3)' }} />
+                    <div className="absolute top-0 bottom-0 w-[2px]"
+                         style={{ left: `calc(${pct(valor)}% - 1px)`, background: dentro ? V2_COLOR.ok : V2_COLOR.aviso }} />
+                </div>
+                <div className="flex justify-between text-[10px] text-gray-600 mt-1 cifra-v2">
+                    <span>{min}</span>
+                    <span className="text-gray-500">objetivo {objetivoMin} a {objetivoMax}</span>
+                    <span>{max}</span>
+                </div>
+            </div>
+        );
+    }
+
+    /** Las tres bandas del espectro, de un vistazo. */
+    function V2Espectro({ grave, media, aguda }) {
+        const vals = [{ n: 'Graves', v: grave }, { n: 'Medios', v: media }, { n: 'Agudos', v: aguda }];
+        const suelo = -75, techo = -20;
+        const alto = v => Math.max(4, Math.min(100, (((v == null ? suelo : v) - suelo) / (techo - suelo)) * 100));
+        return (
+            <div className="flex items-end gap-3 h-24">
+                {vals.map(b => (
+                    <div key={b.n} className="flex-1 flex flex-col items-center justify-end h-full">
+                        <span className="text-[10px] text-gray-500 mb-1 cifra-v2">
+                            {b.v == null ? '—' : b.v.toFixed(0)}
+                        </span>
+                        <div className="w-full rounded-sm" style={{ height: `${alto(b.v)}%`, background: '#4a4a4a' }} />
+                        <span className="rotulo-v2 mt-1.5">{b.n}</span>
+                    </div>
+                ))}
+            </div>
+        );
+    }
+
+    /** Anillo de porcentaje: correlación mono y similares. */
+    function V2Anillo({ pct, etiqueta, tono }) {
+        const r = 24, c = 2 * Math.PI * r;
+        const p = Math.max(0, Math.min(100, pct || 0));
+        return (
+            <div className="flex items-center gap-3">
+                <svg width="58" height="58" viewBox="0 0 58 58" className="flex-shrink-0">
+                    <circle cx="29" cy="29" r={r} fill="none" stroke="#2e2e2e" strokeWidth="5" />
+                    <circle cx="29" cy="29" r={r} fill="none" stroke={tono || V2_COLOR.ok} strokeWidth="5"
+                            strokeLinecap="round" strokeDasharray={`${(c * p) / 100} ${c}`}
+                            transform="rotate(-90 29 29)" />
+                    <text x="29" y="33" textAnchor="middle" fill="#fff" fontSize="13" fontWeight="600">
+                        {Math.round(p)}%
+                    </text>
+                </svg>
+                <span className="text-xs text-gray-400 leading-snug">{etiqueta}</span>
+            </div>
+        );
+    }
+
+    /** Un paso del plan: número, avance y "cómo se hace". */
+    function V2Paso({ n, texto }) {
+        const par = v2Partir(texto);
+        return (
+            <div className="flex gap-3 items-start">
+                <span className="flex-shrink-0 w-5 h-5 rounded border border-[#3a3a3a] text-gray-400 flex items-center justify-center text-[11px] font-semibold mt-0.5 cifra-v2">
+                    {n}
+                </span>
+                <div className="min-w-0">
+                    {par[1]
+                        ? <V2Desplegable avance={par[0]} etiqueta="Cómo se hace"><p>{par[1]}</p></V2Desplegable>
+                        : <p className="text-gray-300 text-sm leading-relaxed">{par[0]}</p>}
+                </div>
+            </div>
+        );
+    }
+
+    // ---- Pestañas del rediseño ------------------------------------------
+    // Cada una recibe el resultado entero. Lo que necesita estado o red
+    // (feedback, tutoriales, CTA) NO vive aquí: se le pasa ya montado desde
+    // DiagnosticoScreen, para no duplicar la lógica que ya funciona.
+
+    const V2_TABS = [
+        { id: 'resumen', label: 'Resumen' },
+        { id: 'plan', label: 'Plan de acción' },
+        { id: 'mezcla', label: 'Mezcla' },
+        { id: 'master', label: 'Máster' },
+        { id: 'detalle', label: 'Detalle' },
+    ];
+
+    function V2TabResumen({ r, extras }) {
+        const prioridades = (r.prioridades || []).slice(0, 3);
+        const hayExtras = extras && (extras.derivacion || extras.tutoriales || extras.feedback);
+        const cuantosExtras = extras
+            ? [extras.derivacion, extras.tutoriales, extras.feedback].filter(Boolean).length : 0;
+        return (
+            <div className="space-y-4">
+                {/* Las prioridades mandan: es lo que el productor va a hacer. El
+                    qué-está-mal ya lo dice la cabecera, repetirlo aquí sería
+                    poner la misma frase dos veces en la misma pantalla. */}
+                {prioridades.length > 0 && (
+                    <V2Tarjeta titulo="Qué hacer ahora" tono="ok">
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-6 gap-y-4">
+                            {prioridades.map((pp, i) => <V2Paso key={i} n={i + 1} texto={pp} />)}
+                        </div>
+                        {r.prioridades.length > 3 && (
+                            <p className="text-gray-600 text-xs mt-4">
+                                Hay {r.prioridades.length - 3} más en «Plan de acción».
+                            </p>
+                        )}
+                    </V2Tarjeta>
+                )}
+
+                {r.aviso_genero && (
+                    <V2Tarjeta titulo="Sobre tu género" tono="aviso">
+                        <p className="text-gray-300 text-sm leading-relaxed">{r.aviso_genero}</p>
+                    </V2Tarjeta>
+                )}
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    {r.diagnostico_principal && r.diagnostico_principal.explicacion && (
+                        <V2Tarjeta titulo="Por qué lo decimos" tono="aviso">
+                            {r.diagnostico_principal.explicacion.split('\n').filter(Boolean).map((l, i) => (
+                                <p key={i} className="text-gray-300 text-sm leading-relaxed">{l}</p>
+                            ))}
+                        </V2Tarjeta>
+                    )}
+                    {r.nota_contextual && (
+                        <V2Tarjeta titulo="Para tu caso concreto">
+                            <V2Desplegable avance={v2Partir(r.nota_contextual, 110)[0]}>
+                                <p>{v2Partir(r.nota_contextual, 110)[1]}</p>
+                            </V2Desplegable>
+                        </V2Tarjeta>
+                    )}
+                    {r.siguiente_sesion && (
+                        <V2Tarjeta titulo="Tu próxima sesión">
+                            <V2Desplegable avance={v2Partir(r.siguiente_sesion, 100)[0]}>
+                                <p>{v2Partir(r.siguiente_sesion, 100)[1]}</p>
+                            </V2Desplegable>
+                        </V2Tarjeta>
+                    )}
+                </div>
+
+                {(r.error_de_foco || r.diagnostico_secundario) && (
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                        {r.error_de_foco && (
+                            <V2Tarjeta titulo="Ojo con dónde pones el esfuerzo" tono="aviso"
+                                       ancho={r.diagnostico_secundario ? 'lg:col-span-2' : 'lg:col-span-3'}>
+                                <p className="text-gray-300 text-sm leading-relaxed">{r.error_de_foco_mensaje}</p>
+                            </V2Tarjeta>
+                        )}
+                        {r.diagnostico_secundario && (
+                            <V2Tarjeta titulo="Segundo frente"
+                                       ancho={r.error_de_foco ? '' : 'lg:col-span-3'}>
+                                <p className="text-gray-300 text-sm leading-relaxed">{r.diagnostico_secundario.titulo}</p>
+                            </V2Tarjeta>
+                        )}
+                    </div>
+                )}
+
+                {/* En una línea fina, no en tarjeta: como tarjeta se quedaba
+                    sola en su fila dejando dos huecos. */}
+                {r.referencia_temporal && (
+                    <p className="text-gray-600 text-xs">{r.referencia_temporal}</p>
+                )}
+
+                {/* Lo que rodea al diagnóstico va AQUÍ, en la primera pantalla:
+                    metido tras una pestaña no lo vería nadie. La rejilla se
+                    ajusta a cuántas tarjetas haya, para no dejar huecos. */}
+                {hayExtras && (
+                    <div className={`grid grid-cols-1 gap-4 pt-1 ${
+                        cuantosExtras >= 3 ? 'lg:grid-cols-3'
+                        : cuantosExtras === 2 ? 'lg:grid-cols-2' : ''}`}>
+                        {extras.derivacion}
+                        {extras.tutoriales}
+                        {extras.feedback}
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    function V2TabPlan({ r }) {
+        return (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="space-y-4">
+                    <V2Tarjeta titulo="Todas las prioridades, en orden" tono="ok">
+                        <div className="space-y-3">
+                            {(r.prioridades || []).map((pp, i) => <V2Paso key={i} n={i + 1} texto={pp} />)}
+                        </div>
+                    </V2Tarjeta>
+                    {r.sugerencias_estructura && r.sugerencias_estructura.length > 0 && (
+                        <V2Tarjeta titulo="Estructura: dónde tocar">
+                            <ul className="space-y-2">
+                                {r.sugerencias_estructura.map((x, i) => (
+                                    <li key={i} className="text-gray-300 text-sm leading-relaxed flex gap-2">
+                                        <span className="text-gray-600 flex-none">—</span>{x}
+                                    </li>
+                                ))}
+                            </ul>
+                        </V2Tarjeta>
+                    )}
+                </div>
+                <div className="space-y-4">
+                    {r.no_tocar_aun && r.no_tocar_aun.length > 0 && (
+                        <V2Tarjeta titulo="No toques esto todavía" tono="aviso">
+                            <p className="text-gray-600 text-xs mb-3">
+                                Tan importante como lo que hay que hacer: lo que va a hacerte perder el tiempo ahora.
+                            </p>
+                            <ul className="space-y-3">
+                                {r.no_tocar_aun.map((x, i) => (
+                                    <li key={i} className="text-gray-300 text-sm leading-relaxed flex gap-2">
+                                        <span className="text-gray-600 flex-none">×</span>{x}
+                                    </li>
+                                ))}
+                            </ul>
+                        </V2Tarjeta>
+                    )}
+                    {((r.tips_genero && r.tips_genero.length > 0) || r.tip_objetivo) && (
+                        <V2Tarjeta titulo="Por tu género y tu objetivo">
+                            {(r.tips_genero || []).map((t, i) => (
+                                <p key={i} className="text-gray-300 text-sm leading-relaxed mb-2">{t}</p>
+                            ))}
+                            {r.tip_objetivo && (
+                                <V2Desplegable avance={v2Partir(r.tip_objetivo, 100)[0]}>
+                                    <p>{v2Partir(r.tip_objetivo, 100)[1]}</p>
+                                </V2Desplegable>
+                            )}
+                        </V2Tarjeta>
+                    )}
+                </div>
+            </div>
+        );
+    }
+
+    function V2TabMezcla({ r }) {
+        const d = r.datos_audio || {};
+        const sg = r.senales || {};
+        const m = d.mono_compat || {};
+        const h = d.harshness || {};
+        const tonoBalance = d.balance_grave === 'elevado' ? 'aviso' : 'neutro';
+        const tonoMono = m.nivel_compatibilidad === 'excelente' ? 'neutro' : 'aviso';
+        const fmt = (v, dec) => (typeof v === 'number' ? v.toFixed(dec == null ? 1 : dec) : '—');
+        return (
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                <V2Tarjeta titulo="Balance espectral" tono={tonoBalance}
+                           datos={<V2Dato etiqueta="Graves" valor={d.balance_grave || '—'} tono={tonoBalance} />}>
+                    <V2Espectro grave={sg.db_grave} media={sg.db_media} aguda={sg.db_aguda} />
+                    <p className="text-gray-400 text-xs mt-3">
+                        Diferencia graves–medios: <span className="text-white cifra-v2">{fmt(sg.diff_grave_media)} dB</span>
+                    </p>
+                    <V2Desplegable etiqueta="Qué significa">
+                        <p>Una diferencia grande entre graves y medios suele significar que el low end
+                           se está comiendo el sitio del resto. No es que falten agudos: es que hay
+                           demasiado grave tapándolos.</p>
+                    </V2Desplegable>
+                </V2Tarjeta>
+
+                <V2Tarjeta titulo="Densidad y dinámica"
+                           datos={<V2Dato etiqueta="Densidad" valor={d.densidad || '—'} />}>
+                    <div className="space-y-2.5">
+                        {[['Rango dinámico', `${fmt(sg.rango_dinamico)} dB`],
+                          ['Contraste entre secciones', d.contraste || '—'],
+                          ['Cambios significativos', sg.cambios_significativos == null ? '—' : sg.cambios_significativos]
+                        ].map(par => (
+                            <div key={par[0]} className="flex justify-between text-sm gap-3">
+                                <span className="text-gray-400">{par[0]}</span>
+                                <span className="text-white font-medium cifra-v2">{par[1]}</span>
+                            </div>
+                        ))}
+                    </div>
+                </V2Tarjeta>
+
+                <V2Tarjeta titulo="Compatibilidad mono" tono={tonoMono}
+                           datos={<V2Dato etiqueta="Estado" valor={m.nivel_compatibilidad || '—'} tono={tonoMono} />}>
+                    <V2Anillo pct={(m.correlacion_lr || 0) * 100}
+                              etiqueta={`Correlación L/R · pérdida en mono ${m.perdida_mono_db == null ? '—' : m.perdida_mono_db} dB`} />
+                    <V2Desplegable etiqueta="Detalle por bandas">
+                        <p>{m.resumen}</p>
+                        {m.bandas && Object.keys(m.bandas).map(banda => (
+                            <div key={banda} className="flex justify-between text-xs gap-3">
+                                <span className="capitalize text-gray-500">{banda}</span>
+                                <span className="text-gray-300 cifra-v2">
+                                    {(m.bandas[banda].correlacion * 100).toFixed(0)}% · {m.bandas[banda].perdida_db} dB · {m.bandas[banda].estado}
+                                </span>
+                            </div>
+                        ))}
+                    </V2Desplegable>
+                </V2Tarjeta>
+
+                <V2Tarjeta titulo="Aspereza en medios-altos" tono={h.tiene_harshness ? 'aviso' : 'neutro'}
+                           datos={<V2Dato etiqueta="Frames ásperos" valor={`${h.pct_frames_harsh == null ? '—' : h.pct_frames_harsh}%`}
+                                          tono={h.tiene_harshness ? 'aviso' : 'neutro'} />}>
+                    {h.tiene_harshness ? (
+                        <p className="text-gray-300 text-sm">
+                            Zona: <span className="text-white">{h.zona_problema}</span> · pico en <span className="cifra-v2">{h.peak_freq_hz} Hz</span> · carácter {h.caracter}
+                        </p>
+                    ) : (
+                        <p className="text-gray-400 text-sm">Sin picos molestos en la zona de 2 a 6 kHz.</p>
+                    )}
+                </V2Tarjeta>
+            </div>
+        );
+    }
+
+    function V2TabMaster({ r }) {
+        const lo = (r.datos_audio || {}).loudness || {};
+        const tonoPicos = lo.severidad_picos === 'atencion' ? 'aviso' : 'neutro';
+        const tonoRec = lo.severidad_recorte === 'atencion' ? 'alerta' : 'neutro';
+        const tp = lo.true_peak_dbtp;
+        const MIN = -3, MAX = 6;
+        const pos = v => Math.max(0, Math.min(100, ((v - MIN) / (MAX - MIN)) * 100));
+        const avPicos = v2Partir(lo.aviso_picos || '', 80);
+        const avRec = v2Partir(lo.aviso_recorte || '', 80);
+        const avSat = v2Partir(lo.aviso_saturacion || '', 90);
+        return (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <V2Tarjeta titulo="Loudness"
+                           datos={<><V2Dato etiqueta="LUFS" valor={lo.lufs_integrado == null ? '—' : lo.lufs_integrado} />
+                                    <V2Dato etiqueta="Rango" valor={`${lo.rango_loudness == null ? '—' : lo.rango_loudness} LU`} /></>}>
+                    {typeof lo.lufs_integrado === 'number' && lo.lufs_integrado > -60 && (
+                        <V2BarraRango valor={lo.lufs_integrado} min={-24} max={-4} objetivoMin={-9} objetivoMax={-7} />
+                    )}
+                    {lo.referencia_genero && <p className="text-gray-400 text-xs mt-3">{lo.referencia_genero}</p>}
+                    <V2Desplegable etiqueta="Qué hacer con esto">
+                        <p>{lo.referencia}</p>
+                        <p>{lo.consejo_master}</p>
+                    </V2Desplegable>
+                </V2Tarjeta>
+
+                <V2Tarjeta titulo="Picos" tono={tonoPicos}
+                           datos={<><V2Dato etiqueta="True peak" valor={typeof tp === 'number' ? `${tp.toFixed(1)} dBTP` : '—'} tono={tonoPicos} />
+                                    <V2Dato etiqueta="Sample peak" valor={typeof lo.sample_peak_dbfs === 'number' && lo.sample_peak_dbfs > -99 ? `${lo.sample_peak_dbfs.toFixed(1)} dBFS` : '—'} /></>}>
+                    {/* La escala llega a +6: un máster recortado se va a +5 con
+                        facilidad y con el tope en +3 la marca no se leía. */}
+                    {typeof tp === 'number' && tp > -99 && (
+                        <>
+                            <div className="relative h-5 barra-v2 mb-1">
+                                <div className="absolute top-0 bottom-0" style={{ left: 0, width: `${pos(-1)}%`, background: 'rgba(37,244,100,0.12)' }} />
+                                <div className="absolute top-0 bottom-0" style={{ left: `${pos(-1)}%`, width: `${pos(0.3) - pos(-1)}%`, background: 'rgba(250,204,21,0.10)' }} />
+                                <div className="absolute top-0 bottom-0" style={{ left: `${pos(0.3)}%`, right: 0, background: 'rgba(248,113,113,0.10)' }} />
+                                <div className="absolute top-0 bottom-0 w-[2px]"
+                                     style={{ left: `calc(${pos(tp)}% - 1px)`, background: tonoPicos === 'neutro' ? V2_COLOR.ok : V2_COLOR.aviso }} />
+                            </div>
+                            <div className="flex justify-between text-[10px] text-gray-600 mb-3 cifra-v2">
+                                <span>{MIN} dBTP</span>
+                                <span className="text-gray-500">−1 recomendado · 0 el techo</span>
+                                <span>+{MAX}</span>
+                            </div>
+                        </>
+                    )}
+                    {lo.titulo_picos && <p className="text-white text-sm font-medium mb-1">{lo.titulo_picos}</p>}
+                    <V2Desplegable avance={avPicos[0]}>
+                        <p>{avPicos[1]}</p>
+                        {lo.nota_lossy_picos && <p className="text-gray-500">{lo.nota_lossy_picos}</p>}
+                    </V2Desplegable>
+                </V2Tarjeta>
+
+                {lo.categoria_recorte && (
+                    <V2Tarjeta titulo="Recorte de muestras" tono={tonoRec}
+                               datos={lo.recorte_medible
+                                   ? <><V2Dato etiqueta="En el techo" valor={v2Num(lo.muestras_en_techo_total)} tono={tonoRec} />
+                                       <V2Dato etiqueta="Meseta máx" valor={`${(lo.racha_maxima_ms || 0).toFixed(2)} ms`} tono={tonoRec} /></>
+                                   : <V2Dato etiqueta="Medible" valor="no aplica" />}>
+                        {lo.titulo_recorte && <p className="text-white text-sm font-medium mb-1">{lo.titulo_recorte}</p>}
+                        <V2Desplegable avance={avRec[0]}><p>{avRec[1]}</p></V2Desplegable>
+                    </V2Tarjeta>
+                )}
+
+                <V2Tarjeta titulo="Saturación dinámica" tono={lo.saturacion_dinamica === 'ok' ? 'neutro' : 'aviso'}
+                           datos={<V2Dato etiqueta="Estado" valor={lo.saturacion_dinamica || '—'}
+                                          tono={lo.saturacion_dinamica === 'ok' ? 'neutro' : 'aviso'} />}>
+                    {lo.aviso_saturacion
+                        ? <V2Desplegable avance={avSat[0]}><p>{avSat[1]}</p></V2Desplegable>
+                        : lo.saturacion_dinamica === 'ok'
+                        ? <p className="text-gray-400 text-sm">El limitador no ha aplastado la dinámica.</p>
+                        /* Sin este caso, un estado 'moderada' sin texto asociado
+                           enseñaba el indicador en amarillo y debajo "no ha
+                           aplastado": la tarjeta se contradecía a sí misma. */
+                        : <p className="text-gray-400 text-sm">
+                              La compresión del máster está en <span className="text-white">{lo.saturacion_dinamica || '—'}</span>.
+                              No llega a nivel de aviso, pero es la zona en la que conviene comparar
+                              con una referencia del género antes de apretar más.
+                          </p>}
+                </V2Tarjeta>
+            </div>
+        );
+    }
+
+    function V2TabDetalle({ r }) {
+        const d = r.datos_audio || {};
+        const a = d.armonia || {};
+        const f = d.formato || {};
+        const lo = d.loudness || {};
+        const fila = (k, v) => (
+            <div key={k} className="flex justify-between py-1.5 border-b border-[#2e2e2e] last:border-0 gap-3">
+                <span className="text-gray-500 text-xs">{k}</span>
+                <span className="text-gray-300 text-xs text-right cifra-v2">{v == null || v === '' ? '—' : String(v)}</span>
+            </div>
+        );
+        return (
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                <V2Tarjeta titulo="Estructura">
+                    {fila('Duración', d.duracion)}
+                    {fila('BPM', d.bpm == null ? 'no detectado' : d.bpm)}
+                    {fila('Bloques', d.n_bloques)}
+                    {fila('Contraste', d.contraste)}
+                    {fila('Desarrollo', d.desarrollo_temporal ? 'sí' : 'no')}
+                </V2Tarjeta>
+                <V2Tarjeta titulo="Armonía">
+                    {fila('Tonalidad', a.key ? `${a.key} ${a.modo || ''}`.trim() : null)}
+                    {fila('Confianza', a.key_confidence)}
+                    {fila('Complejidad', a.complejidad_armonica)}
+                    {fila('Tonal vs percusivo', a.ratio_tonal_percusivo)}
+                    <p className="text-gray-600 text-[11px] mt-3 leading-relaxed">
+                        El motor no juzga si las notas o los acordes son acertados. Esto es
+                        descripción, no criterio.
+                    </p>
+                </V2Tarjeta>
+                <V2Tarjeta titulo="El archivo que subiste">
+                    {fila('Formato', f.archivo_container ? `${f.archivo_container} · ${f.archivo_codec}` : null)}
+                    {fila('Sample rate', f.archivo_sample_rate ? `${f.archivo_sample_rate} Hz` : null)}
+                    {fila('Canales', f.archivo_canales)}
+                    {fila('Con pérdida', f.archivo_lossy ? 'sí' : 'no')}
+                </V2Tarjeta>
+                <V2Tarjeta titulo="Cómo se ha medido" ancho="lg:col-span-2">
+                    {fila('Método de picos', lo.true_peak_method
+                        ? `${lo.true_peak_method} (${lo.true_peak_oversampling}×)` : null)}
+                    {fila('Medidor certificado', lo.true_peak_validated == null ? null : (lo.true_peak_validated ? 'sí' : 'no'))}
+                    {fila('Motor', r.versiones && r.versiones.analysis_engine_version)}
+                    {fila('Taxonomía de picos', lo.peak_taxonomy_version ? `v${lo.peak_taxonomy_version}` : null)}
+                </V2Tarjeta>
+                {r.alcance_analisis && (
+                    <V2Tarjeta titulo="Alcance del análisis">
+                        <p className="text-gray-400 text-xs leading-relaxed">{r.alcance_analisis}</p>
+                    </V2Tarjeta>
+                )}
+            </div>
+        );
+    }
+
     function DiagnosticoScreen({ resultado, onReset, contexto, userEmail, file, opciones, nombreProyecto, onIrAPerfil, comunidadOk,
                                 proyectoNombreResuelto, versionActual, proyectoIdActual, onVerComparativa }) {
         const r = resultado;
@@ -1548,6 +2114,10 @@
         const [feedbackEnviado, setFeedbackEnviado] = useState(false);
         const [feedbackRealEnviado, setFeedbackRealEnviado] = useState(false);
         const [showTutoriales, setShowTutoriales] = useState(false);
+        // Rediseño (v2): interruptor por URL y pestaña activa. Se resuelve
+        // una sola vez para que no cambie de vista a mitad de sesión.
+        const [v2Activo] = useState(usarVistaV2);
+        const [v2Tab, setV2Tab] = useState('resumen');
 
         // Sticky bar de feedback: aparece tras 20s en la pantalla del diagnóstico
         // si el usuario no ha respondido todavía. Resuelve el problema medido en
@@ -1602,6 +2172,374 @@
             : r.estado_track === 'avanzado'
             ? { color: '#60a5fa', bg: 'rgba(96,165,250,0.10)', border: '#1e3a5f', label: 'Listo para pulir', icon: '🔵' }
             : { color: '#facc15', bg: 'rgba(250,204,21,0.10)', border: '#713f12', label: 'En desarrollo', icon: '🟡' };
+
+        // El widget de calibración se guarda en una variable para que lo
+        // usen LAS DOS vistas: la clásica lo pinta donde siempre y el
+        // rediseño lo mete en la primera pantalla. Duplicarlo habría
+        // significado mantener dos veces un formulario de tres pasos que
+        // ya funciona.
+        const bloqueFeedback = (
+                    <>
+                        {/* ===== FEEDBACK POST-ANÁLISIS — Calibración ===== */}
+                        <div ref={feedbackWidgetRef}>
+                        {feedbackStep === 0 && (
+                            <div className="card p-6 mb-6 text-center">
+                                <p className="text-gray-300 text-sm mb-2">¿El diagnóstico coincide con lo que percibías como problema?</p>
+                                <p className="text-gray-500 text-xs mb-4">Tu respuesta nos ayuda a mejorar el motor de análisis</p>
+                                <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                                    <button
+                                        onClick={() => { setFeedbackCoincide('si'); setFeedbackStep(1); }}
+                                        className="px-5 py-2.5 bg-green-900/40 hover:bg-green-900/60 accent-green rounded-lg transition-colors text-sm"
+                                    >
+                                        Sí, dio en el clavo
+                                    </button>
+                                    <button
+                                        onClick={() => { setFeedbackCoincide('masomenos'); setFeedbackStep(1); }}
+                                        className="px-5 py-2.5 bg-yellow-900/30 hover:bg-yellow-900/50 text-yellow-400 rounded-lg transition-colors text-sm"
+                                    >
+                                        Más o menos
+                                    </button>
+                                    <button
+                                        onClick={() => { setFeedbackCoincide('no'); setFeedbackStep(1); }}
+                                        className="px-5 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-400 rounded-lg transition-colors text-sm"
+                                    >
+                                        No, mi problema es otro
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {feedbackStep === 1 && !feedbackEnviado && (
+                            <div className="card p-6 mb-6 fade-in">
+                                {feedbackCoincide === 'si' ? (
+                                    <div>
+                                        <p className="accent-green text-sm mb-3">¡Genial! ¿Algo que quieras comentar?</p>
+                                        <textarea
+                                            value={feedbackComentario}
+                                            onChange={(e) => setFeedbackComentario(e.target.value)}
+                                            placeholder="Opcional: ¿qué te ha parecido más útil?"
+                                            maxLength={500}
+                                            rows={2}
+                                            className="w-full px-4 py-3 rounded-lg text-sm input-field resize-none"
+                                        />
+                                    </div>
+                                ) : (
+                                    <div>
+                                        <p className="text-gray-300 text-sm mb-3">
+                                            {feedbackCoincide === 'no'
+                                                ? 'Entendido. Cuéntanos más para que podamos mejorar:'
+                                                : 'Gracias. Cuéntanos qué faltó o qué sobró:'}
+                                        </p>
+                                        <div>
+                                            <label className="block text-xs text-gray-500 mb-1">¿Cuál crees que es el problema real de tu track que Mentotrack no haya identificado?</label>
+                                            <textarea
+                                                value={feedbackProblemaReal}
+                                                onChange={(e) => setFeedbackProblemaReal(e.target.value)}
+                                                placeholder="Ej.: Creo que el problema es la estructura, no el balance. No detectó que el clap está muy alto..."
+                                                maxLength={500}
+                                                rows={3}
+                                                className="w-full px-4 py-3 rounded-lg text-sm input-field resize-none"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                                <div className="flex gap-3 mt-3 justify-end">
+                                    <button
+                                        onClick={() => { setFeedbackStep(2); }}
+                                        className="text-gray-500 text-xs hover:text-gray-400 transition-colors"
+                                    >
+                                        Saltar
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            const fb = {
+                                                timestamp: new Date().toISOString(),
+                                                coincide: feedbackCoincide,
+                                                problema_real: feedbackProblemaReal,
+                                                no_detectado: feedbackNoDetectado,
+                                                comentario: feedbackComentario,
+                                                diagnostico: r.diagnostico_principal?.id,
+                                            };
+                                            // Enviar a API local (con JWT auth)
+                                            fetch(`${API_URL}/api/feedback`, {
+                                                method: 'POST',
+                                                headers: authHeaders(),
+                                                body: JSON.stringify(fb),
+                                            }).catch(() => {});
+                                            // Enviar feedback a Google Sheets via backend proxy
+                                            const comentarioCompleto = [
+                                                feedbackCoincide === 'si' ? '[COINCIDE]' : feedbackCoincide === 'masomenos' ? '[PARCIAL]' : '[NO COINCIDE]',
+                                                feedbackProblemaReal ? `Problema real: ${feedbackProblemaReal}` : '',
+                                                feedbackNoDetectado ? `No detectado: ${feedbackNoDetectado}` : '',
+                                                feedbackComentario ? `Comentario: ${feedbackComentario}` : '',
+                                            ].filter(Boolean).join(' | ');
+                                            fetch(`${API_URL}/api/sheets/feedback`, {
+                                                method: 'POST',
+                                                headers: {'Content-Type': 'application/json'},
+                                                body: JSON.stringify({
+                                                    email: userEmail,
+                                                    fue_util: feedbackCoincide === 'si' ? 'Sí' : feedbackCoincide === 'masomenos' ? 'Parcial' : 'No',
+                                                    comentario: comentarioCompleto,
+                                                }),
+                                            }).catch(() => {});
+                                            setFeedbackEnviado(true);
+                                            trackEvent('funnel_feedback_given', {
+                                                coincide: feedbackCoincide,
+                                                tiene_comentario: !!(feedbackComentario || feedbackProblemaReal || feedbackNoDetectado),
+                                            });
+                                            setTimeout(() => setFeedbackStep(2), 1200);
+                                        }}
+                                        className="px-5 py-2 btn-primary rounded-lg transition-colors text-sm"
+                                    >
+                                        Enviar
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {feedbackStep === 1 && feedbackEnviado && (
+                            <div className="card p-6 mb-6 text-center fade-in">
+                                <p className="accent-green text-sm">Gracias, tu feedback mejora el motor</p>
+                            </div>
+                        )}
+
+                        {feedbackStep === 2 && (
+                            <div className="card p-6 mb-6 fade-in" style={{borderLeft: '3px solid var(--po-purple)'}}>
+                                <p className="accent-purple text-sm font-medium mb-3">¿Quieres ayudar a mejorar esta app?</p>
+                                <p className="text-gray-300 text-sm leading-relaxed mb-4">
+                                    Hasta ahora tu música no se ha almacenado, pero si me compartes un enlace la escucharé personalmente para mejorar el motor de análisis. Gracias a tu música, y nuestro feedback real y humano podremos hacer una mejor herramienta para nuestra comunidad. Gracias por formar parte de esto :) - Alex
+                                </p>
+
+                                {!feedbackRealEnviado ? (
+                                    <div>
+                                        <input
+                                            type="text"
+                                            value={feedbackEnlace}
+                                            onChange={(e) => setFeedbackEnlace(e.target.value)}
+                                            placeholder="Pega tu enlace de Soundcloud o Dropbox"
+                                            className="w-full px-4 py-3 rounded-lg text-sm input-field mb-3"
+                                        />
+                                        <div className="flex gap-3 justify-end">
+                                            <button
+                                                onClick={() => setFeedbackStep(3)}
+                                                className="text-gray-500 text-xs hover:text-gray-400 transition-colors"
+                                            >
+                                                No, gracias
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    if (!feedbackEnlace.trim()) return;
+                                                    // Enviar enlace de feedback real via backend proxy
+                                                    fetch(`${API_URL}/api/sheets/feedback-real`, {
+                                                        method: 'POST',
+                                                        headers: {'Content-Type': 'application/json'},
+                                                        body: JSON.stringify({
+                                                            email: userEmail,
+                                                            enlace: feedbackEnlace.trim(),
+                                                        }),
+                                                    }).catch(() => {});
+                                                    // Enviar a API local (con JWT auth)
+                                                    fetch(`${API_URL}/api/feedback-request`, {
+                                                        method: 'POST',
+                                                        headers: authHeaders(),
+                                                        body: JSON.stringify({
+                                                            enlace: feedbackEnlace.trim(),
+                                                            diagnostico_id: r.diagnostico_principal?.id,
+                                                            genero: contexto?.genero,
+                                                            objetivo: contexto?.objetivo,
+                                                        }),
+                                                    }).catch(() => {});
+                                                    setFeedbackRealEnviado(true);
+                                                }}
+                                                disabled={!feedbackEnlace.trim()}
+                                                className={`px-5 py-2 rounded-lg transition-colors text-sm ${
+                                                    feedbackEnlace.trim()
+                                                        ? 'btn-primary'
+                                                        : 'btn-primary'
+                                                }`}
+                                            >
+                                                Quiero feedback
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-2 fade-in">
+                                        <p className="accent-green text-sm mb-1">Recibido. Alex revisará tu track pronto.</p>
+                                        <p className="text-gray-500 text-xs">Te contactaremos por el medio que uses para compartir el enlace.</p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        </div>
+                    </>
+        );
+
+        // =====================================================================
+        // Vista v2 — el rediseño. Se activa con ?v2=1.
+        // =====================================================================
+        // Reutiliza TODO lo que ya funciona: el widget de calibración, el modal
+        // de tutoriales, las tarjetas de derivación y compartir en comunidad
+        // son los mismos componentes que usa la vista clásica. Lo único nuevo
+        // es la disposición.
+        if (v2Activo) {
+            const cfgV2 = r.estado_track === 'verde'
+                ? { color: V2_COLOR.alerta, label: 'Fase temprana' }
+                : r.estado_track === 'avanzado'
+                ? { color: V2_COLOR.info, label: 'Listo para pulir' }
+                : { color: V2_COLOR.aviso, label: 'En desarrollo' };
+            const loV2 = d.loudness || {};
+            const tonoPicosV2 = loV2.severidad_picos === 'atencion' ? 'aviso' : 'neutro';
+            const avisosV2 = {
+                master: loV2.severidad_picos === 'atencion'
+                        || loV2.severidad_recorte === 'atencion'
+                        || (loV2.saturacion_dinamica && loV2.saturacion_dinamica !== 'ok'),
+                mezcla: (d.harshness && d.harshness.tiene_harshness)
+                        || d.balance_grave === 'elevado',
+            };
+
+            // Derivación: exactamente la misma regla que la vista clásica —
+            // una tarjeta y solo una, Relesit si el track sale fino.
+            const derivacionV2 = (diagId === 'sin_diagnostico' || r.estado_track === 'avanzado') && r.estado_track !== 'verde'
+                ? <RelesitCTA diagId={diagId} estado={r.estado_track} userEmail={userEmail}
+                              bpm={d && d.bpm}
+                              genero={contexto && (contexto.genero === 'otro' ? (contexto.genero_custom || '') : contexto.genero)} />
+                : <MasterCTA diagId={diagId} variante={masterCta.variante}
+                             categoria={masterCta.categoria} userEmail={userEmail} />;
+
+            // Tutoriales: en la vista clásica están tras un botón al final del
+            // informe. Aquí se enseñan directamente — que estuvieran escondidos
+            // es una de las hipótesis de por qué solo los usa el 4,6 %.
+            const tutorialesV2 = allTutoriales.length > 0 ? (
+                <div className="card p-5">
+                    <div className="rotulo-v2 mb-3">Tutoriales para esto</div>
+                    <ul className="space-y-3">
+                        {allTutoriales.slice(0, 3).map((tut, i) => {
+                            const vid = (tut.url.match(/[?&]v=([\w-]{11})/) || [])[1];
+                            return (
+                                <li key={i}>
+                                    <a href={tut.url} target="_blank" rel="noopener"
+                                       onClick={() => {
+                                           trackEvent('tutorial_clicked', { diagnostico: diagId, tutorial: tut.titulo });
+                                           try {
+                                               fetch(`${API_URL}/api/sheets/tutorial-click`, {
+                                                   method: 'POST',
+                                                   headers: { 'Content-Type': 'application/json' },
+                                                   body: JSON.stringify({ email: userEmail || '', tutorial_clickado: tut.titulo }),
+                                               }).catch(() => {});
+                                           } catch (e) {}
+                                       }}
+                                       className="flex gap-3 items-start group">
+                                        {vid && (
+                                            <span className="relative flex-none w-[104px] rounded overflow-hidden bg-[#1a1a1a]">
+                                                <img src={`https://i.ytimg.com/vi/${vid}/mqdefault.jpg`} alt="" loading="lazy"
+                                                     className="w-full h-[59px] object-cover opacity-80 group-hover:opacity-100 transition" />
+                                                <span className="absolute inset-0 flex items-center justify-center">
+                                                    <span className="w-6 h-6 rounded-full bg-black/60 flex items-center justify-center">
+                                                        <span style={{ width: 0, height: 0, marginLeft: '2px',
+                                                                       borderTop: '4px solid transparent',
+                                                                       borderBottom: '4px solid transparent',
+                                                                       borderLeft: '7px solid #fff' }} />
+                                                    </span>
+                                                </span>
+                                            </span>
+                                        )}
+                                        <span className="min-w-0">
+                                            <span className="text-gray-200 text-sm leading-snug group-hover:text-white transition block">{tut.titulo}</span>
+                                            <span className="text-gray-600 text-xs mt-1 leading-snug block">{tut.descripcion}</span>
+                                        </span>
+                                    </a>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                </div>
+            ) : null;
+
+            return (
+                <div className="min-h-screen py-6 px-4 fade-in v2-wrap">
+                    <div className="max-w-7xl mx-auto">
+                        {/* Cabecera: estado, titular y las cifras que se miran
+                            de un vistazo, siempre visibles sin hacer scroll. */}
+                        <div className="card p-5 mb-4" style={{ borderTop: `2px solid ${cfgV2.color}` }}>
+                            <div className="flex flex-col xl:flex-row xl:items-center gap-4 justify-between">
+                                <div className="min-w-0">
+                                    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                                        <span className="punto-v2" style={{ background: cfgV2.color }} />
+                                        <span className="rotulo-v2" style={{ color: cfgV2.color }}>{cfgV2.label}</span>
+                                        <span className="text-gray-600 text-xs">· {r.estado_texto}</span>
+                                    </div>
+                                    <h1 className="text-white text-lg xl:text-xl font-bold leading-snug break-words">
+                                        {r.diagnostico_principal.titulo}
+                                    </h1>
+                                </div>
+                                <div className="flex gap-2 flex-wrap xl:justify-end xl:flex-shrink-0 min-w-0">
+                                    <V2Dato etiqueta="Duración" valor={d.duracion} />
+                                    <V2Dato etiqueta="BPM" valor={d.bpm == null ? '—' : d.bpm} />
+                                    <V2Dato etiqueta="LUFS" valor={loV2.lufs_integrado == null ? '—' : loV2.lufs_integrado} />
+                                    <V2Dato etiqueta="True peak"
+                                            valor={typeof loV2.true_peak_dbtp === 'number' && loV2.true_peak_dbtp > -99
+                                                   ? loV2.true_peak_dbtp.toFixed(1) : '—'}
+                                            tono={tonoPicosV2} />
+                                    <V2Dato etiqueta="Mono" valor={(d.mono_compat && d.mono_compat.nivel_compatibilidad) || '—'} />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-1 mb-4 border-b border-[#2e2e2e] overflow-x-auto">
+                            {V2_TABS.map(t => (
+                                <button key={t.id} onClick={() => setV2Tab(t.id)}
+                                        className={`tab-v2 px-4 py-2.5 text-sm text-gray-400 flex items-center gap-2 ${v2Tab === t.id ? 'on' : ''}`}>
+                                    {t.label}
+                                    {avisosV2[t.id] && <span className="punto-v2" style={{ background: V2_COLOR.aviso }}
+                                                             title="Hay algo que mirar aquí" />}
+                                </button>
+                            ))}
+                        </div>
+
+                        <div className="fade-in" key={v2Tab}>
+                            {v2Tab === 'resumen' && (
+                                <V2TabResumen r={r} extras={{
+                                    derivacion: derivacionV2,
+                                    tutoriales: tutorialesV2,
+                                    feedback: <div className="card p-5">{bloqueFeedback}</div>,
+                                }} />
+                            )}
+                            {v2Tab === 'plan' && <V2TabPlan r={r} />}
+                            {v2Tab === 'mezcla' && <V2TabMezcla r={r} />}
+                            {v2Tab === 'master' && <V2TabMaster r={r} />}
+                            {v2Tab === 'detalle' && <V2TabDetalle r={r} />}
+                        </div>
+
+                        {comunidadOk && (
+                            <div className="mt-6">
+                                <CompartirComunidad file={file} resultado={r} contexto={contexto}
+                                                    opciones={opciones} nombreProyecto={nombreProyecto}
+                                                    onIrAPerfil={onIrAPerfil} />
+                            </div>
+                        )}
+
+                        <div className="mt-8 flex flex-wrap gap-3 items-center justify-between border-t border-[#2e2e2e] pt-5">
+                            <p className="text-gray-600 text-xs max-w-xl">{r.nota_motivacional}</p>
+                            <div className="flex gap-2 flex-wrap">
+                                <button onClick={() => { try { sessionStorage.removeItem('mt_v2'); } catch (e) {}
+                                                         location.search = ''; }}
+                                        className="btn-secondary px-4 py-2 rounded text-sm"
+                                        title="Vuelve a la vista de siempre">
+                                    Vista clásica
+                                </button>
+                                <button onClick={onReset} className="btn-primary px-4 py-2 rounded text-sm font-medium">
+                                    Analizar otro track
+                                </button>
+                            </div>
+                        </div>
+
+                        <p className="text-center text-gray-700 text-xs mt-6">
+                            Tu audio no se almacena. Se procesa y se descarta.
+                        </p>
+                    </div>
+                </div>
+            );
+        }
 
         return (
             <div className="min-h-screen py-12 px-6 fade-in">
@@ -2178,197 +3116,7 @@
                     </details>
 
 
-                    {/* ===== FEEDBACK POST-ANÁLISIS — Calibración ===== */}
-                    <div ref={feedbackWidgetRef}>
-                    {feedbackStep === 0 && (
-                        <div className="card p-6 mb-6 text-center">
-                            <p className="text-gray-300 text-sm mb-2">¿El diagnóstico coincide con lo que percibías como problema?</p>
-                            <p className="text-gray-500 text-xs mb-4">Tu respuesta nos ayuda a mejorar el motor de análisis</p>
-                            <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                                <button
-                                    onClick={() => { setFeedbackCoincide('si'); setFeedbackStep(1); }}
-                                    className="px-5 py-2.5 bg-green-900/40 hover:bg-green-900/60 accent-green rounded-lg transition-colors text-sm"
-                                >
-                                    Sí, dio en el clavo
-                                </button>
-                                <button
-                                    onClick={() => { setFeedbackCoincide('masomenos'); setFeedbackStep(1); }}
-                                    className="px-5 py-2.5 bg-yellow-900/30 hover:bg-yellow-900/50 text-yellow-400 rounded-lg transition-colors text-sm"
-                                >
-                                    Más o menos
-                                </button>
-                                <button
-                                    onClick={() => { setFeedbackCoincide('no'); setFeedbackStep(1); }}
-                                    className="px-5 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-400 rounded-lg transition-colors text-sm"
-                                >
-                                    No, mi problema es otro
-                                </button>
-                            </div>
-                        </div>
-                    )}
-
-                    {feedbackStep === 1 && !feedbackEnviado && (
-                        <div className="card p-6 mb-6 fade-in">
-                            {feedbackCoincide === 'si' ? (
-                                <div>
-                                    <p className="accent-green text-sm mb-3">¡Genial! ¿Algo que quieras comentar?</p>
-                                    <textarea
-                                        value={feedbackComentario}
-                                        onChange={(e) => setFeedbackComentario(e.target.value)}
-                                        placeholder="Opcional: ¿qué te ha parecido más útil?"
-                                        maxLength={500}
-                                        rows={2}
-                                        className="w-full px-4 py-3 rounded-lg text-sm input-field resize-none"
-                                    />
-                                </div>
-                            ) : (
-                                <div>
-                                    <p className="text-gray-300 text-sm mb-3">
-                                        {feedbackCoincide === 'no'
-                                            ? 'Entendido. Cuéntanos más para que podamos mejorar:'
-                                            : 'Gracias. Cuéntanos qué faltó o qué sobró:'}
-                                    </p>
-                                    <div>
-                                        <label className="block text-xs text-gray-500 mb-1">¿Cuál crees que es el problema real de tu track que Mentotrack no haya identificado?</label>
-                                        <textarea
-                                            value={feedbackProblemaReal}
-                                            onChange={(e) => setFeedbackProblemaReal(e.target.value)}
-                                            placeholder="Ej.: Creo que el problema es la estructura, no el balance. No detectó que el clap está muy alto..."
-                                            maxLength={500}
-                                            rows={3}
-                                            className="w-full px-4 py-3 rounded-lg text-sm input-field resize-none"
-                                        />
-                                    </div>
-                                </div>
-                            )}
-                            <div className="flex gap-3 mt-3 justify-end">
-                                <button
-                                    onClick={() => { setFeedbackStep(2); }}
-                                    className="text-gray-500 text-xs hover:text-gray-400 transition-colors"
-                                >
-                                    Saltar
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        const fb = {
-                                            timestamp: new Date().toISOString(),
-                                            coincide: feedbackCoincide,
-                                            problema_real: feedbackProblemaReal,
-                                            no_detectado: feedbackNoDetectado,
-                                            comentario: feedbackComentario,
-                                            diagnostico: r.diagnostico_principal?.id,
-                                        };
-                                        // Enviar a API local (con JWT auth)
-                                        fetch(`${API_URL}/api/feedback`, {
-                                            method: 'POST',
-                                            headers: authHeaders(),
-                                            body: JSON.stringify(fb),
-                                        }).catch(() => {});
-                                        // Enviar feedback a Google Sheets via backend proxy
-                                        const comentarioCompleto = [
-                                            feedbackCoincide === 'si' ? '[COINCIDE]' : feedbackCoincide === 'masomenos' ? '[PARCIAL]' : '[NO COINCIDE]',
-                                            feedbackProblemaReal ? `Problema real: ${feedbackProblemaReal}` : '',
-                                            feedbackNoDetectado ? `No detectado: ${feedbackNoDetectado}` : '',
-                                            feedbackComentario ? `Comentario: ${feedbackComentario}` : '',
-                                        ].filter(Boolean).join(' | ');
-                                        fetch(`${API_URL}/api/sheets/feedback`, {
-                                            method: 'POST',
-                                            headers: {'Content-Type': 'application/json'},
-                                            body: JSON.stringify({
-                                                email: userEmail,
-                                                fue_util: feedbackCoincide === 'si' ? 'Sí' : feedbackCoincide === 'masomenos' ? 'Parcial' : 'No',
-                                                comentario: comentarioCompleto,
-                                            }),
-                                        }).catch(() => {});
-                                        setFeedbackEnviado(true);
-                                        trackEvent('funnel_feedback_given', {
-                                            coincide: feedbackCoincide,
-                                            tiene_comentario: !!(feedbackComentario || feedbackProblemaReal || feedbackNoDetectado),
-                                        });
-                                        setTimeout(() => setFeedbackStep(2), 1200);
-                                    }}
-                                    className="px-5 py-2 btn-primary rounded-lg transition-colors text-sm"
-                                >
-                                    Enviar
-                                </button>
-                            </div>
-                        </div>
-                    )}
-
-                    {feedbackStep === 1 && feedbackEnviado && (
-                        <div className="card p-6 mb-6 text-center fade-in">
-                            <p className="accent-green text-sm">Gracias, tu feedback mejora el motor</p>
-                        </div>
-                    )}
-
-                    {feedbackStep === 2 && (
-                        <div className="card p-6 mb-6 fade-in" style={{borderLeft: '3px solid var(--po-purple)'}}>
-                            <p className="accent-purple text-sm font-medium mb-3">¿Quieres ayudar a mejorar esta app?</p>
-                            <p className="text-gray-300 text-sm leading-relaxed mb-4">
-                                Hasta ahora tu música no se ha almacenado, pero si me compartes un enlace la escucharé personalmente para mejorar el motor de análisis. Gracias a tu música, y nuestro feedback real y humano podremos hacer una mejor herramienta para nuestra comunidad. Gracias por formar parte de esto :) - Alex
-                            </p>
-
-                            {!feedbackRealEnviado ? (
-                                <div>
-                                    <input
-                                        type="text"
-                                        value={feedbackEnlace}
-                                        onChange={(e) => setFeedbackEnlace(e.target.value)}
-                                        placeholder="Pega tu enlace de Soundcloud o Dropbox"
-                                        className="w-full px-4 py-3 rounded-lg text-sm input-field mb-3"
-                                    />
-                                    <div className="flex gap-3 justify-end">
-                                        <button
-                                            onClick={() => setFeedbackStep(3)}
-                                            className="text-gray-500 text-xs hover:text-gray-400 transition-colors"
-                                        >
-                                            No, gracias
-                                        </button>
-                                        <button
-                                            onClick={() => {
-                                                if (!feedbackEnlace.trim()) return;
-                                                // Enviar enlace de feedback real via backend proxy
-                                                fetch(`${API_URL}/api/sheets/feedback-real`, {
-                                                    method: 'POST',
-                                                    headers: {'Content-Type': 'application/json'},
-                                                    body: JSON.stringify({
-                                                        email: userEmail,
-                                                        enlace: feedbackEnlace.trim(),
-                                                    }),
-                                                }).catch(() => {});
-                                                // Enviar a API local (con JWT auth)
-                                                fetch(`${API_URL}/api/feedback-request`, {
-                                                    method: 'POST',
-                                                    headers: authHeaders(),
-                                                    body: JSON.stringify({
-                                                        enlace: feedbackEnlace.trim(),
-                                                        diagnostico_id: r.diagnostico_principal?.id,
-                                                        genero: contexto?.genero,
-                                                        objetivo: contexto?.objetivo,
-                                                    }),
-                                                }).catch(() => {});
-                                                setFeedbackRealEnviado(true);
-                                            }}
-                                            disabled={!feedbackEnlace.trim()}
-                                            className={`px-5 py-2 rounded-lg transition-colors text-sm ${
-                                                feedbackEnlace.trim()
-                                                    ? 'btn-primary'
-                                                    : 'btn-primary'
-                                            }`}
-                                        >
-                                            Quiero feedback
-                                        </button>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="text-center py-2 fade-in">
-                                    <p className="accent-green text-sm mb-1">Recibido. Alex revisará tu track pronto.</p>
-                                    <p className="text-gray-500 text-xs">Te contactaremos por el medio que uses para compartir el enlace.</p>
-                                </div>
-                            )}
-                        </div>
-                    )}
-                    </div>
+                    {bloqueFeedback}
 
                     {/* ===== CTA Sesión 1:1 con Alex (consultoría) — DESACTIVADO (jun-2026) =====
                         Quitado por baja conversión (no entraban ni las llamadas gratis).

@@ -230,8 +230,17 @@ function tutorialesDe(r) {
     return salida;
 }
 
-/** Derivación al Máster. Una sola tarjeta, nunca dos. */
+/** Derivación al Máster. Una sola tarjeta, nunca dos.
+ *
+ * El enlace es el REAL, con los mismos parámetros UTM que manda la app
+ * (utm_content lleva la categoría del diagnóstico, que es lo que permite
+ * saber después qué diagnóstico trae más gente). Aquí sí navega: un botón de
+ * adorno en una prueba hace perder tiempo a quien la está mirando. */
 function SiguientePaso({ r }) {
+    const categoria = r.diagnostico_principal?.id || 'general';
+    const url = 'https://producciononline.com/master/?utm_source=mentotrack'
+              + '&utm_medium=app&utm_campaign=derivacion&utm_content='
+              + encodeURIComponent(categoria);
     return (
         <div className="card p-5 flex flex-col" style={{ borderTop: '2px solid #6D10FF' }}>
             <div className="rotulo mb-3">Siguiente paso</div>
@@ -262,9 +271,10 @@ function SiguientePaso({ r }) {
             <p className="text-gray-400 text-sm leading-relaxed mb-4">
                 {CONTENIDO.masterVariantes[resolverMaster(r)]}
             </p>
-            <button className="btn-primary px-4 py-2 rounded text-sm font-medium w-full mt-auto">
+            <a href={url} target="_blank" rel="noopener"
+               className="btn-primary px-4 py-2 rounded text-sm font-medium w-full mt-auto text-center block">
                 Ver el programa
-            </button>
+            </a>
         </div>
     );
 }
@@ -758,10 +768,16 @@ function Diagnostico({ r }) {
 
             <div className="mt-8 flex flex-wrap gap-3 items-center justify-between border-t border-[#2e2e2e] pt-5">
                 <p className="text-gray-600 text-xs max-w-xl">{r.nota_motivacional}</p>
+                {/* Estos tres no navegan: en la prueba no hay informe que
+                    descargar ni sesión con la que compartir. Llevan `title`
+                    para que quien la mire no los persiga. */}
                 <div className="flex gap-2 flex-wrap">
-                    <button className="btn-secondary px-4 py-2 rounded text-sm">Compartir en la comunidad</button>
-                    <button className="btn-secondary px-4 py-2 rounded text-sm">Descargar informe</button>
-                    <button className="btn-primary px-4 py-2 rounded text-sm font-medium">Analizar otra versión</button>
+                    <button title="En la prueba no hace nada"
+                            className="btn-secondary px-4 py-2 rounded text-sm">Compartir en la comunidad</button>
+                    <button title="En la prueba no hace nada"
+                            className="btn-secondary px-4 py-2 rounded text-sm">Descargar informe</button>
+                    <button title="En la prueba no hace nada"
+                            className="btn-primary px-4 py-2 rounded text-sm font-medium">Analizar otra versión</button>
                 </div>
             </div>
         </div>
