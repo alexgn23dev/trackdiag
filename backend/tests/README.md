@@ -106,6 +106,7 @@ cambiar la configuración del repositorio.
 | `test_recorte.py` | Fase 2B: contar muestras a fondo de escala. Qué se puede afirmar, qué no se acusa y que el texto enseñe |
 | `test_versiones.py` | Versionado de algoritmos y dependencias fijadas |
 | `test_frontend.py` | Guards estáticos sobre `index.html` |
+| `test_frontend_v2.py` | El rediseño y su interruptor `?v2=1`: que las dos vistas convivan y que la nueva reutilice lo que ya funciona |
 | `test_lenguaje.py` | Que no se cuele jerga interna (`n_bloques`) en el texto que lee el productor |
 | `test_genero_no_electronico.py` | El aviso de género sale ANTES del botón, y las listas del cliente y del motor no divergen |
 
