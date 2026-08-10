@@ -423,14 +423,24 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None,
 
     # === Loudness (LUFS) ===
     # Pasamos audio ya cargado para evitar re-lectura desde disco
+    # Golpes detectados: hacen falta para saber si las muestras en el techo
+    # caen sobre transitorios (firma de un clipper) o sobre material
+    # sostenido (síntoma de un problema de ganancia). Ver fase 2B.
+    try:
+        onsets_seg = librosa.onset.onset_detect(y=y, sr=sr, units="time")
+    except Exception:
+        onsets_seg = None
+
     loudness = _analizar_loudness(audio_path, y_preloaded=y, sr_preloaded=sr,
-                                  y_stereo_preloaded=y_stereo if es_stereo else None)
+                                  y_stereo_preloaded=y_stereo if es_stereo else None,
+                                  formato=formato, onsets_seg=onsets_seg)
 
     # Taxonomía de picos (fase 2A). Necesita el formato del archivo, así que
     # se calcula aquí y no dentro de _analizar_loudness. Los campos antiguos
     # (`nivel_true_peak`, `aviso_true_peak`) siguen intactos: la interfaz usa
     # los nuevos, los parsers y el histórico siguen viendo los viejos.
     loudness.update(_clasificar_picos(loudness, formato))
+    loudness.update(_clasificar_recorte(loudness, formato))
 
     # === Saturación dinámica (over-compression / "chafado") ===
     # Cruza LUFS + LRA + rango_dinamico para detectar si el limiter ha aplastado
@@ -704,6 +714,366 @@ def _analizar_harshness(mel_db: np.ndarray, mel_freqs: np.ndarray) -> dict:
     return resultado
 
 
+# ---------------------------------------------------------------------------
+# Fase 2B — muestras a fondo de escala
+# ---------------------------------------------------------------------------
+# El true peak dice si la ONDA RECONSTRUIDA asoma por encima del techo. Eso
+# muchas veces no es un problema: el pico vive entre muestras y no hay nada
+# recortado. Lo que de verdad es daño es que a la onda le hayan cortado la
+# punta en plano, y eso solo se ve CONTANDO MUESTRAS.
+#
+# Lo que justifica la fase, medido: hoy dos tracks muy distintos salen con la
+# MISMA categoría `true_peak_over` y son indistinguibles en el informe —
+#   * uno con el sample peak a -0,15 dBFS y NINGUNA muestra en el techo: el
+#     pico vive entre muestras, el máster está intacto, no hay nada que tocar;
+#   * otro con 4,3 ms de onda completamente plana: daño real e irreversible.
+# La diferencia práctica es "no toques nada" frente a "vuelve a exportar".
+#
+# LÍMITE, declarado: si el recorte ocurrió antes del bounce y DESPUÉS se bajó
+# el nivel, las muestras ya no están en el techo y contar no encuentra nada.
+# No se arregla contando mejor — la huella no está en el archivo. El diseño
+# original prometía cazar "techo correcto + recorte dentro"; eso es imposible,
+# porque el true peak nunca es menor que el sample peak: si hay muestras en el
+# techo, el true peak ya está en 0 o por encima.
+
+# Ventana alrededor de un golpe dentro de la cual se considera que una muestra
+# en el techo "cae en un transitorio".
+_VENTANA_TRANSITORIO_SEG = 0.050
+# Muestras consecutivas a partir de las cuales una racha es una meseta.
+_MIN_MUESTRAS_MESETA = 3
+# Por encima de esta duración la racha ya no es compatible con un clipper
+# recortando picos: es material sostenido aplastado.
+_RACHA_SOSTENIDA_MS = 1.0
+# Y por encima de esta fracción, además, deja de ser puntual.
+_PCT_SOSTENIDO = 0.05
+# Fracción de muestras en techo que deben caer en golpes para que el patrón
+# sea el de un clipper trabajando sobre la percusión.
+_CONCENTRACION_TRANSITORIOS = 0.8
+
+
+def _rachas(mascara: np.ndarray) -> np.ndarray:
+    """Longitudes de los tramos consecutivos de True. Vector vacío si no hay."""
+    if not mascara.any():
+        return np.zeros(0, dtype=np.int64)
+    bordes = np.diff(np.concatenate(
+        ([0], mascara.astype(np.int8), [0])))
+    return np.flatnonzero(bordes == -1) - np.flatnonzero(bordes == 1)
+
+
+def _lsb_del_formato(formato: dict):
+    """Escalón mínimo del archivo, o None si el concepto no aplica.
+
+    En punto fijo el techo existe y el escalón lo fija el bit depth. En coma
+    flotante NO HAY TECHO: contar "muestras a fondo de escala" no significa
+    nada, y fabricar un techo de 0 por convenio sería volver al error que
+    corrigió la fase 2A. Decisión 2 de DISENO_FASE_2B.md.
+    """
+    fmt = formato or {}
+    # El orden importa para el mensaje. Un MP3 se decodifica a coma flotante,
+    # así que caería en la rama del float — pero al usuario no le sirve que le
+    # hablemos de coma flotante: él subió un MP3. El motivo que le importa es
+    # que lo que estamos midiendo no es su máster, es lo que salió del
+    # decodificador. Decisión 3 de DISENO_FASE_2B.md.
+    if fmt.get("archivo_lossy"):
+        return None
+    if fmt.get("archivo_sample_format") == "float":
+        return None
+    bits = fmt.get("archivo_pcm_bit_depth")
+    if not bits or bits < 8:
+        return None
+    return 2.0 ** -(bits - 1)
+
+
+def _medir_muestras_en_techo(native: np.ndarray, native_sr: int,
+                             formato: dict, onsets_seg=None) -> dict:
+    """Mediciones OBJETIVAS sobre el array de muestras.
+
+    Todo lo que hay aquí sale de contar. Dos personas con el mismo archivo
+    obtienen los mismos números; no depende de ningún umbral discutible. Lo
+    interpretable (qué significa una racha de 3 ms) vive en `_clasificar_recorte`.
+    """
+    salida = {
+        "recorte_medible": False,
+        "recorte_no_medible_motivo": "",
+        "muestras_en_techo_por_canal": [],
+        "muestras_en_techo_total": 0,
+        "pct_muestras_en_techo": 0.0,
+        "racha_maxima_muestras": 0,
+        "racha_maxima_ms": 0.0,
+        "n_mesetas": 0,
+        "canal_afectado": "",
+        "concentracion_en_transitorios": None,
+        "posicion_maximo_seg": 0.0,
+        "distancia_maximo_al_borde_seg": 0.0,
+        "true_peak_at_file_edge": False,
+        "umbral_techo_dbfs": None,
+    }
+
+    lsb = _lsb_del_formato(formato)
+    if lsb is None:
+        fmt = formato or {}
+        if fmt.get("archivo_lossy"):
+            motivo = "lossy"
+        elif fmt.get("archivo_sample_format") == "float":
+            motivo = "coma_flotante"
+        else:
+            motivo = "bit_depth_desconocido"
+        salida["recorte_no_medible_motivo"] = motivo
+        return salida
+    if native is None or native.size == 0 or native_sr <= 0:
+        salida["recorte_no_medible_motivo"] = "sin_audio"
+        return salida
+
+    salida["recorte_medible"] = True
+    # Se trabaja en la precisión en la que ya está leído el archivo. Pasar a
+    # float64 duplicaría la memoria (200+ MB en una pista larga) sin ganar
+    # nada: un valor de 24 bits cabe exacto en float32, que tiene 24 bits de
+    # mantisa. Por encima de 24 bits el margen de 1 LSB se queda por debajo de
+    # la resolución de float32 y el umbral colapsa al fondo de escala exacto,
+    # que para esos formatos es justo lo que interesa contar.
+    abs_nat = np.abs(native)
+    # El margen de 1 LSB es lo que hace que el conteo no dependa del error de
+    # cuantización: una muestra escrita a fondo de escala y la inmediatamente
+    # inferior son indistinguibles a efectos de "el limitador tocó aquí".
+    umbral = abs_nat.dtype.type(1.0 - lsb)
+    salida["umbral_techo_dbfs"] = round(20.0 * float(np.log10(float(umbral))), 6)
+    en_techo = abs_nat >= umbral
+
+    por_canal = en_techo.sum(axis=0).astype(int).tolist()
+    total = int(sum(por_canal))
+    salida["muestras_en_techo_por_canal"] = por_canal
+    salida["muestras_en_techo_total"] = total
+    salida["pct_muestras_en_techo"] = round(
+        100.0 * total / float(en_techo.size), 6)
+
+    # Rachas: se miden por canal y se guarda la peor. Una meseta de 40 ms en
+    # L es un problema aunque R esté impecable.
+    peor_racha = 0
+    n_mesetas = 0
+    for ch in range(en_techo.shape[1]):
+        r = _rachas(en_techo[:, ch])
+        if r.size:
+            peor_racha = max(peor_racha, int(r.max()))
+            n_mesetas += int((r >= _MIN_MUESTRAS_MESETA).sum())
+    salida["racha_maxima_muestras"] = peor_racha
+    # En ms, que es lo comparable: 20 muestras son 0,45 ms a 44,1 kHz y 0,21 ms
+    # a 96 kHz. Los umbrales se ponen sobre esto, nunca sobre el conteo.
+    salida["racha_maxima_ms"] = round(1000.0 * peor_racha / native_sr, 4)
+    salida["n_mesetas"] = n_mesetas
+
+    if total:
+        tocados = [c for c, n in enumerate(por_canal) if n]
+        if len(tocados) > 1:
+            salida["canal_afectado"] = "ambos"
+        elif en_techo.shape[1] >= 2:
+            salida["canal_afectado"] = "LR"[tocados[0]] if tocados[0] < 2 else str(tocados[0])
+        else:
+            salida["canal_afectado"] = "mono"
+
+        if onsets_seg is not None and len(onsets_seg):
+            idx = np.flatnonzero(en_techo.any(axis=1))
+            t = idx / float(native_sr)
+            ons = np.sort(np.asarray(onsets_seg, dtype=np.float64))
+            j = np.searchsorted(ons, t)
+            izq = np.abs(t - ons[np.clip(j - 1, 0, len(ons) - 1)])
+            der = np.abs(ons[np.clip(j, 0, len(ons) - 1)] - t)
+            cerca = np.minimum(izq, der) <= _VENTANA_TRANSITORIO_SEG
+            salida["concentracion_en_transitorios"] = round(
+                float(cerca.mean()), 4)
+
+    plano = int(np.argmax(abs_nat, axis=None) // abs_nat.shape[1])
+    pos = plano / float(native_sr)
+    dur = len(native) / float(native_sr)
+    salida["posicion_maximo_seg"] = round(pos, 4)
+    salida["distancia_maximo_al_borde_seg"] = round(min(pos, dur - pos), 4)
+    # Se MIDE, no se corrige. En la fase 1.1 quedó comprobado que la
+    # sobreoscilación ante un escalón es real y la ven los cuatro métodos: no
+    # es un artefacto que haya que suprimir. El campo sirve para poder matizar
+    # el texto, no para descontar dB.
+    salida["true_peak_at_file_edge"] = bool(plano < 512 or len(native) - plano <= 512)
+    return salida
+
+
+def _clasificar_recorte(medicion: dict, formato: dict) -> dict:
+    """Interpreta las mediciones. Aquí sí hay umbrales elegidos, y por eso el
+    lenguaje es de probabilidad.
+
+    Dos reglas que vienen de las decisiones cerradas con Alex:
+
+    * NO se afirma intención. Se describe el patrón y con qué es compatible.
+    * NO se avisa a todo el mundo. Un clipper haciendo su trabajo no genera
+      aviso: un productor que lo usa a propósito no necesita una regañina en
+      cada análisis, y si se la damos deja de creerse el resto del informe.
+
+    Y el principio que ordena el copy: cada caso tiene que dejar al productor
+    sabiendo algo. Qué se ha medido, qué significa y qué hacer con ello.
+    """
+    salida = {
+        "categoria_recorte": "",
+        "severidad_recorte": "info",     # info | atencion
+        "titulo_recorte": "",
+        "aviso_recorte": "",
+    }
+    fmt = formato or {}
+
+    if not medicion.get("recorte_medible"):
+        motivo = medicion.get("recorte_no_medible_motivo", "")
+        if motivo == "lossy":
+            salida.update({
+                "categoria_recorte": "no_aplica_lossy",
+                "titulo_recorte": "Recorte de muestras: hace falta el archivo original",
+                "aviso_recorte": (
+                    "No se cuentan muestras recortadas en un archivo con pérdida "
+                    "(MP3, OGG, AAC). El motivo: lo que analizamos no son tus "
+                    "muestras, son las que ha reconstruido el decodificador, y ese "
+                    "proceso cambia la forma de onda — puede aplanar picos que "
+                    "estaban bien y crear otros que no existían. Acusarte de recortar "
+                    "a partir de eso sería injusto. "
+                    "Si quieres saber si tu máster tiene recorte real, sube el WAV o "
+                    "el AIFF del que salió este archivo."),
+            })
+        elif motivo == "coma_flotante":
+            salida.update({
+                "categoria_recorte": "no_aplica_float",
+                "titulo_recorte": "Recorte de muestras: no aplica en coma flotante",
+                "aviso_recorte": (
+                    "No se cuentan muestras recortadas porque en un archivo de coma "
+                    "flotante no hay techo que tocar: los valores por encima de 0 se "
+                    "guardan tal cual y se recuperan bajando el gain. El recorte "
+                    "aparece cuando exportas a PCM (WAV 16/24 bits), que es donde "
+                    "esos valores ya no caben. Si quieres este dato, analiza el WAV "
+                    "de entrega."),
+            })
+        else:
+            salida.update({
+                "categoria_recorte": "no_medible",
+                "titulo_recorte": "Recorte de muestras: no se ha podido medir",
+                "aviso_recorte": (
+                    "No se ha podido determinar la resolución del archivo, y sin "
+                    "saber cuál es el valor máximo que admite no se puede contar "
+                    "qué muestras lo alcanzan."),
+            })
+        return salida
+
+    total = medicion["muestras_en_techo_total"]
+    racha_ms = medicion["racha_maxima_ms"]
+    racha_n = medicion["racha_maxima_muestras"]
+    pct = medicion["pct_muestras_en_techo"]
+    conc = medicion.get("concentracion_en_transitorios")
+    canal = medicion.get("canal_afectado", "")
+    es_lossy = bool(fmt.get("archivo_lossy"))
+
+    if total == 0:
+        salida.update({
+            "categoria_recorte": "sin_muestras_en_techo",
+            "titulo_recorte": "Ninguna muestra llega al techo",
+            "aviso_recorte": (
+                "Ni una sola muestra del archivo alcanza el valor máximo que admite "
+                "el formato. Eso descarta el recorte por muestras: la forma de onda "
+                "está entera. Ojo, no es lo mismo que el true peak — ese mide la onda "
+                "reconstruida entre muestras y puede asomar por encima de 0 sin que "
+                "aquí haya nada recortado."),
+        })
+        return salida
+
+    # Coletilla común: el "de dónde sale" el número, para que el dato enseñe.
+    donde = ""
+    if canal in ("L", "R"):
+        donde = f" Todas están en el canal {canal}, lo que suele apuntar a un elemento concreto mal ajustado más que al máster entero."
+    elif canal == "ambos":
+        donde = ""
+
+    lossy_nota = ""
+    if es_lossy:
+        lossy_nota = (
+            " Aviso importante: has subido un archivo con pérdida. El decodificador "
+            "de MP3 o AAC puede generar muestras a fondo de escala que NO estaban en "
+            "tu máster original, así que este recuento no es atribuible a tu mezcla. "
+            "Para un dato real, analiza el WAV o AIFF del que salió.")
+
+    # --- Muestras sueltas: el techo se toca, no se recorta -------------------
+    if racha_n < _MIN_MUESTRAS_MESETA:
+        cuantas = "Hay una muestra que llega" if total == 1 else \
+            f"Hay {total} muestras que llegan"
+        seguidas = "una sola muestra" if racha_n <= 1 else f"{racha_n} muestras"
+        salida.update({
+            "categoria_recorte": "techo_tocado",
+            "titulo_recorte": "El techo se toca, pero la onda no está recortada",
+            "aviso_recorte": (
+                f"{cuantas} al máximo del formato, pero "
+                f"siempre sueltas: la racha más larga es de {seguidas}. "
+                "Para que haya recorte hace falta que varias muestras seguidas se "
+                "queden pegadas al techo formando una meseta — es eso lo que aplana "
+                "la onda y genera distorsión. Aquí no ocurre: son picos que rozan el "
+                "límite y vuelven a bajar." + donde + lossy_nota),
+        })
+        return salida
+
+    sostenido = (racha_ms > _RACHA_SOSTENIDA_MS and pct > _PCT_SOSTENIDO)
+    en_golpes = conc is not None and conc >= _CONCENTRACION_TRANSITORIOS
+
+    # --- Patrón de clipper: corto y en los golpes. No es un aviso -----------
+    if en_golpes and not sostenido:
+        salida.update({
+            "categoria_recorte": "recorte_en_transitorios",
+            "titulo_recorte": "Recorte corto y en los golpes: la firma de un clipper",
+            "aviso_recorte": (
+                f"Hay {total} muestras en el techo formando {medicion['n_mesetas']} "
+                f"mesetas, ninguna de más de {racha_ms:.2f} ms, y el "
+                f"{conc * 100:.0f}% caen justo sobre golpes de percusión. "
+                "Ese patrón es exactamente lo que deja un clipper recortando los "
+                "picos de la batería, que es una técnica normal y muy usada en "
+                "electrónica: rebaja los transitorios para poder subir el nivel medio "
+                "sin que el limitador bombee. **Si lo has puesto tú, esto es lo "
+                "esperado y no hay nada que corregir.** "
+                "Lo decimos solo para que sepas que está ahí y hasta dónde llega."
+                + lossy_nota),
+        })
+        return salida
+
+    # --- Recorte sostenido: el caso que sí merece un aviso ------------------
+    if sostenido and not es_lossy:
+        salida.update({
+            "categoria_recorte": "recorte_sostenido",
+            "severidad_recorte": "atencion",
+            "titulo_recorte": "Hay tramos de onda aplanados",
+            "aviso_recorte": (
+                f"La racha más larga son {racha_n} muestras seguidas pegadas al techo: "
+                f"{racha_ms:.1f} ms de onda completamente plana, y en total el "
+                f"{pct:.3f}% de las muestras del archivo están ahí. "
+                "Eso ya no encaja con un clipper recortando picos — un clipper actúa "
+                "durante décimas de milisegundo sobre transitorios. Un tramo plano de "
+                "milisegundos significa que material sostenido (un bajo, un pad, una "
+                "nota larga) se ha quedado sin sitio. "
+                "Lo que oyes de eso es distorsión armónica añadida, y a diferencia de "
+                "un pico alto **no se arregla después**: la información que había en "
+                "esa parte de la onda ya no está en el archivo. "
+                "Qué hacer: baja el gain de entrada del máster unos dB y vuelve a "
+                "exportar desde el proyecto. Si el recorte viene de la mezcla y no del "
+                "máster, búscalo en el elemento que suena en ese momento "
+                f"(~{medicion['posicion_maximo_seg']:.1f}s). "
+                "Y si esto es una decisión estética tuya —distorsión buscada—, "
+                "ignóralo: lo marcamos porque no podemos distinguir tu intención, "
+                "solo la forma de la onda." + donde),
+        })
+        return salida
+
+    # --- Recorte breve no concentrado, o lossy sospechoso ------------------
+    salida.update({
+        "categoria_recorte": "recorte_breve",
+        "titulo_recorte": "Recorte puntual",
+        "aviso_recorte": (
+            f"Hay {medicion['n_mesetas']} meseta(s) de muestras pegadas al techo, la "
+            f"más larga de {racha_ms:.2f} ms ({racha_n} muestras). "
+            "Son tramos en los que la onda se queda plana en vez de seguir subiendo. "
+            "A esta duración el efecto audible es mínimo y es lo que deja cualquier "
+            "limitador trabajando cerca del techo. "
+            "No hace falta que corrijas nada por esto; si te molesta, un par de dB "
+            "menos de entrada en el máster lo quita." + donde + lossy_nota),
+    })
+    return salida
+
+
 def _clasificar_picos(loudness: dict, formato: dict) -> dict:
     """Taxonomía de picos (fase 2A). Sustituye a `nivel_true_peak` en la
     interfaz; el campo antiguo se conserva intacto para no romper parsers ni
@@ -845,7 +1215,7 @@ def _clasificar_picos(loudness: dict, formato: dict) -> dict:
 
 
 def _analizar_loudness(audio_path: str, y_preloaded=None, sr_preloaded=None,
-                       y_stereo_preloaded=None) -> dict:
+                       y_stereo_preloaded=None, formato=None, onsets_seg=None) -> dict:
     """
     Mide loudness según ITU-R BS.1770 (LUFS).
     Usa audio precargado si está disponible para evitar re-lectura de disco.
@@ -903,6 +1273,10 @@ def _analizar_loudness(audio_path: str, y_preloaded=None, sr_preloaded=None,
         "aviso_saturacion": "",       # texto solo cuando saturación elevada/extrema
         "nivel_true_peak": "",        # "ok"|"streaming"|"clipping" según severidad
         "aviso_true_peak": "",        # texto accionable cuando excede umbrales
+        # --- Fase 2B: muestras a fondo de escala -------------------------
+        # Se rellenan en el bloque de picos; si el archivo no se pudo releer
+        # a rate nativo se quedan así y `recorte_medible` marca el porqué.
+        **_medir_muestras_en_techo(None, 0, formato),
     }
 
     try:
@@ -983,6 +1357,12 @@ def _analizar_loudness(audio_path: str, y_preloaded=None, sr_preloaded=None,
             resultado["true_peak_oversampling"] = OVERSAMPLING_PICOS
             resultado["peak_measurement_sample_rate"] = int(native_sr)
             resultado["peak_measurement_channels"] = int(native.shape[1])
+
+            # Fase 2B: contar muestras a fondo de escala. Se hace aquí porque
+            # es donde ya está leído el array nativo — reutilizarlo cuesta
+            # ~10-30 ms en una pista de 6 min, frente a releer el archivo.
+            resultado.update(_medir_muestras_en_techo(
+                native, native_sr, formato, onsets_seg=onsets_seg))
         except Exception:
             # Fallback: el archivo no se pudo releer a sample rate nativo.
             # Lo único que queda es el audio ya remuestreado a 22 kHz, que NO

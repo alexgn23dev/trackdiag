@@ -203,7 +203,7 @@
     // /api/health. Si no coincide, este fichero viene de la caché del
     // navegador y puede estar dejando de enviar campos que el backend ya
     // espera — se recarga una sola vez y, si aun así no cuadra, se avisa.
-    const APP_VERSION = '0.5.73';
+    const APP_VERSION = '0.5.74';
 
     function comprobarVersionFrontend(onDesfase, onEntorno) {
         fetch(`${API_URL}/api/health`, { cache: 'no-store' })
@@ -1883,6 +1883,34 @@
                                             <div className="mt-3 p-2 rounded border-l-2 border-yellow-400 bg-yellow-400/5">
                                                 <p className="text-xs font-medium text-yellow-400">True peak</p>
                                                 <p className="text-gray-300 text-xs mt-1">{d.loudness.aviso_true_peak}</p>
+                                            </div>
+                                        ) : null}
+                                        {/* Fase 2B — muestras a fondo de escala. Es lo único
+                                            que puede AFIRMAR que la onda está recortada; el
+                                            true peak de arriba solo dice si la onda asoma
+                                            entre muestras.
+                                            El caso limpio se resuelve en una línea: un
+                                            informe sin problemas no debe llenarse de párrafos.
+                                            El resto sí se explica entero — la idea es formar
+                                            al productor, no solo etiquetarle el archivo. */}
+                                        {d.loudness.categoria_recorte === 'sin_muestras_en_techo' ? (
+                                            <p className="text-gray-500 text-xs mt-2">
+                                                Ninguna muestra del archivo llega al techo: la forma de onda está entera.
+                                            </p>
+                                        ) : d.loudness.aviso_recorte ? (
+                                            <div className={`mt-3 p-2 rounded border-l-2 ${d.loudness.severidad_recorte === 'atencion' ? 'border-yellow-400 bg-yellow-400/5' : 'border-gray-600 bg-white/5'}`}>
+                                                <p className={`text-xs font-medium ${d.loudness.severidad_recorte === 'atencion' ? 'text-yellow-400' : 'text-gray-300'}`}>
+                                                    {d.loudness.titulo_recorte}
+                                                </p>
+                                                <p className="text-gray-300 text-xs mt-1">{d.loudness.aviso_recorte}</p>
+                                                {d.loudness.racha_maxima_ms > 0 && (
+                                                    <p className="text-gray-500 text-xs mt-1">
+                                                        Medido: {d.loudness.muestras_en_techo_total} muestras en el techo
+                                                        {' '}({d.loudness.pct_muestras_en_techo}% del archivo) ·
+                                                        {' '}meseta más larga {d.loudness.racha_maxima_ms} ms
+                                                        {d.loudness.canal_afectado ? ` · canal ${d.loudness.canal_afectado}` : ''}
+                                                    </p>
+                                                )}
                                             </div>
                                         ) : null}
                                         {loudnessTip && (
@@ -3826,6 +3854,17 @@
                         informe += `Categoría de picos: ${_cat}\n`;
                         informe += `Taxonomía de picos: v${da.loudness.peak_taxonomy_version || 2}\n`;
                     }
+                    // Fase 2B. `!= null` otra vez a propósito: un recuento de 0
+                    // es un dato (no hay recorte), no una ausencia de dato.
+                    const _rec = da.loudness.categoria_recorte;
+                    if (_rec) {
+                        informe += `Recorte de muestras: ${_rec}\n`;
+                        if (da.loudness.muestras_en_techo_total != null && da.loudness.recorte_medible) {
+                            informe += `Muestras en el techo: ${da.loudness.muestras_en_techo_total}`;
+                            informe += ` (${da.loudness.pct_muestras_en_techo}%)`;
+                            informe += ` | Meseta más larga: ${da.loudness.racha_maxima_ms} ms\n`;
+                        }
+                    }
                 }
                 if (da.mono_compat) {
                     informe += `Mono compat: ${da.mono_compat.nivel_compatibilidad || 'N/A'}`;
@@ -3905,6 +3944,15 @@
                     true_peak_method: da.loudness?.true_peak_method,
                     true_peak_oversampling: da.loudness?.true_peak_oversampling,
                     true_peak_validated: da.loudness?.true_peak_validated,
+                    categoria_recorte: da.loudness?.categoria_recorte,
+                    recorte_medible: da.loudness?.recorte_medible,
+                    severidad_recorte: da.loudness?.severidad_recorte,
+                    muestras_en_techo_total: da.loudness?.muestras_en_techo_total,
+                    pct_muestras_en_techo: da.loudness?.pct_muestras_en_techo,
+                    racha_maxima_ms: da.loudness?.racha_maxima_ms,
+                    n_mesetas: da.loudness?.n_mesetas,
+                    canal_afectado: da.loudness?.canal_afectado,
+                    concentracion_en_transitorios: da.loudness?.concentracion_en_transitorios,
                     true_peak_ground_truth_validation_passed: da.loudness?.true_peak_ground_truth_validation_passed,
                     true_peak_internal_validation_passed: da.loudness?.true_peak_internal_validation_passed,
                     true_peak_external_validation_passed: da.loudness?.true_peak_external_validation_passed,

@@ -1,6 +1,10 @@
 # Fase 2B — campos de muestras a fondo de escala
 
-**Diseño. Nada de esto está implementado.**
+**IMPLEMENTADA en v0.5.74 (2026-08-09).** Este documento conserva el diseño y
+el rastro de lo que se corrigió por el camino, incluida una promesa que
+resultó ser imposible (ver la tabla cruzada más abajo). El código vive en
+`engine/extractor.py::_medir_muestras_en_techo` y `::_clasificar_recorte`;
+los tests, en `tests/test_recorte.py`.
 
 ---
 
@@ -180,9 +184,19 @@ demuestra recorte". La 2B es justo lo que cierra esa frase:
 | `true_peak_over` | A0 o ninguna | Over intersample puro. El máster está bien, el pico vive entre muestras |
 | `true_peak_over` | A2 / A3 | Recorte probable **y** overs. Es el caso grave de verdad |
 | `overs_float_recuperables` | (no aplica: en float no hay techo) | Sigue siendo recuperable |
-| `ok` / `margen_streaming` | A3 | **El hallazgo que hoy es invisible**: techo correcto y recorte dentro, típico de un clipper antes del bounce |
+| ~~`ok` / `margen_streaming`~~ | ~~A3~~ | **IMPOSIBLE — corregido el 2026-08-09** |
 
-Esa última fila es la que justifica la fase. Hoy un track así sale limpio.
+**La última fila era un error del diseño y se retira.** El true peak nunca es
+menor que el sample peak (lo fuerza el `max(tp, sp)` de `extractor.py`). Si hay
+muestras en el techo, el sample peak está en 0 dBFS, luego el true peak está en
+0 o por encima, luego la categoría de la 2A **no puede ser `ok`**. "Techo
+correcto y recorte dentro" no existe.
+
+Lo que sí justifica la fase, y está medido en
+`test_recorte.py::test_separa_dos_tracks_que_la_2a_ve_iguales`, es la primera
+fila contra la segunda: **dos tracks que hoy salen los dos como
+`true_peak_over` y son indistinguibles en el informe**, cuando uno no tiene ni
+una muestra recortada y el otro tiene 4,3 ms de onda plana.
 
 ## Coste estimado
 
@@ -198,7 +212,61 @@ cambios    = np.diff(en_techo.astype(np.int8), axis=0)
 Estimación: **10-30 ms** en un track de 6 minutos, frente a los ~600 ms que
 tarda hoy el análisis de un track de 12 s. Despreciable.
 
-## Qué hay que decidir antes de implementar
+## DECISIONES CERRADAS (2026-08-09, con Alex)
+
+### El principio que ordena todo el copy
+
+> *"Sobre todo explica al usuario lo que ocurre en cada caso, la idea siempre
+> es formarle también."* — Alex
+
+No basta con clasificar. Cada caso tiene que dejar al productor sabiendo algo
+que antes no sabía: qué se ha medido, qué significa físicamente, con qué es
+compatible y qué hacer (o no hacer). Un aviso que solo etiqueta es una
+oportunidad desperdiciada.
+
+### Intención: no se puede saber, y no se va a fingir
+
+Pregunta de Alex: *"a veces el recorte es buscado en mastering, ¿cómo sabremos
+que es intencionado? ¿Se lo dirás a todo el mundo?"*
+
+**No se puede saber.** Afirmar lo contrario sería exactamente el error que
+corrigió toda esta auditoría: convertir una señal en una certeza sobre la
+intención de alguien. Lo que sí separan las mediciones son los extremos:
+
+| | clipper haciendo su trabajo | error de ganancia |
+|---|---|---|
+| Duración de la racha | décimas de ms | decenas de ms |
+| Dónde cae | en los golpes (transitorios) | sobre notas sostenidas |
+| Reparto | por todo el track | concentrado en la parte más fuerte |
+
+**Y no, no se le dice a todo el mundo.** Un productor de techno que usa un
+clipper a propósito no necesita una regañina en cada análisis; si se la damos,
+deja de creerse el resto del informe. Solo el patrón **incompatible con uso
+deliberado** genera aviso, y aun así con lenguaje de "esto no parece un
+clipper haciendo su trabajo, mira si es lo que buscabas", nunca "tienes un
+error".
+
+### Las cinco
+
+1. **Umbral de "en el techo": 1 LSB del bit depth real.** Ya se conoce desde
+   v0.5.71. En 24 bits eso es 1,19·10⁻⁷, representable exactamente en el
+   float32 con el que se lee el archivo.
+2. **Coma flotante: NO APLICA.** Ahí no hay techo — por eso la 2A dejó de
+   decirles que clipean. Inventar un techo de 0 para poder contar algo sería
+   volver al error corregido.
+3. **Con pérdida (MP3/OGG): se mide, no se acusa.** El decodificador puede
+   generar picos que no estaban en el original. Nunca se emite recorte
+   sostenido sobre un lossy; se invita a subir el WAV.
+4. **`confianza_clipping_probable`: NO se implementa.** Un número inventado a
+   partir de pesos elegidos a dedo, con apariencia de precisión que no tiene.
+   Todo lo demás funciona sin él.
+5. **¿Puede ser diagnóstico principal? Solo el recorte sostenido, y midiendo
+   antes.** Se implementa la detección, se pasa sobre el histórico y se mide
+   **cuántos informes cambiarían de titular** antes de activar nada.
+
+---
+
+## Qué había que decidir antes de implementar (histórico)
 
 1. **El umbral de "en el techo".** ¿`1 − 1 LSB` del bit depth real, o un valor
    fijo como −0,1 dBFS? El primero es correcto pero exige conocer el bit

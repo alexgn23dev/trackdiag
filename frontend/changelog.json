@@ -1,6 +1,18 @@
 {
   "entries": [
     {
+      "version": "0.5.74",
+      "date": "2026-08-09",
+      "title": "Ahora sí sabemos ver el recorte de verdad",
+      "changes": [
+        "Mentotrack ya no se queda en «tus picos asoman por encima del techo». Ahora cuenta cuántas muestras se han quedado pegadas al máximo y cuánto duran esos tramos, que es lo único que demuestra que a la onda le han cortado la punta.",
+        "Con eso separamos dos casos que antes eran idénticos en el informe: un pico que asoma entre muestras y no ha roto nada, y una onda de verdad aplastada. Lo primero no se toca; lo segundo hay que volver a exportarlo.",
+        "Si usas un clipper a propósito en la batería —técnica normal en electrónica— no te vamos a dar la brasa: reconocemos ese patrón y solo te decimos que está ahí.",
+        "En archivos de coma flotante y en MP3 no se cuenta nada, y te explicamos por qué: en el primero no hay techo que tocar y en el segundo las muestras son del decodificador, no tuyas.",
+        "Lo que seguimos sin poder ver, y lo decimos: si el recorte ocurrió antes de exportar y luego bajaste el nivel, no queda rastro en el archivo."
+      ]
+    },
+    {
       "version": "0.5.73",
       "date": "2026-08-09",
       "title": "El medidor de picos, certificado",
