@@ -34,19 +34,23 @@ const contenido = JSON.parse(fs.readFileSync(destino, 'utf8'));
 let dataUri;
 if (ext === '.svg') {
     let svg = fs.readFileSync(origen, 'utf8');
-    if (!conservar) {
-        // El monograma viene en negro (#1D1D1B, #000, currentColor…). Sobre
-        // una tarjeta oscura hay que pasarlo a blanco.
+    // Producción Online tiene una versión del logo ya en blanco (la _B). Si
+    // llega esa, recolorear sobra: se detecta y se deja como está.
+    const yaEsClaro = /fill:\s*#(fff|ffffff)\b/i.test(svg) || /fill="#(fff|ffffff)"/i.test(svg);
+    if (!conservar && !yaEsClaro) {
+        // El monograma en su versión normal viene en negro (#1D1D1B, #000…).
+        // Sobre una tarjeta oscura hay que pasarlo a blanco.
         svg = svg
             .replace(/fill="#(0{3,6}|1[dD]1[dD]1[bB]|1a1a1a|111111|222222)"/g, 'fill="#FFFFFF"')
             .replace(/fill:\s*#(0{3,6}|1[dD]1[dD]1[bB])/g, 'fill:#FFFFFF');
-        if (!/fill=/.test(svg)) {
-            // Sin fill declarado, hereda del contenedor: se fuerza en la raíz.
+        if (!/fill[=:]/.test(svg)) {
+            // Sin fill declarado hereda del contenedor: se fuerza en la raíz.
             svg = svg.replace('<svg', '<svg fill="#FFFFFF"');
         }
     }
     dataUri = 'data:image/svg+xml;base64,' + Buffer.from(svg, 'utf8').toString('base64');
-    console.log(conservar ? 'SVG incrustado sin tocar el color'
+    console.log(yaEsClaro ? 'SVG incrustado — ya venía en blanco, no se toca el color'
+              : conservar ? 'SVG incrustado sin tocar el color'
                           : 'SVG incrustado y recoloreado a blanco');
 } else if (ext === '.png' || ext === '.webp') {
     const mime = ext === '.png' ? 'image/png' : 'image/webp';

@@ -140,20 +140,19 @@ queda con el CTA al Máster. Lo comprueba `verificar.cjs`.
 
 ### El logo de Producción Online
 
-Falta el archivo. Para meterlo:
+Ya está puesto: `frontend/logo-po.svg` (la versión _VR_B, que viene en blanco
+y por eso no hay que recolorearla) va incrustado como data URI en
+`contenido.json`, así que el prototipo sigue abriéndose sin red.
+
+Si algún día cambia el archivo:
 
 ```bash
-node docs/rediseno/incrustar-logo.cjs <ruta-al-logo>
+node docs/rediseno/incrustar-logo.cjs frontend/logo-po.svg
 node docs/rediseno/construir.cjs
 ```
 
-**Mejor en SVG**: el monograma es negro y las tarjetas son oscuras, así que
-hay que recolorearlo a blanco — y eso solo se puede hacer con un SVG. Un PNG
-tendría que venir ya en claro y con fondo transparente.
-
-Mientras no esté, la tarjeta enseña el nombre de la marca en texto. No se
-dibuja un logo aproximado: trazar a ojo el monograma de alguien y llamarlo su
-logo es peor que no ponerlo.
+El script detecta si el SVG ya viene en claro y, si no, lo recolorea a blanco
+— las tarjetas son oscuras y el monograma en su versión normal es negro.
 
 ### Ya resuelto
 
