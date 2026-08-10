@@ -106,7 +106,7 @@ jobs:
           for m in test_picos test_formato test_sin_senal test_itu_referencia \
                    test_reconstruccion test_recorte test_versiones test_frontend \
                    test_entorno test_tempo test_taxonomia_picos \
-                   test_compat_legacy_v2 test_encuesta_retirada; do
+                   test_compat_legacy_v2 test_encuesta_retirada test_lenguaje; do
             echo "::group::$m"
             docker run --rm -w /app/backend mentotrack:ci \
               python -m unittest "tests.$m" -v 2>&1 | tail -25

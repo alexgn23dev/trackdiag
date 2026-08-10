@@ -106,6 +106,7 @@ cambiar la configuración del repositorio.
 | `test_recorte.py` | Fase 2B: contar muestras a fondo de escala. Qué se puede afirmar, qué no se acusa y que el texto enseñe |
 | `test_versiones.py` | Versionado de algoritmos y dependencias fijadas |
 | `test_frontend.py` | Guards estáticos sobre `index.html` |
+| `test_lenguaje.py` | Que no se cuele jerga interna (`n_bloques`) en el texto que lee el productor |
 
 ## Notas
 

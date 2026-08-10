@@ -12,6 +12,8 @@
  * Piezas de entrada, todas en esta carpeta:
  *   prototipo.src.html   la fuente con JSX y el marcador __CASOS_JSON__
  *   casos.json           tres análisis REALES sacados del motor
+ *   contenido.json       tutoriales y variantes del CTA, extraídos del
+ *                        index.html de producción para no inventar textos
  *   react.js, react-dom.js   UMD de producción
  *
  * Sin tipografías remotas a propósito: un <link> a Google Fonts bloquea el
@@ -38,11 +40,14 @@ function cargarBabel() {
 
 const fuente = leer('prototipo.src.html');
 const casos = leer('casos.json');
+const contenido = leer('contenido.json');
 
 // 1. Inyectar los datos reales
 let jsx = fuente.match(/<script type="text\/babel"[^>]*>([\s\S]*?)<\/script>/)[1];
 if (!jsx.includes('__CASOS_JSON__')) throw new Error('la fuente no tiene __CASOS_JSON__');
 jsx = jsx.replace('__CASOS_JSON__', JSON.stringify(JSON.parse(casos)));
+if (!jsx.includes('__CONTENIDO_JSON__')) throw new Error('la fuente no tiene __CONTENIDO_JSON__');
+jsx = jsx.replace('__CONTENIDO_JSON__', JSON.stringify(JSON.parse(contenido)));
 
 // 2. Compilar el JSX a JS normal
 const { code } = cargarBabel().transform(jsx, {

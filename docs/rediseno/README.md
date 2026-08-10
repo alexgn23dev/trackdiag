@@ -20,10 +20,18 @@ Esta prueba cambia tres cosas:
 1. **Ancho.** El contenedor pasa a 1280 px y el contenido se reparte en
    rejillas de dos y tres columnas.
 2. **Pestañas.** Cinco: Resumen · Plan de acción · Mezcla · Máster · Detalle.
-   Las que tienen algo que mirar llevan un punto amarillo.
+   Las que tienen algo que mirar llevan un punto de color.
 3. **Texto desplegable.** Cada tarjeta enseña un avance de una o dos frases y
    guarda el resto tras «Saber más». **No se quita ni una palabra**: deja de
    estar toda de golpe.
+4. **Sin emojis.** Cada tarjeta se identifica con un rótulo en versalitas y,
+   cuando hay algo que mirar, con un punto de color. Es lo que separa un panel
+   de herramienta de una app de consumo.
+5. **Lo que rodea al diagnóstico va en el Resumen**, no escondido: la
+   derivación al Máster, los tutoriales del canal filtrados por diagnóstico y
+   la pregunta de calibración. Compartir y descargar, en la barra de acciones.
+   Los textos salen de `contenido.json`, extraído del `index.html` real para
+   no inventar copy que luego no existe.
 
 Los datos son **reales**, salidos del motor (v0.5.77). Hay tres análisis para
 comparar: un boceto temprano, un máster caliente y un track cuidado.
@@ -42,8 +50,10 @@ prototipo.html?tab=master&caso=caliente
   sin mover los puntos de ruptura).
 * **La tipografía.** Se usa la pila del sistema en vez de Arimo y Space
   Grotesk, para que el archivo no dependa de Google Fonts y abra sin red.
-* **Lo que rodea al diagnóstico.** Feedback, tutoriales, CTA al Máster,
-  compartir en comunidad: no están. Esto es solo la vista de resultados.
+* **El comportamiento real de los bloques que rodean al diagnóstico.** Están
+  colocados y con su texto real, pero no llaman a nada: el botón del Máster no
+  navega, el feedback no envía y compartir no sube nada. Lo que se juzga aquí
+  es dónde van y cuánto sitio ocupan.
 
 ---
 
@@ -51,9 +61,10 @@ prototipo.html?tab=master&caso=caliente
 
 | Archivo | Qué es |
 |---|---|
-| `prototipo.html` | **Lo que hay que abrir.** Generado, autocontenido, 222 KB |
+| `prototipo.html` | **Lo que hay que abrir.** Generado, autocontenido, 230 KB |
 | `prototipo.src.html` | La fuente con JSX. Es lo que se edita |
 | `casos.json` | Los tres análisis reales |
+| `contenido.json` | Tutoriales y variantes del CTA, extraídos del `index.html` real |
 | `construir.cjs` | Genera `prototipo.html` a partir de lo anterior |
 | `verificar.cjs` | Renderiza cada pestaña con cada análisis en Node |
 | `tailwind.config.cjs`, `tw.in.css`, `tw.out.css` | Solo las clases que se usan |
@@ -94,10 +105,18 @@ Se anotan porque son los mismos que habría que evitar al llevarlo a
 
 ## Pendiente de decidir antes de llevarlo a producción
 
-* Dónde encajan feedback, tutoriales y el CTA al Máster: ¿fuera de las
-  pestañas, siempre visibles, o en una sexta?
-* Si el informe descargable en texto plano sigue igual (ahora es un volcado
-  lineal y no tiene pestañas).
-* La primera prioridad del motor menciona `n_bloques`, que es un nombre de
-  variable interno. Se cuela en el texto que ve el usuario; no es cosa del
-  rediseño, pero se ve mucho más ahora que está arriba del todo.
+* **El móvil.** Con cinco pestañas y rejillas de tres columnas, hay que
+  mirarlo en un teléfono de verdad antes de dar nada por bueno.
+* **El informe descargable** sigue siendo un volcado lineal en texto plano.
+  ¿Se reordena para que siga el orden de las pestañas?
+* **Qué pasa con un análisis sin diagnóstico secundario o sin tutoriales**
+  para su categoría: la rejilla de tres se queda con dos tarjetas y un hueco.
+* **Dónde va el aviso de género fuera de alcance** (vallenato, pop, rock…),
+  que hoy sale arriba del todo y aquí no está contemplado.
+
+### Ya resuelto
+
+* La primera prioridad decía `n_bloques bajo`, un nombre de variable interno
+  colándose en el texto del usuario. Arreglado en `engine/templates.py`, con
+  `tests/test_lenguaje.py` barriendo todo el texto de cara al usuario para que
+  no vuelva a pasar.

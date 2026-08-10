@@ -7,7 +7,11 @@ TEMPLATES = {
     "problema_arreglo": {
         "titulo": "La estructura del arreglo es el cuello de botella — falta forma reconocible.",
         "prioridades": [
-            "Identifica qué señal disparó el diagnóstico — el motor te lo dice en la explicación: poco contraste entre bloques, sin desarrollo, n_bloques bajo, break desproporcionado o inicio abrupto. La acción cambia según el caso: si es poco contraste, mete drops y breaks claros. Si es sin desarrollo, añade transiciones (filtros que abren, capas que entran). Si es break desproporcionado, recorta o súbele intensidad media.",
+            # Ojo al reescribir esto: la versión anterior decía "n_bloques bajo",
+            # que es el nombre de una variable interna colándose en el texto que
+            # lee el productor. Aquí no puede aparecer nada que no se entienda
+            # sin conocer el código.
+            "Mira qué señal ha disparado el diagnóstico: la tienes justo encima, en «por qué lo decimos». Cada una pide una cosa distinta. Si es poco contraste entre secciones, mete drops y breaks claros. Si es que no hay desarrollo, añade transiciones: filtros que abren, capas que van entrando. Si el break es desproporcionado, recórtalo o súbele intensidad. Y si el track tiene pocas secciones, el problema es que aún no hay estructura que arreglar: hay que crearla.",
             "Estructura base de track de club (4-6 minutos): intro de 32 bars con kick + percusión + 1 elemento (DJ-friendly); build-up de 16 bars donde entran elementos progresivamente; drop principal de 32-64 bars con todo activo; break de 16-32 bars con la mitad de elementos quitados y un giro melódico/atmosférico; segundo drop de 32-64 bars (variado, no idéntico al primero); outro de 16-32 bars perdiendo elementos para mix. Si tu track no encaja vagamente con esto, tienes ahí los huecos.",
             "Antes de seguir, haz el ejercicio del mapa de bloques en papel: divide el tiempo del track en bloques de 32 compases y, para cada bloque, escribe (a) qué energía tiene (1-5), (b) qué elementos están sonando, (c) qué cambia respecto al bloque anterior. Si dos bloques contiguos tienen exactamente lo mismo, ahí está el problema — o añades variación o recortas el bloque repetido.",
         ],
