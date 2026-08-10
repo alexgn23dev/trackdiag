@@ -48,7 +48,7 @@ sandbox.ReactDOM = { createRoot: () => ({ render: () => {} }) };
 // objeto global (solo lo hacen `var` y las declaraciones de función). Por eso
 // se añade un epílogo que exporta explícitamente lo que hace falta.
 const epilogo = `
-;globalThis.__proto = { CASOS, TABS, Diagnostico,
+;globalThis.__proto = { CASOS, CONTENIDO, TABS, Diagnostico,
     TabResumen, TabPlan, TabMezcla, TabMaster, TabDetalle };`;
 vm.runInContext(codigoComponentes + epilogo, sandbox, { filename: 'prototipo.js' });
 
@@ -98,6 +98,29 @@ for (const tab of TABS) {
             fallos++;
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// La fila de abajo del resumen: CTA siempre, tutoriales solo si los hay.
+// ---------------------------------------------------------------------------
+console.log('\nFila de siguiente paso / tutoriales / calibración:');
+const base = JSON.parse(JSON.stringify(Object.values(CASOS)[0].resultado));
+const conTutoriales = Object.keys(P.CONTENIDO.tutoriales);
+const casosFila = [
+    ['con tutoriales', conTutoriales[0], 3],
+    ['sin tutoriales', 'categoria_sin_tutoriales_de_prueba', 2],
+];
+for (const [etiqueta, dxId, columnasEsperadas] of casosFila) {
+    const r = JSON.parse(JSON.stringify(base));
+    r.diagnostico_principal.id = dxId;
+    delete r.diagnostico_secundario;
+    const out = Server.renderToStaticMarkup(React.createElement(P.TabResumen, { r }));
+    const m = out.match(/class="[^"]*pt-1[^"]*"/);
+    const cols = m && m[0].includes('grid-cols-3') ? 3 : m && m[0].includes('grid-cols-2') ? 2 : 0;
+    const cta = out.includes('Ver el programa');
+    const ok = cols === columnasEsperadas && cta;
+    if (!ok) fallos++;
+    console.log(`  ${etiqueta.padEnd(16)} ${ok ? 'OK' : '✗'} · columnas=${cols} (esperadas ${columnasEsperadas}) · CTA=${cta ? 'sí' : 'NO'}`);
 }
 
 console.log(fallos ? `\n${fallos} problema(s).` : '\nTodo renderiza sin errores ni huecos.');

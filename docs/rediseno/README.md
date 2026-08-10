@@ -65,6 +65,7 @@ prototipo.html?tab=master&caso=caliente
 | `prototipo.src.html` | La fuente con JSX. Es lo que se edita |
 | `casos.json` | Los tres análisis reales |
 | `contenido.json` | Tutoriales y variantes del CTA, extraídos del `index.html` real |
+| `incrustar-logo.cjs` | Mete el logo de Producción Online como data URI |
 | `construir.cjs` | Genera `prototipo.html` a partir de lo anterior |
 | `verificar.cjs` | Renderiza cada pestaña con cada análisis en Node |
 | `tailwind.config.cjs`, `tw.in.css`, `tw.out.css` | Solo las clases que se usan |
@@ -113,6 +114,46 @@ Se anotan porque son los mismos que habría que evitar al llevarlo a
   para su categoría: la rejilla de tres se queda con dos tarjetas y un hueco.
 * **Dónde va el aviso de género fuera de alcance** (vallenato, pop, rock…),
   que hoy sale arriba del todo y aquí no está contemplado.
+
+### 13 de los 22 tutoriales del index.html están rotos
+
+Comprobado uno a uno contra YouTube: devuelven 404. Se han retirado de
+`contenido.json` y quedan listados en su clave `_tutoriales_rotos` para poder
+reponerlos. **Seis categorías se quedan sin ninguno**, y cuatro de ellas son
+diagnósticos que el motor emite de verdad:
+
+| categoría | vivos | rotos |
+|---|---|---|
+| `poco_contraste` | 0 | 2 |
+| `exceso_lowend` | 0 | 2 |
+| `exceso_densidad` | 0 | 2 |
+| `harshness_mezcla` | 0 | 2 |
+| `carencia_espectral` | 1 | 1 |
+| `mezcla_prematura` | 1 | 1 |
+
+(`conflicto_armonico` y `pobreza_armonica` también, pero están desactivadas en
+el motor.)
+
+Decisión de Alex: **no rellenar con vídeos que no vengan al caso.** Si para un
+diagnóstico no hay tutorial que encaje, la tarjeta no aparece y la fila se
+queda con el CTA al Máster. Lo comprueba `verificar.cjs`.
+
+### El logo de Producción Online
+
+Falta el archivo. Para meterlo:
+
+```bash
+node docs/rediseno/incrustar-logo.cjs <ruta-al-logo>
+node docs/rediseno/construir.cjs
+```
+
+**Mejor en SVG**: el monograma es negro y las tarjetas son oscuras, así que
+hay que recolorearlo a blanco — y eso solo se puede hacer con un SVG. Un PNG
+tendría que venir ya en claro y con fondo transparente.
+
+Mientras no esté, la tarjeta enseña el nombre de la marca en texto. No se
+dibuja un logo aproximado: trazar a ojo el monograma de alguien y llamarlo su
+logo es peor que no ponerlo.
 
 ### Ya resuelto
 

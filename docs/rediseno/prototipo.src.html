@@ -235,16 +235,25 @@ function SiguientePaso({ r }) {
     return (
         <div className="card p-5 flex flex-col" style={{ borderTop: '2px solid #6D10FF' }}>
             <div className="rotulo mb-3">Siguiente paso</div>
-            {/* HUECO DEL LOGO DE PRODUCCIÓN ONLINE. Falta el archivo: la
-                imagen adjuntada llegó en blanco. En cuanto esté, se guarda en
-                CONTENIDO.logoPO como data URI y esto pasa a ser un <img>. No
-                se inventa una marca provisional. */}
+            {/* Logo de Producción Online. Para meterlo:
+                    node docs/rediseno/incrustar-logo.cjs <ruta-al-logo>
+                    node docs/rediseno/construir.cjs
+                Mejor en SVG: el monograma es negro y la tarjeta es oscura, así
+                que hay que recolorearlo a blanco — eso solo se puede hacer con
+                un SVG. Un PNG tendría que venir ya en claro y con fondo
+                transparente. */}
             {CONTENIDO.logoPO ? (
                 <img src={CONTENIDO.logoPO} alt="Producción Online"
-                     className="h-9 mb-3 self-start object-contain" />
+                     className="h-8 mb-3 self-start object-contain" />
             ) : (
-                <div className="h-9 mb-3 px-3 rounded border border-dashed border-[#4a3a6a] flex items-center self-start">
-                    <span className="rotulo" style={{ color: '#8b5cf6' }}>logo de PO — pendiente</span>
+                /* Mientras no esté el archivo, el nombre de la marca en texto.
+                   No es un logo aproximado: dibujar a ojo el monograma de
+                   alguien y llamarlo su logo es peor que no ponerlo. */
+                <div className="h-8 mb-3 flex items-center self-start">
+                    <span className="text-white font-bold tracking-tight text-[15px]"
+                          style={{ fontFamily: "'Space Grotesk', Arial, sans-serif" }}>
+                        Producción Online
+                    </span>
                 </div>
             )}
             <p className="text-white text-sm font-semibold mb-1.5 leading-snug">
@@ -263,9 +272,13 @@ function SiguientePaso({ r }) {
 /**
  * Tutoriales del canal, filtrados por el diagnóstico, con miniatura.
  *
- * Solo se muestran los que tienen miniatura, y eso equivale a "el vídeo
- * existe": 13 de los 22 enlaces del index.html actual devuelven 404. Mandar a
- * alguien a un "vídeo no disponible" es peor que no ofrecerle nada.
+ * Si para este diagnóstico no hay ninguno que encaje, la tarjeta NO aparece y
+ * la fila se queda con el CTA al Máster. Rellenar con vídeos que no van al
+ * caso es peor que no poner nada.
+ *
+ * De los 22 enlaces del index.html de producción, 13 devuelven 404 y se han
+ * retirado de contenido.json; quedan en `_tutoriales_rotos` para poder
+ * reponerlos. Seis categorías se han quedado sin ninguno.
  */
 function Tutoriales({ r }) {
     const lista = tutorialesDe(r).filter(t => t.thumb).slice(0, 3);
