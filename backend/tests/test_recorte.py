@@ -390,6 +390,16 @@ class TestElTextoEnsena(unittest.TestCase):
         aviso = medir("wav24_pico_menos1")["aviso_recorte"].lower()
         self.assertIn("true peak", aviso)
 
+    def test_ningun_aviso_lleva_markdown(self):
+        """El frontend pinta estos textos tal cual, sin procesar markdown: unos
+        asteriscos de negrita se verían como asteriscos. Pasó en la v0.5.74."""
+        for nombre in _CASOS:
+            lo = medir(nombre)
+            for campo in ("titulo_recorte", "aviso_recorte"):
+                texto = lo[campo]
+                for marca in ("**", "__", "`"):
+                    self.assertNotIn(marca, texto, f"{nombre}.{campo}: '{marca}'")
+
     def test_los_avisos_llevan_los_numeros_medidos(self):
         for nombre in ("wav24_clip_sostenido", "wav24_clipping_evidente"):
             lo = medir(nombre)
