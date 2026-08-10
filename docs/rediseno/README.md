@@ -115,28 +115,23 @@ Se anotan porque son los mismos que habría que evitar al llevarlo a
 * **Dónde va el aviso de género fuera de alcance** (vallenato, pop, rock…),
   que hoy sale arriba del todo y aquí no está contemplado.
 
-### 13 de los 22 tutoriales del index.html están rotos
+### Los 13 tutoriales rotos: arreglados (2026-08-10)
 
-Comprobado uno a uno contra YouTube: devuelven 404. Se han retirado de
-`contenido.json` y quedan listados en su clave `_tutoriales_rotos` para poder
-reponerlos. **Seis categorías se quedan sin ninguno**, y cuatro de ellas son
-diagnósticos que el motor emite de verdad:
+Estaban rotos porque **el canal los resubió con otro ID**, no porque los
+borrara. Se han buscado por título uno a uno y sustituido en
+`frontend/index.html`. Las doce categorías vuelven a tener tutoriales.
 
-| categoría | vivos | rotos |
-|---|---|---|
-| `poco_contraste` | 0 | 2 |
-| `exceso_lowend` | 0 | 2 |
-| `exceso_densidad` | 0 | 2 |
-| `harshness_mezcla` | 0 | 2 |
-| `carencia_espectral` | 1 | 1 |
-| `mezcla_prematura` | 1 | 1 |
+Antes de que se arreglaran, **33 de los 147 clicks (22 %)** acabaron en un
+"vídeo no disponible".
 
-(`conflicto_armonico` y `pobreza_armonica` también, pero están desactivadas en
-el motor.)
+Para que no vuelva a pasar en silencio:
 
-Decisión de Alex: **no rellenar con vídeos que no vengan al caso.** Si para un
-diagnóstico no hay tutorial que encaje, la tarjeta no aparece y la fila se
-queda con el CTA al Máster. Lo comprueba `verificar.cjs`.
+```bash
+python backend/scripts/verificar_tutoriales.py
+```
+
+No está en el CI a propósito: depende de YouTube y de la red, y un test que
+falla por causas ajenas al commit acaba ignorándose.
 
 ### El logo de Producción Online
 

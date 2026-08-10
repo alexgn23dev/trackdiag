@@ -276,9 +276,9 @@ function SiguientePaso({ r }) {
  * la fila se queda con el CTA al Máster. Rellenar con vídeos que no van al
  * caso es peor que no poner nada.
  *
- * De los 22 enlaces del index.html de producción, 13 devuelven 404 y se han
- * retirado de contenido.json; quedan en `_tutoriales_rotos` para poder
- * reponerlos. Seis categorías se han quedado sin ninguno.
+ * El filtro por `thumb` es además un seguro: un vídeo sin miniatura es un
+ * vídeo que ya no existe. Los 13 enlaces rotos que había se arreglaron el
+ * 2026-08-10 (el canal los había resubido con otro ID).
  */
 function Tutoriales({ r }) {
     const lista = tutorialesDe(r).filter(t => t.thumb).slice(0, 3);

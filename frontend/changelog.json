@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "version": "0.5.79",
+      "date": "2026-08-10",
+      "title": "Los tutoriales vuelven a funcionar",
+      "changes": [
+        "13 de los 23 tutoriales que recomendaba el informe llevaban meses llevando a un «vídeo no disponible»: el canal los había resubido con otro ID y los enlaces se quedaron viejos. Arreglados todos.",
+        "Uno de cada cinco clicks en tutoriales acababa en esa pantalla de error. Si te pasó, era eso."
+      ]
+    },
+    {
       "version": "0.5.78",
       "date": "2026-08-10",
       "title": "Te decimos antes de analizar si tu género encaja",
