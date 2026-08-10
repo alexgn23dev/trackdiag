@@ -203,7 +203,7 @@
     // /api/health. Si no coincide, este fichero viene de la caché del
     // navegador y puede estar dejando de enviar campos que el backend ya
     // espera — se recarga una sola vez y, si aun así no cuadra, se avisa.
-    const APP_VERSION = '0.5.75';
+    const APP_VERSION = '0.5.76';
 
     function comprobarVersionFrontend(onDesfase, onEntorno) {
         fetch(`${API_URL}/api/health`, { cache: 'no-store' })
@@ -964,7 +964,7 @@
 
     // CTA hacia Relesit (relesit.com) — solo tras un diagnóstico BUENO: el track
     // está fino, así que invitamos a buscarle sello. Relesit es gratis.
-    function RelesitCTA({ diagId, estado, userEmail }) {
+    function RelesitCTA({ diagId, estado, userEmail, bpm, genero }) {
         useEffect(() => {
             try { trackEvent('cta_relesit_visto', { diagnostico: diagId, estado }); } catch (e) {}
             try { window.mtCtaEvent && window.mtCtaEvent('relesit_visto', { diagnostico_id: diagId || '', email: userEmail || '' }); } catch (e) {}
@@ -974,9 +974,26 @@
                 href="https://relesit.com/?utm_source=mentotrack&utm_medium=app&utm_campaign=derivacion&utm_content=objetivo_sello"
                 target="_blank"
                 rel="noopener"
-                onClick={() => {
-                    try { trackEvent('cta_relesit_clicked', { diagnostico: diagId }); } catch (e) {}
-                    try { window.mtCtaEvent && window.mtCtaEvent('relesit_clicked', { diagnostico_id: diagId || '', email: userEmail || '' }); } catch (e) {}
+                onClick={async (e) => {
+                    try { trackEvent('cta_relesit_clicked', { diagnostico: diagId }); } catch (err) {}
+                    try { window.mtCtaEvent && window.mtCtaEvent('relesit_clicked', { diagnostico_id: diagId || '', email: userEmail || '' }); } catch (err) {}
+                    // Si el usuario está logueado en Mentotrack, pedimos un token de handoff
+                    // y lo llevamos a Relesit YA logueado (sin re-registro). Si no hay sesión
+                    // o algo falla, dejamos el enlace normal (nueva pestaña, sin sesión).
+                    let tok = null;
+                    try { tok = localStorage.getItem('mentotrack_token'); } catch (err) {}
+                    if (!tok) return;
+                    e.preventDefault();
+                    let dest = 'https://relesit.com/?utm_source=mentotrack&utm_medium=app&utm_campaign=derivacion&utm_content=objetivo_sello';
+                    try {
+                        const resp = await fetch('/api/sso/relesit', {
+                            method: 'POST',
+                            headers: { 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ track: { bpm: bpm || null, genero: genero || null } }),
+                        });
+                        if (resp.ok) { const d = await resp.json(); if (d && d.url) dest = d.url; }
+                    } catch (err) {}
+                    window.location.assign(dest);
                 }}
                 className="block card p-5 mb-6 transition-all"
                 style={{
@@ -2289,7 +2306,7 @@
                         diagnóstico es bueno (track fino → busca sello); si no, el
                         Máster con el texto adaptado a la categoría dominante. */}
                     {(diagId === 'sin_diagnostico' || r.estado_track === 'avanzado') && r.estado_track !== 'verde' ? (
-                        <RelesitCTA diagId={diagId} estado={r.estado_track} userEmail={userEmail} />
+                        <RelesitCTA diagId={diagId} estado={r.estado_track} userEmail={userEmail} bpm={r.datos_audio && r.datos_audio.bpm} genero={contexto && (contexto.genero === 'otro' ? (contexto.genero_custom || '') : contexto.genero)} />
                     ) : (
                         <MasterCTA diagId={diagId} variante={masterCta.variante} categoria={masterCta.categoria} userEmail={userEmail} />
                     )}
