@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "version": "0.5.78",
+      "date": "2026-08-10",
+      "title": "Te decimos antes de analizar si tu género encaja",
+      "changes": [
+        "Si escribes un género que no es electrónica, ahora te lo decimos en el formulario, antes de darle al botón, y no al final del informe cuando ya has esperado el análisis entero.",
+        "Arreglado de paso un fallo de la detección: por culpa de las tildes, «rock electrónico» se tomaba como no electrónico. Ahora da igual cómo lo escribas.",
+        "Y una prioridad del informe mencionaba un nombre interno del motor («n_bloques»). Reescrita para que se entienda."
+      ]
+    },
+    {
       "version": "0.5.77",
       "date": "2026-08-10",
       "title": "Menos alarmas por una décima",

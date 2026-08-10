@@ -107,6 +107,7 @@ cambiar la configuración del repositorio.
 | `test_versiones.py` | Versionado de algoritmos y dependencias fijadas |
 | `test_frontend.py` | Guards estáticos sobre `index.html` |
 | `test_lenguaje.py` | Que no se cuele jerga interna (`n_bloques`) en el texto que lee el productor |
+| `test_genero_no_electronico.py` | El aviso de género sale ANTES del botón, y las listas del cliente y del motor no divergen |
 
 ## Notas
 

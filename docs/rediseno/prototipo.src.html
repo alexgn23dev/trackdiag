@@ -233,24 +233,42 @@ function tutorialesDe(r) {
 /** Derivación al Máster. Una sola tarjeta, nunca dos. */
 function SiguientePaso({ r }) {
     return (
-        <div className="card p-5" style={{ borderTop: '2px solid #6D10FF' }}>
+        <div className="card p-5 flex flex-col" style={{ borderTop: '2px solid #6D10FF' }}>
             <div className="rotulo mb-3">Siguiente paso</div>
+            {/* HUECO DEL LOGO DE PRODUCCIÓN ONLINE. Falta el archivo: la
+                imagen adjuntada llegó en blanco. En cuanto esté, se guarda en
+                CONTENIDO.logoPO como data URI y esto pasa a ser un <img>. No
+                se inventa una marca provisional. */}
+            {CONTENIDO.logoPO ? (
+                <img src={CONTENIDO.logoPO} alt="Producción Online"
+                     className="h-9 mb-3 self-start object-contain" />
+            ) : (
+                <div className="h-9 mb-3 px-3 rounded border border-dashed border-[#4a3a6a] flex items-center self-start">
+                    <span className="rotulo" style={{ color: '#8b5cf6' }}>logo de PO — pendiente</span>
+                </div>
+            )}
             <p className="text-white text-sm font-semibold mb-1.5 leading-snug">
                 Máster de Producción Musical
             </p>
             <p className="text-gray-400 text-sm leading-relaxed mb-4">
                 {CONTENIDO.masterVariantes[resolverMaster(r)]}
             </p>
-            <button className="btn-primary px-4 py-2 rounded text-sm font-medium w-full">
+            <button className="btn-primary px-4 py-2 rounded text-sm font-medium w-full mt-auto">
                 Ver el programa
             </button>
         </div>
     );
 }
 
-/** Tutoriales del canal, filtrados por el diagnóstico. */
+/**
+ * Tutoriales del canal, filtrados por el diagnóstico, con miniatura.
+ *
+ * Solo se muestran los que tienen miniatura, y eso equivale a "el vídeo
+ * existe": 13 de los 22 enlaces del index.html actual devuelven 404. Mandar a
+ * alguien a un "vídeo no disponible" es peor que no ofrecerle nada.
+ */
 function Tutoriales({ r }) {
-    const lista = tutorialesDe(r).slice(0, 3);
+    const lista = tutorialesDe(r).filter(t => t.thumb).slice(0, 3);
     if (!lista.length) return null;
     return (
         <div className="card p-5">
@@ -258,9 +276,26 @@ function Tutoriales({ r }) {
             <ul className="space-y-3">
                 {lista.map((t, i) => (
                     <li key={i}>
-                        <a href={t.url} target="_blank" rel="noopener"
-                           className="enlace text-sm leading-snug">{t.titulo}</a>
-                        <p className="text-gray-600 text-xs mt-1 leading-snug">{t.descripcion}</p>
+                        <a href={t.url} target="_blank" rel="noopener" className="flex gap-3 items-start group">
+                            <span className="relative flex-none w-[104px] rounded overflow-hidden bg-[#1a1a1a]">
+                                <img src={t.thumb} alt="" loading="lazy"
+                                     className="w-full h-[59px] object-cover opacity-80 group-hover:opacity-100 transition" />
+                                {/* Sin marca de reproducción, una miniatura de
+                                    YouTube no se lee como un vídeo. */}
+                                <span className="absolute inset-0 flex items-center justify-center">
+                                    <span className="w-6 h-6 rounded-full bg-black/60 flex items-center justify-center">
+                                        <span style={{ width: 0, height: 0, marginLeft: '2px',
+                                                       borderTop: '4px solid transparent',
+                                                       borderBottom: '4px solid transparent',
+                                                       borderLeft: '7px solid #fff' }} />
+                                    </span>
+                                </span>
+                            </span>
+                            <span className="min-w-0">
+                                <span className="text-gray-200 text-sm leading-snug group-hover:text-white transition block">{t.titulo}</span>
+                                <span className="text-gray-600 text-xs mt-1 leading-snug block">{t.descripcion}</span>
+                            </span>
+                        </a>
                     </li>
                 ))}
             </ul>
@@ -313,6 +348,9 @@ function Feedback() {
 
 function TabResumen({ r }) {
     const prioridades = r.prioridades.slice(0, 3);
+    // Si este diagnóstico no tiene ningún tutorial vivo, la fila se reparte
+    // en dos y no queda un hueco donde debería haber una tarjeta.
+    const hayTutoriales = tutorialesDe(r).some(t => t.thumb);
     return (
         <div className="space-y-4">
             {/* Las prioridades mandan: es lo que el productor va a hacer. El
@@ -368,7 +406,7 @@ function TabResumen({ r }) {
 
             {/* Lo que rodea al diagnóstico va AQUÍ, en la primera pantalla.
                 Metido tras una pestaña no lo vería nadie. */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 pt-1">
+            <div className={`grid grid-cols-1 gap-4 pt-1 ${hayTutoriales ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
                 <SiguientePaso r={r} />
                 <Tutoriales r={r} />
                 <Feedback />

@@ -203,7 +203,7 @@
     // /api/health. Si no coincide, este fichero viene de la caché del
     // navegador y puede estar dejando de enviar campos que el backend ya
     // espera — se recarga una sola vez y, si aun así no cuadra, se avisa.
-    const APP_VERSION = '0.5.77';
+    const APP_VERSION = '0.5.78';
 
     function comprobarVersionFrontend(onDesfase, onEntorno) {
         fetch(`${API_URL}/api/health`, { cache: 'no-store' })
@@ -678,6 +678,16 @@
                         </div>
                     )}
 
+                    {/* ==========================================================
+                        Discriminación de género ANTES del botón de análisis.
+                        Mentotrack está calibrado solo para electrónica de club;
+                        hasta ahora el aviso llegaba en el informe, cuando el
+                        usuario ya había esperado el análisis entero. Estas
+                        listas son copia de las de engine/contextualizador.py
+                        (`_whitelist_electronic` y `_palabras_no_electronicas`):
+                        si allí se tocan, hay que tocarlas aquí — lo comprueba
+                        backend/tests/test_genero_no_electronico.py.
+                    ========================================================== */}
                     <SelectField
                         label="¿Qué género estás produciendo?"
                         options={opciones.generos}
@@ -709,6 +719,30 @@
                                     <p className="text-xs text-red-400 mt-1">
                                         Escribe el género para poder analizar correctamente tu track.
                                     </p>
+                                )}
+                                {!customVacio && esGeneroNoElectronico(customTxt) && (
+                                    <div
+                                        className="mt-2 p-3 rounded-lg text-xs leading-relaxed"
+                                        style={{
+                                            background: 'rgba(250,204,21,0.06)',
+                                            border: '1px solid rgba(250,204,21,0.28)',
+                                            color: 'var(--po-light)',
+                                        }}
+                                    >
+                                        <p className="text-yellow-400 font-medium mb-1">
+                                            Mentotrack está calibrado para electrónica de club
+                                        </p>
+                                        <p>
+                                            House, techno, trance y derivados. Con «{customTxt}» el motor
+                                            aplicará igualmente sus reglas, pero varios diagnósticos —estructura
+                                            de club, loudness de pista, compatibilidad mono— dan por supuestas
+                                            convenciones que tu estilo no tiene por qué seguir.
+                                        </p>
+                                        <p className="mt-1.5 text-gray-400">
+                                            Puedes analizarlo igualmente y tratarlo como una segunda opinión
+                                            técnica, pero preferimos decírtelo antes y no después.
+                                        </p>
+                                    </div>
                                 )}
                             </div>
                         );
@@ -1075,6 +1109,48 @@
     // que NO se muestra el CTA de Relesit (nunca dos tarjetas). El texto se
     // adapta a la categoría dominante del diagnóstico.
     // =====================================================================
+    // Espejo de engine/contextualizador.py. Se comprueba en
+    // backend/tests/test_genero_no_electronico.py que las dos listas coincidan.
+    const GENEROS_ELECTRONICOS = [
+        "tech", "techno", "house", "trance", "minimal", "ambient", "drum",
+        "dnb", "d&b", "garage", "dubstep", "electro", "edm", "dance",
+        "downtempo", "breakbeat", "breaks", "psy", "hardstyle", "hardcore",
+        "dub techno", "deep", "future", "club", "rave",
+    ];
+    const GENEROS_NO_ELECTRONICOS = [
+        "vallenato", "salsa", "bachata", "merengue", "cumbia", "mariachi",
+        "ranchera", "banda", "mambo", "rumba", "tango", "samba", "bossa",
+        "reggaeton", "reggaetón", "dembow", "perreo",
+        "pop ", " pop", "indie pop", "k-pop", "kpop",
+        "rock", "metal", "punk", "grunge", "hardcore punk",
+        "rap", "hip hop", "hip-hop", "trap latino", "drill",
+        "jazz", "blues", "soul", "gospel", "r&b", "rnb",
+        "country", "folk", "bluegrass",
+        "reggae", "ska",
+        "classical", "clásica", "clasica", "sinfónic", "sinfonic",
+        "opera", "ópera", "flamenco", "fandango",
+        "vals", "paso doble", "polka", "celta", "afrobeat", "afrobeats",
+    ];
+
+    /** ¿El género escrito a mano queda fuera del alcance del motor?
+     *
+     * Misma regla que el backend: si el texto contiene alguna palabra
+     * claramente electrónica NO se avisa, aunque también contenga una de la
+     * otra lista. Evita marcar "rock electrónico" o "indie dance pop". */
+    function esGeneroNoElectronico(texto) {
+        // Sin quitar las tildes, "electro" no casa con "electrónico" y
+        // "rock electrónico" saldría marcado — el falso positivo que la lista
+        // blanca dice evitar. Mismo criterio que _sin_tildes() en el backend.
+        const t = (texto || '').toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        if (t.length < 2) return false;
+        // Se normalizan también las palabras de la lista, para que dé igual
+        // cómo estén escritas ahí.
+        const n = k => k.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        if (GENEROS_ELECTRONICOS.some(k => t.includes(n(k)))) return false;
+        return GENEROS_NO_ELECTRONICOS.some(k => t.includes(n(k)));
+    }
+
     const MASTER_CTA_VARIANTES = {
         mezcla: 'Lo que el análisis ha detectado en tu track se trabaja a fondo en el bloque de Mezcla del Máster: 7 cursos y 106 clases.',
         mastering: 'Lo que el análisis ha detectado en tu track se trabaja en el bloque de Mastering del Máster: sonido final listo para club, sello y plataformas.',
@@ -3041,6 +3117,8 @@
                 .catch(() => {
                     // Fallback con opciones hardcoded si la API no está disponible
                     setOpciones({
+                        // Ver la nota del campo de género: espejo de las listas
+                        // de engine/contextualizador.py.
                         generos: [
                             {value: "tech_house", label: "Tech House"},
                             {value: "house", label: "House"},
