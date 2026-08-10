@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "version": "0.5.77",
+      "date": "2026-08-10",
+      "title": "Menos alarmas por una décima",
+      "changes": [
+        "Si tu true peak sale entre 0 y +0,3 dBTP ya no te decimos que te pasas del techo: te decimos que estás justo en la frontera. Por tan poco no hay problema audible, y en másters muy saturados la propia medida tiene ese margen — tu limitador y el nuestro pueden no coincidir ahí sin que ninguno mienta.",
+        "Por encima de +0,3 sí se afirma, como hasta ahora."
+      ]
+    },
+    {
       "version": "0.5.74",
       "date": "2026-08-09",
       "title": "Ahora sí sabemos ver el recorte de verdad",
