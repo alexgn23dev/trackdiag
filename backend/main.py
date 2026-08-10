@@ -59,7 +59,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-APP_VERSION = "0.5.75"
+APP_VERSION = "0.5.76"
 
 app = FastAPI(title="Mentotrack API", version=APP_VERSION)
 app.state.limiter = limiter
@@ -264,6 +264,17 @@ if not JWT_SECRET:
     print("[WARN] JWT_SECRET no configurado — generando uno aleatorio (se perderá al reiniciar)")
 
 JWT_EXPIRY_DAYS = int(os.environ.get("JWT_EXPIRY_DAYS", "7"))
+
+# Puente con Relesit (relesit.com). SSO_SECRET es un secreto COMPARTIDO server-to-
+# server (distinto de JWT_SECRET) que firma: (a) el token de handoff SSO y (b) el
+# acceso al endpoint de features del lector. RELESIT_URL = destino del handoff.
+SSO_SECRET = os.environ.get("SSO_SECRET", "")
+if SSO_SECRET and len(SSO_SECRET) < 32:
+    print("[WARN] SSO_SECRET demasiado corto (<32) — puente con Relesit DESHABILITADO. "
+          "Genera uno con: python -c \"import secrets;print(secrets.token_urlsafe(32))\"")
+    SSO_SECRET = ""
+RELESIT_URL = os.environ.get("RELESIT_URL", "https://relesit.com").rstrip("/")
+_MAX_FEATURES_UPLOAD = 200 * 1024 * 1024  # corte por Content-Length antes de leer el cuerpo
 
 
 def _create_token(email: str, token_version: int = 0) -> str:
@@ -1478,6 +1489,114 @@ def _looks_like_email(s: str) -> bool:
 
 # -------------------------------------------------------------------------
 # /api/auth/login — login con email O username + password
+# =========================================================================
+# Puente con Relesit: features del lector + handoff SSO (server-to-server).
+# =========================================================================
+def _json_safe(o):
+    """Convierte tipos numpy / NaN / inf a JSON nativo (senales trae floats numpy)."""
+    import math
+    try:
+        import numpy as _np
+    except Exception:
+        _np = None
+    if isinstance(o, dict):
+        return {k: _json_safe(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [_json_safe(v) for v in o]
+    if _np is not None and isinstance(o, _np.generic):
+        o = o.item()
+    if _np is not None and isinstance(o, _np.ndarray):
+        return [_json_safe(v) for v in o.tolist()]
+    if isinstance(o, float) and (math.isnan(o) or math.isinf(o)):
+        return None
+    return o
+
+
+@app.post("/api/internal/features")
+@limiter.limit("30/minute")
+async def internal_features(request: Request):
+    """Extrae features de audio (BPM/key/loudness/…) para el lector de Relesit.
+    Server-to-server: protegido por SSO_SECRET compartido (no hay auth de usuario).
+    Reutiliza el MISMO motor (engine.extractor) que el diagnóstico; así Relesit no
+    empaqueta librosa ni duplica el extractor. Chequea secreto y tamaño ANTES de leer
+    el cuerpo, para que un upload sin secreto no se spoolee a disco (DoS)."""
+    # 1) Gate del secreto ANTES de tocar el cuerpo (con signatura request-only, FastAPI
+    #    no lo lee todavía). Comparación en bytes (evita TypeError con no-ASCII).
+    secret = request.headers.get("X-Relesit-Secret", "")
+    if not SSO_SECRET or not hmac.compare_digest(
+            secret.encode("utf-8", "ignore"), SSO_SECRET.encode("utf-8")):
+        return JSONResponse(status_code=403, content={"error": "forbidden"})
+    # 2) Corte por tamaño declarado antes de parsear el multipart.
+    try:
+        cl = int(request.headers.get("content-length") or 0)
+    except ValueError:
+        cl = 0
+    if cl > _MAX_FEATURES_UPLOAD:
+        return JSONResponse(status_code=413, content={"error": "archivo demasiado grande"})
+    # 3) Ahora sí, parsear el cuerpo.
+    form = await request.form()
+    audio = form.get("audio")
+    if audio is None or not hasattr(audio, "read"):
+        return JSONResponse(status_code=400, content={"error": "falta 'audio'"})
+    content = await audio.read()
+    extension, err = _validar_audio_upload(getattr(audio, "filename", "track"), content)
+    if err:
+        return err
+    session_id = str(uuid.uuid4())[:8]
+    tmp_dir = tempfile.mkdtemp()
+    tmp_path = os.path.join(tmp_dir, f"{session_id}{extension}")
+    try:
+        with open(tmp_path, "wb") as f:
+            f.write(content)
+        content = None
+        _load_engine()
+        loop = asyncio.get_event_loop()
+        senales = await asyncio.wait_for(
+            loop.run_in_executor(None, lambda: _extraer_senales(tmp_path, omitir_armonia=False)),
+            timeout=90)
+        return JSONResponse(content=_json_safe(senales))
+    except asyncio.TimeoutError:
+        return JSONResponse(status_code=504, content={"error": "análisis excedió el tiempo"})
+    except Exception as e:
+        return JSONResponse(status_code=400,
+                            content={"error": f"No se pudo analizar el audio: {type(e).__name__}"})
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+@app.post("/api/sso/relesit")
+@limiter.limit("20/minute")
+async def sso_relesit(request: Request, data: dict = None):
+    """Emite un token de handoff firmado (SSO_SECRET) para que un usuario logueado
+    en Mentotrack aterrice YA logueado en Relesit, sin re-registro. TTL corto (120s);
+    lleva jti para uso único del lado receptor. Solo email + track mínimo."""
+    token = _get_token_from_request(request)
+    email = _verify_token(token) if token else None
+    if not email:
+        return JSONResponse(status_code=401, content={"error": "no autenticado"})
+    if not SSO_SECRET:
+        return JSONResponse(status_code=503, content={"error": "sso no configurado"})
+    track = (data or {}).get("track") or {}
+
+    def _num(x):
+        try:
+            return round(float(x)) if x is not None else None
+        except Exception:
+            return None
+    safe_track = {
+        "bpm": _num(track.get("bpm")),
+        "genero": (str(track.get("genero") or "")[:60]).strip() or None,
+    }
+    now = datetime.now(timezone.utc)
+    payload = {
+        "iss": "mentotrack", "typ": "sso", "email": email, "track": safe_track,
+        "jti": secrets.token_urlsafe(12),
+        "iat": now, "exp": now + timedelta(seconds=120),
+    }
+    sso = jwt.encode(payload, SSO_SECRET, algorithm="HS256")
+    return {"url": f"{RELESIT_URL}/sso?t={sso}"}
+
+
 # -------------------------------------------------------------------------
 @app.post("/api/auth/login")
 @limiter.limit("5/minute")
@@ -3980,9 +4099,19 @@ async def _task_reenganche():
 # =========================================================================
 
 ENCUESTA_ACTUAL = "comunidad-2026-06"
-# CTA in-app de la encuesta. Pon ENCUESTA_CTA_ACTIVA=0 en Railway para apagarlo
-# (cuando ya no quieras recoger más respuestas) sin tocar código.
-_ENCUESTA_CTA_ACTIVA = os.environ.get("ENCUESTA_CTA_ACTIVA", "1") not in ("0", "false", "no", "")
+
+# RETIRADA el 2026-08-10 por decisión de Alex. Arranca APAGADA: el CTA no se
+# muestra en ningún sitio y no se admiten votos ni comentarios nuevos, así que
+# lo recogido queda como un conjunto cerrado.
+#
+# NO se ha borrado nada: las respuestas siguen en la tabla `encuesta_respuestas`
+# y se leen igual desde la pestaña Encuesta del dashboard. Retomarla es poner
+# ENCUESTA_CTA_ACTIVA=1 en Railway — sin tocar código y sin desplegar.
+#
+# Si se retoma, plantéate estrenar `ENCUESTA_ACTUAL` con una campaña nueva en
+# vez de reabrir "comunidad-2026-06": mezclar respuestas separadas por meses
+# en la misma campaña haría ilegibles los porcentajes.
+_ENCUESTA_CTA_ACTIVA = os.environ.get("ENCUESTA_CTA_ACTIVA", "0") not in ("0", "false", "no", "")
 _ENCUESTA_INTRO = (
     "Estamos pensando en una zona de comunidad donde compartas tu idea o track "
     "—con tu nombre— junto a otros productores, para daros feedback entre vosotros. "
@@ -3993,6 +4122,13 @@ _ENCUESTA_OPCIONES = {
     "solo_compartir": "Compartiría mis tracks, pero no me veo comentando los de otros",
     "solo_comentar": "Comentaría los de otros, pero aún no compartiría los míos",
     "no": "No me interesa",
+}
+
+
+_RESPUESTA_ENCUESTA_CERRADA = {
+    "ok": False,
+    "cerrada": True,
+    "error": "La encuesta ya no está activa. Gracias por participar.",
 }
 
 
@@ -4203,6 +4339,24 @@ async def encuesta_page(request: Request, t: str = "", o: str = ""):
     """Página de voto de la encuesta. Llega desde el email con ?t=token&o=opcion.
     El voto se registra vía POST desde JS (los scanners de email siguen los GET
     pero no ejecutan JS — evita falsos votos)."""
+    # Primero lo de la encuesta cerrada y después la validez del token: si ya
+    # no se admiten respuestas, que el enlace sea bueno o malo da igual, y así
+    # tampoco se filtra cuáles siguen siendo válidos.
+    if not _ENCUESTA_CTA_ACTIVA:
+        # Los enlaces del email de junio siguen llegando hasta que caduque el
+        # token. Mejor decirlo que enseñar unos botones que ya no registran.
+        return HTMLResponse(
+            "<html><head><meta charset='UTF-8'><meta name='robots' content='noindex'>"
+            "<title>Encuesta — Mentotrack</title></head>"
+            "<body style='font-family:sans-serif;background:#0c0c0e;color:#e5e5e5;"
+            "display:flex;align-items:center;justify-content:center;min-height:100vh;"
+            "text-align:center;padding:24px'>"
+            "<div><p>Esta encuesta ya está cerrada. Gracias a quienes respondisteis.</p>"
+            "<p style='color:#b8b8bd;font-size:14px'>"
+            "<a href='https://www.mentotrack.com' style='color:#25F464'>Ir a Mentotrack</a>"
+            "</p></div></body></html>",
+            status_code=410,
+        )
     email = _email_desde_token_encuesta(t)
     if not email:
         return HTMLResponse(
@@ -4276,6 +4430,8 @@ async def encuesta_page(request: Request, t: str = "", o: str = ""):
 @app.post("/api/encuesta/voto")
 @limiter.limit("10/minute")
 async def encuesta_voto(request: Request, data: dict):
+    if not _ENCUESTA_CTA_ACTIVA:
+        return JSONResponse(status_code=410, content=_RESPUESTA_ENCUESTA_CERRADA)
     email = _email_desde_token_encuesta(data.get("t", ""))
     opcion = data.get("o", "")
     if not email or opcion not in _ENCUESTA_OPCIONES:
@@ -4291,6 +4447,8 @@ async def encuesta_voto(request: Request, data: dict):
 @app.post("/api/encuesta/comentario")
 @limiter.limit("5/minute")
 async def encuesta_comentario(request: Request, data: dict):
+    if not _ENCUESTA_CTA_ACTIVA:
+        return JSONResponse(status_code=410, content=_RESPUESTA_ENCUESTA_CERRADA)
     email = _email_desde_token_encuesta(data.get("t", ""))
     comentario = _sanitize(data.get("comentario", ""), 2000)
     if not email or not comentario:
@@ -4331,6 +4489,8 @@ async def encuesta_estado(request: Request):
 @limiter.limit("15/minute")
 async def encuesta_voto_auth(request: Request, data: dict):
     """Voto de la encuesta desde dentro de la app (sesión, sin token de email)."""
+    if not _ENCUESTA_CTA_ACTIVA:
+        return JSONResponse(status_code=410, content=_RESPUESTA_ENCUESTA_CERRADA)
     email, err = _require_auth_user(request)
     if err:
         return err
@@ -4349,6 +4509,8 @@ async def encuesta_voto_auth(request: Request, data: dict):
 @limiter.limit("10/minute")
 async def encuesta_comentario_auth(request: Request, data: dict):
     """Comentario opcional de la encuesta desde la app (sesión)."""
+    if not _ENCUESTA_CTA_ACTIVA:
+        return JSONResponse(status_code=410, content=_RESPUESTA_ENCUESTA_CERRADA)
     email, err = _require_auth_user(request)
     if err:
         return err
