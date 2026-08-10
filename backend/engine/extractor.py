@@ -90,7 +90,21 @@ if not _ALGORITMO_COINCIDE:
 #   1 — hasta v0.5.70: ok | streaming | clipping  (llamaba clipping a un over)
 #   2 — desde v0.5.72: ok | margen_streaming | true_peak_over |
 #                      overs_float_recuperables
-PEAK_TAXONOMY_VERSION = 2
+#   3 — desde v0.5.77: se parte `true_peak_over` en dos. Ver abajo.
+PEAK_TAXONOMY_VERSION = 3
+
+# Frontera a partir de la cual se AFIRMA que el pico pasa del techo.
+#
+# No está en 0,0 porque 0,0 es más fino de lo que la medida resuelve. Con
+# material muy saturado —energía pegada a Nyquist— la medición tiene un margen
+# de unas tres décimas: soxr se queda 0,39 dB corto frente al pico real y
+# Youlean se desvía 0,16 en sentido contrario (RESULTADOS_VALIDACION.md §8).
+# Con material normal la medida es exacta hasta 0,004 dB, pero un pico a +0,1
+# tampoco es un problema audible, así que la banda sirve igual.
+#
+# Entre 0 y este valor se usa `true_peak_en_el_limite`, que describe sin
+# acusar. Por encima, `true_peak_over`, que sí afirma.
+_UMBRAL_TP_AFIRMABLE = 0.3
 
 #
 # PRIORIDAD DE FASE 2A, registrada aquí a propósito: un WAV 32-bit float con
@@ -1155,8 +1169,8 @@ def _clasificar_picos(loudness: dict, formato: dict) -> dict:
         })
         return salida
 
-    # --- B. Pico reconstruido por encima del techo -------------------------
-    if tp > 0.0:
+    # --- B. Pico reconstruido claramente por encima del techo --------------
+    if tp > _UMBRAL_TP_AFIRMABLE:
         salida.update({
             "categoria_picos": "true_peak_over",
             "severidad_picos": "atencion",
@@ -1178,6 +1192,28 @@ def _clasificar_picos(loudness: dict, formato: dict) -> dict:
                 "de distorsión al reproducir o al codificar a formatos con pérdida. "
                 "Qué hacer: baja el ceiling del limiter (prueba -1 dBTP) y reanaliza."
             ),
+        })
+        return salida
+
+    # --- B2. Entre 0 y +0,3: por encima, pero dentro del margen de la medida
+    if tp > 0.0:
+        salida.update({
+            "categoria_picos": "true_peak_en_el_limite",
+            "severidad_picos": "info",
+            "titulo_picos": "Justo en la frontera del techo",
+            "aviso_picos": (
+                f"El true peak sale en {tp:+.1f} dBTP: por encima de 0, pero por "
+                f"tan poco que no da para afirmar que te pases. Dos motivos. "
+                "Uno, que {:+.1f} dBTP sobre el techo no produce un problema audible "
+                "por sí solo. Y dos, que en másters muy saturados —con mucha energía "
+                "en la zona más alta del espectro— esta medida tiene un margen de "
+                "unas tres décimas: tu limitador y el nuestro pueden no coincidir ahí, "
+                "y ninguno de los dos estaría mintiendo. "
+                "Qué hacer: si el track es para club o para pinchar, déjalo. Si vas a "
+                "distribuirlo en streaming, baja el ceiling del limiter a -1 dBTP y te "
+                "quitas la duda del todo — es gratis y te da colchón para la "
+                "codificación a MP3 o AAC."
+            ).format(tp),
         })
         return salida
 

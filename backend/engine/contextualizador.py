@@ -242,6 +242,20 @@ TONO_EXPERIENCIA = {
 # FUNCIÓN PRINCIPAL
 # =============================================================================
 
+def _sin_tildes(texto: str) -> str:
+    """Quita los diacríticos para comparar géneros escritos a mano.
+
+    El usuario escribe "electrónica", "clásica" o "reggaetón" con tilde y las
+    listas de palabras están sin ella (o con las dos variantes, que era el
+    apaño anterior). Normalizar en un sitio evita mantener duplicados.
+    """
+    import unicodedata
+    return "".join(
+        c for c in unicodedata.normalize("NFD", texto)
+        if unicodedata.category(c) != "Mn"
+    )
+
+
 def contextualizar_feedback(diagnostico_id: str, contexto: dict, senales: dict) -> dict:
     """
     Genera feedback contextualizado basado en el diagnóstico, contexto del usuario
@@ -390,7 +404,10 @@ def contextualizar_feedback(diagnostico_id: str, contexto: dict, senales: dict) 
     # los diagnósticos no aplican igual fuera de eso. Detectamos sub-géneros
     # comunes en el campo libre de "Otro" para avisar al inicio del informe.
     if genero == "otro":
-        custom = (contexto.get("genero_custom") or "").lower()
+        # Sin quitar las tildes, "electro" no casa con "electrónico" y
+        # "rock electrónico" acababa marcado como no electrónico — justo el
+        # falso positivo que la lista blanca de abajo dice evitar.
+        custom = _sin_tildes((contexto.get("genero_custom") or "").lower())
         # Whitelist: si el custom contiene una palabra electrónica conocida,
         # NO disparar el aviso aunque también contenga ruido. Evita falsos
         # positivos como "rock electrónico" o "indie dance pop".
@@ -400,7 +417,10 @@ def contextualizar_feedback(diagnostico_id: str, contexto: dict, senales: dict) 
             "downtempo", "breakbeat", "breaks", "psy", "hardstyle", "hardcore",
             "dub techno", "deep", "future", "club", "rave",
         )
-        es_electronic_friendly = any(k in custom for k in _whitelist_electronic)
+        # Se normalizan también las palabras de la lista: así da igual cómo
+        # estén escritas ahí ("ópera" u "opera") y no hay que mantener las dos.
+        es_electronic_friendly = any(_sin_tildes(k) in custom
+                                     for k in _whitelist_electronic)
 
         _palabras_no_electronicas = (
             "vallenato", "salsa", "bachata", "merengue", "cumbia", "mariachi",
@@ -417,7 +437,8 @@ def contextualizar_feedback(diagnostico_id: str, contexto: dict, senales: dict) 
             "vals", "paso doble", "polka", "celta", "afrobeat", "afrobeats",
         )
         match_no_electronic = next(
-            (p.strip() for p in _palabras_no_electronicas if p in custom),
+            (p.strip() for p in _palabras_no_electronicas
+             if _sin_tildes(p) in custom),
             None,
         )
         if match_no_electronic and not es_electronic_friendly:

@@ -173,9 +173,32 @@ class TestInformeNuevo(unittest.TestCase):
 
 
 class TestVersionesDeTaxonomia(unittest.TestCase):
-    def test_la_version_es_2(self):
+    """La versión es lo que permite leer un análisis viejo sin malinterpretarlo.
+
+    v1 → ok | streaming | clipping           (llamaba clipping a un over)
+    v2 → + overs_float_recuperables, y `true_peak_over` en vez de "clipping"
+    v3 → parte `true_peak_over` en dos: entre 0 y +0,3 dBTP se describe sin
+         afirmar, porque esa frontera es más fina de lo que la medida resuelve
+    """
+
+    def test_la_version_es_3(self):
         from engine.extractor import PEAK_TAXONOMY_VERSION
-        self.assertEqual(PEAK_TAXONOMY_VERSION, 2)
+        self.assertEqual(PEAK_TAXONOMY_VERSION, 3)
+
+    def test_subir_de_categoria_obliga_a_subir_la_version(self):
+        """Si alguien añade una categoría sin tocar la versión, dos análisis
+        con vocabularios distintos quedarían marcados igual."""
+        from engine.extractor import PEAK_TAXONOMY_VERSION
+        conocidas = {"ok", "margen_streaming", "true_peak_en_el_limite",
+                     "true_peak_over", "overs_float_recuperables"}
+        ruta = os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), "engine", "extractor.py")
+        with open(ruta, encoding="utf-8") as f:
+            codigo = f.read()
+        emitidas = set(re.findall(r'"categoria_picos": "([a-z_]+)"', codigo))
+        self.assertEqual(emitidas, conocidas,
+                         f"el código emite categorías que la v{PEAK_TAXONOMY_VERSION} "
+                         "no declara (o al revés)")
 
     def test_viaja_en_el_analisis(self):
         import tempfile
@@ -183,7 +206,7 @@ class TestVersionesDeTaxonomia(unittest.TestCase):
         from tests import fixtures as fx
         m = fx.generar(tempfile.mkdtemp(), solo=["pulso_claro_128"])
         lo = extraer_senales(m["pulso_claro_128"]["ruta"], omitir_armonia=True)["loudness"]
-        self.assertEqual(lo["peak_taxonomy_version"], 2)
+        self.assertEqual(lo["peak_taxonomy_version"], 3)
         self.assertIsNotNone(lo["true_peak_classification_value"])
 
     def test_la_medicion_cruda_no_se_sobrescribe(self):

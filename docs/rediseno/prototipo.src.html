@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Mentotrack — prueba de rediseño del diagnóstico</title>
+<style>
+    :root {
+        --po-dark: #2C2C2C; --po-medium: #4C4C4C; --po-light: #BCBCBC;
+        --po-white: #FFFFFF; --po-green: #25F464; --po-purple: #6D10FF;
+        --po-bg: #1a1a1a; --po-card: #242424; --po-border: #3a3a3a;
+    }
+    html, body { overflow-x: hidden; max-width: 100%; }
+    body { font-family: Arimo, Arial, Helvetica, system-ui, sans-serif; background: var(--po-bg); color: var(--po-light); }
+    h1, h2, h3, .font-heading { font-family: 'Space Grotesk', 'Helvetica Neue', Arial, sans-serif; letter-spacing: -0.01em; }
+    .card { background: var(--po-card); border: 1px solid var(--po-border); border-radius: 10px; }
+    .accent-green { color: var(--po-green); }
+    .fade-in { animation: fadeIn .28s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+    .btn-primary { background: var(--po-purple); color: #fff; transition: all .2s; }
+    .btn-primary:hover { background: #5a0dd6; }
+    .btn-secondary { background: transparent; color: var(--po-light); border: 1px solid var(--po-border); transition: all .2s; }
+    .btn-secondary:hover { border-color: var(--po-medium); color: #fff; }
+
+    /* --- Rótulo de sección --------------------------------------------------
+       Sustituye a los emojis como marca visual de cada tarjeta. Versalitas
+       pequeñas y muy espaciadas: es lo que hace que un panel de datos se lea
+       como una herramienta y no como una app de consumo. */
+    .rotulo {
+        font-size: 10px; font-weight: 700; letter-spacing: .12em;
+        text-transform: uppercase; color: #7a7a7a;
+    }
+    /* Punto de estado. Reemplaza a los semáforos de emoji. */
+    .punto { width: 6px; height: 6px; border-radius: 50%; display: inline-block; flex: none; }
+    /* Cifras de ancho fijo, para que las columnas de números no bailen. */
+    .cifra { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+    .tab { border-bottom: 2px solid transparent; transition: all .18s; white-space: nowrap; }
+    .tab:hover { color: #fff; }
+    .tab.on { border-bottom-color: var(--po-white); color: #fff; }
+    .barra-fondo { background: #1c1c1c; border: 1px solid var(--po-border); border-radius: 3px; overflow: hidden; }
+    .enlace { color: var(--po-light); text-decoration: none; border-bottom: 1px solid #3a3a3a; transition: all .15s; }
+    .enlace:hover { color: #fff; border-bottom-color: var(--po-light); }
+    ::-webkit-scrollbar { height: 6px; width: 8px; }
+    ::-webkit-scrollbar-thumb { background: var(--po-border); border-radius: 4px; }
+    /* Barra de la prueba, no forma parte del diseño */
+    .demo-bar { background: #101010; border-bottom: 1px solid #2a2a2a; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState } = React;
+
+const CASOS = __CASOS_JSON__;
+const CONTENIDO = __CONTENIDO_JSON__;
+
+const COLOR = { neutro: '#3a3a3a', ok: '#25F464', aviso: '#facc15', alerta: '#f87171', info: '#60a5fa' };
+
+// ===========================================================================
+// Piezas
+// ===========================================================================
+
+/** Miles con separador: 253164 es ilegible, 253.164 no. */
+function num(n) { return typeof n === 'number' ? n.toLocaleString('es-ES') : n; }
+
+/** Corta un texto largo por la primera frase; el resto queda para desplegar. */
+function partirEnAvance(texto, minimo = 90, tope = 240) {
+    if (!texto || texto.length <= minimo + 40) return [texto, ''];
+    const re = /\.\s/g;
+    let m;
+    while ((m = re.exec(texto)) !== null) {
+        if (m.index >= minimo) {
+            const avance = texto.slice(0, m.index + 1);
+            if (avance.length <= tope) return [avance, texto.slice(m.index + 2)];
+            break;
+        }
+    }
+    // Algunas prioridades son UNA frase de 400 caracteres encadenada con
+    // puntos y coma; sin esto no se cortarían nunca.
+    const trozo = texto.slice(0, tope);
+    const corte = Math.max(trozo.lastIndexOf('; '), trozo.lastIndexOf(', '));
+    const i = corte > minimo ? corte : trozo.lastIndexOf(' ');
+    if (i <= minimo) return [texto, ''];
+    return [texto.slice(0, i) + '…', texto.slice(i + 1)];
+}
+
+/** Dato suelto, en formato de panel: rótulo arriba, valor abajo. */
+function Dato({ etiqueta, valor, tono = 'neutro' }) {
+    const color = tono === 'neutro' ? '#e5e5e5' : COLOR[tono];
+    return (
+        <div className="px-3 py-1.5 rounded border border-[#333] bg-[#1e1e1e]">
+            <div className="rotulo leading-tight">{etiqueta}</div>
+            <div className="text-sm font-semibold leading-tight cifra mt-0.5" style={{ color }}>{valor}</div>
+        </div>
+    );
+}
+
+/** Avance visible + resto desplegable. Lo que resuelve el exceso de texto. */
+function Desplegable({ avance, children, etiqueta = 'Saber más' }) {
+    const [abierto, setAbierto] = useState(false);
+    return (
+        <div>
+            {avance && <p className="text-gray-300 text-sm leading-relaxed">{avance}</p>}
+            {abierto && <div className="mt-2.5 text-gray-400 text-sm leading-relaxed space-y-2 fade-in">{children}</div>}
+            <button onClick={() => setAbierto(!abierto)}
+                    className="mt-2 text-xs text-gray-500 hover:text-white transition">
+                {abierto ? '− Ocultar' : '+ ' + etiqueta}
+            </button>
+        </div>
+    );
+}
+
+/**
+ * Tarjeta. Sin icono: el estado lo lleva un punto de color junto al rótulo.
+ * El borde superior de color aparece SOLO cuando hay algo que mirar — si todo
+ * lleva color, el color deja de avisar.
+ */
+function Tarjeta({ titulo, tono = 'neutro', datos, children, ancho = '' }) {
+    return (
+        <div className={`card p-5 ${ancho}`}
+             style={tono === 'neutro' ? undefined : { borderTop: `2px solid ${COLOR[tono]}` }}>
+            <div className="flex items-start justify-between gap-3 mb-3">
+                <div className="flex items-center gap-2 min-w-0">
+                    {tono !== 'neutro' && <span className="punto" style={{ background: COLOR[tono] }} />}
+                    <span className="rotulo">{titulo}</span>
+                </div>
+                {datos && <div className="flex gap-2 flex-wrap justify-end">{datos}</div>}
+            </div>
+            {children}
+        </div>
+    );
+}
+
+/** Barra con la zona objetivo marcada. Un número suelto no dice si está bien. */
+function BarraRango({ valor, min, max, objetivoMin, objetivoMax }) {
+    const pct = v => Math.max(0, Math.min(100, ((v - min) / (max - min)) * 100));
+    const dentro = valor >= objetivoMin && valor <= objetivoMax;
+    return (
+        <div>
+            <div className="relative h-5 barra-fondo">
+                <div className="absolute top-0 bottom-0 bg-[#25F464]/12 border-x border-[#25F464]/30"
+                     style={{ left: `${pct(objetivoMin)}%`, width: `${pct(objetivoMax) - pct(objetivoMin)}%` }} />
+                <div className="absolute top-0 bottom-0 w-[2px]"
+                     style={{ left: `calc(${pct(valor)}% - 1px)`, background: dentro ? COLOR.ok : COLOR.aviso }} />
+            </div>
+            <div className="flex justify-between text-[10px] text-gray-600 mt-1 cifra">
+                <span>{min}</span>
+                <span className="text-gray-500">objetivo {objetivoMin} a {objetivoMax}</span>
+                <span>{max}</span>
+            </div>
+        </div>
+    );
+}
+
+/** Tres bandas del espectro, de un vistazo. */
+function Espectro({ grave, media, aguda }) {
+    const vals = [{ n: 'Graves', v: grave }, { n: 'Medios', v: media }, { n: 'Agudos', v: aguda }];
+    const suelo = -75, techo = -20;
+    const alto = v => Math.max(4, Math.min(100, ((v - suelo) / (techo - suelo)) * 100));
+    return (
+        <div className="flex items-end gap-3 h-24">
+            {vals.map(b => (
+                <div key={b.n} className="flex-1 flex flex-col items-center justify-end h-full">
+                    <span className="text-[10px] text-gray-500 mb-1 cifra">{b.v?.toFixed(0)}</span>
+                    <div className="w-full rounded-sm" style={{ height: `${alto(b.v)}%`, background: '#4a4a4a' }} />
+                    <span className="rotulo mt-1.5">{b.n}</span>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+/** Anillo de porcentaje: correlación mono y similares. */
+function Anillo({ pct, etiqueta, tono = COLOR.ok }) {
+    const r = 24, c = 2 * Math.PI * r;
+    return (
+        <div className="flex items-center gap-3">
+            <svg width="58" height="58" viewBox="0 0 58 58" className="flex-shrink-0">
+                <circle cx="29" cy="29" r={r} fill="none" stroke="#2e2e2e" strokeWidth="5" />
+                <circle cx="29" cy="29" r={r} fill="none" stroke={tono} strokeWidth="5" strokeLinecap="round"
+                        strokeDasharray={`${(c * pct) / 100} ${c}`} transform="rotate(-90 29 29)" />
+                <text x="29" y="33" textAnchor="middle" fill="#fff" fontSize="13" fontWeight="600">{Math.round(pct)}%</text>
+            </svg>
+            <span className="text-xs text-gray-400 leading-snug">{etiqueta}</span>
+        </div>
+    );
+}
+
+/** Un paso del plan: número, avance y "cómo se hace". */
+function Paso({ n, texto }) {
+    const [avance, resto] = partirEnAvance(texto);
+    return (
+        <div className="flex gap-3 items-start">
+            <span className="flex-shrink-0 w-5 h-5 rounded border border-[#3a3a3a] text-gray-400 flex items-center justify-center text-[11px] font-semibold mt-0.5 cifra">
+                {n}
+            </span>
+            <div className="min-w-0">
+                {resto
+                    ? <Desplegable avance={avance} etiqueta="Cómo se hace"><p>{resto}</p></Desplegable>
+                    : <p className="text-gray-300 text-sm leading-relaxed">{avance}</p>}
+            </div>
+        </div>
+    );
+}
+
+// ===========================================================================
+// Lo que rodea al diagnóstico — va DENTRO del resumen
+// ===========================================================================
+
+function resolverMaster(r) {
+    const id = r.diagnostico_principal?.id || '';
+    if (CONTENIDO.masterMapeo[id]) return CONTENIDO.masterMapeo[id];
+    const lo = r.datos_audio?.loudness || {};
+    if (lo.aviso_true_peak || lo.aviso_saturacion || lo.nivel === 'muy_alto') return 'mastering';
+    return 'general';
+}
+
+function tutorialesDe(r) {
+    const ids = [r.diagnostico_principal?.id, r.diagnostico_secundario?.id].filter(Boolean);
+    const vistos = new Set();
+    const salida = [];
+    for (const id of ids) {
+        for (const t of (CONTENIDO.tutoriales[id] || [])) {
+            if (!vistos.has(t.url)) { vistos.add(t.url); salida.push(t); }
+        }
+    }
+    return salida;
+}
+
+/** Derivación al Máster. Una sola tarjeta, nunca dos. */
+function SiguientePaso({ r }) {
+    return (
+        <div className="card p-5 flex flex-col" style={{ borderTop: '2px solid #6D10FF' }}>
+            <div className="rotulo mb-3">Siguiente paso</div>
+            {/* Logo de Producción Online. Para meterlo:
+                    node docs/rediseno/incrustar-logo.cjs <ruta-al-logo>
+                    node docs/rediseno/construir.cjs
+                Mejor en SVG: el monograma es negro y la tarjeta es oscura, así
+                que hay que recolorearlo a blanco — eso solo se puede hacer con
+                un SVG. Un PNG tendría que venir ya en claro y con fondo
+                transparente. */}
+            {CONTENIDO.logoPO ? (
+                <img src={CONTENIDO.logoPO} alt="Producción Online"
+                     className="h-10 mb-3 self-start object-contain" />
+            ) : (
+                /* Mientras no esté el archivo, el nombre de la marca en texto.
+                   No es un logo aproximado: dibujar a ojo el monograma de
+                   alguien y llamarlo su logo es peor que no ponerlo. */
+                <div className="h-8 mb-3 flex items-center self-start">
+                    <span className="text-white font-bold tracking-tight text-[15px]"
+                          style={{ fontFamily: "'Space Grotesk', Arial, sans-serif" }}>
+                        Producción Online
+                    </span>
+                </div>
+            )}
+            <p className="text-white text-sm font-semibold mb-1.5 leading-snug">
+                Máster de Producción Musical
+            </p>
+            <p className="text-gray-400 text-sm leading-relaxed mb-4">
+                {CONTENIDO.masterVariantes[resolverMaster(r)]}
+            </p>
+            <button className="btn-primary px-4 py-2 rounded text-sm font-medium w-full mt-auto">
+                Ver el programa
+            </button>
+        </div>
+    );
+}
+
+/**
+ * Tutoriales del canal, filtrados por el diagnóstico, con miniatura.
+ *
+ * Si para este diagnóstico no hay ninguno que encaje, la tarjeta NO aparece y
+ * la fila se queda con el CTA al Máster. Rellenar con vídeos que no van al
+ * caso es peor que no poner nada.
+ *
+ * El filtro por `thumb` es además un seguro: un vídeo sin miniatura es un
+ * vídeo que ya no existe. Los 13 enlaces rotos que había se arreglaron el
+ * 2026-08-10 (el canal los había resubido con otro ID).
+ */
+function Tutoriales({ r }) {
+    const lista = tutorialesDe(r).filter(t => t.thumb).slice(0, 3);
+    if (!lista.length) return null;
+    return (
+        <div className="card p-5">
+            <div className="rotulo mb-3">Tutoriales para esto</div>
+            <ul className="space-y-3">
+                {lista.map((t, i) => (
+                    <li key={i}>
+                        <a href={t.url} target="_blank" rel="noopener" className="flex gap-3 items-start group">
+                            <span className="relative flex-none w-[104px] rounded overflow-hidden bg-[#1a1a1a]">
+                                <img src={t.thumb} alt="" loading="lazy"
+                                     className="w-full h-[59px] object-cover opacity-80 group-hover:opacity-100 transition" />
+                                {/* Sin marca de reproducción, una miniatura de
+                                    YouTube no se lee como un vídeo. */}
+                                <span className="absolute inset-0 flex items-center justify-center">
+                                    <span className="w-6 h-6 rounded-full bg-black/60 flex items-center justify-center">
+                                        <span style={{ width: 0, height: 0, marginLeft: '2px',
+                                                       borderTop: '4px solid transparent',
+                                                       borderBottom: '4px solid transparent',
+                                                       borderLeft: '7px solid #fff' }} />
+                                    </span>
+                                </span>
+                            </span>
+                            <span className="min-w-0">
+                                <span className="text-gray-200 text-sm leading-snug group-hover:text-white transition block">{t.titulo}</span>
+                                <span className="text-gray-600 text-xs mt-1 leading-snug block">{t.descripcion}</span>
+                            </span>
+                        </a>
+                    </li>
+                ))}
+            </ul>
+        </div>
+    );
+}
+
+/** Calibración: la respuesta del usuario alimenta el motor. */
+function Feedback() {
+    const [elegido, setElegido] = useState(null);
+    const opciones = [
+        { id: 'si', txt: 'Sí, dio en el clavo' },
+        { id: 'masomenos', txt: 'Más o menos' },
+        { id: 'no', txt: 'No, mi problema es otro' },
+    ];
+    return (
+        <div className="card p-5">
+            <div className="rotulo mb-3">¿Acertamos?</div>
+            {elegido ? (
+                <div className="fade-in">
+                    <p className="text-gray-300 text-sm mb-3">
+                        Gracias. Si quieres, cuéntanos en una línea qué esperabas encontrar.
+                    </p>
+                    <textarea rows="3" placeholder="Opcional…"
+                              className="w-full bg-[#1c1c1c] border border-[#333] rounded p-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#4C4C4C]" />
+                </div>
+            ) : (
+                <div>
+                    <p className="text-gray-300 text-sm mb-1.5">
+                        ¿El diagnóstico coincide con lo que percibías como problema?
+                    </p>
+                    <p className="text-gray-600 text-xs mb-3">Nos sirve para calibrar el motor.</p>
+                    <div className="flex flex-col gap-2">
+                        {opciones.map(o => (
+                            <button key={o.id} onClick={() => setElegido(o.id)}
+                                    className="btn-secondary px-3 py-2 rounded text-sm text-left">
+                                {o.txt}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ===========================================================================
+// Pestañas
+// ===========================================================================
+
+function TabResumen({ r }) {
+    const prioridades = r.prioridades.slice(0, 3);
+    // Si este diagnóstico no tiene ningún tutorial vivo, la fila se reparte
+    // en dos y no queda un hueco donde debería haber una tarjeta.
+    const hayTutoriales = tutorialesDe(r).some(t => t.thumb);
+    return (
+        <div className="space-y-4">
+            {/* Las prioridades mandan: es lo que el productor va a hacer. El
+                qué-está-mal ya lo dice la cabecera; repetirlo aquí era decir
+                la misma frase dos veces en la misma pantalla. */}
+            <Tarjeta titulo="Qué hacer ahora" tono="ok">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-6 gap-y-4">
+                    {prioridades.map((p, i) => <Paso key={i} n={i + 1} texto={p} />)}
+                </div>
+                {r.prioridades.length > 3 && (
+                    <p className="text-gray-600 text-xs mt-4">
+                        Hay {r.prioridades.length - 3} más en «Plan de acción».
+                    </p>
+                )}
+            </Tarjeta>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <Tarjeta titulo="Por qué lo decimos" tono="aviso">
+                    {r.diagnostico_principal.explicacion.split('\n').filter(Boolean).map((l, i) => (
+                        <p key={i} className="text-gray-300 text-sm leading-relaxed">{l}</p>
+                    ))}
+                </Tarjeta>
+
+                {r.nota_contextual && (
+                    <Tarjeta titulo="Para tu caso concreto">
+                        <Desplegable avance={partirEnAvance(r.nota_contextual, 110)[0]}>
+                            <p>{partirEnAvance(r.nota_contextual, 110)[1]}</p>
+                        </Desplegable>
+                    </Tarjeta>
+                )}
+
+                {r.siguiente_sesion && (
+                    <Tarjeta titulo="Tu próxima sesión">
+                        <Desplegable avance={partirEnAvance(r.siguiente_sesion, 100)[0]}>
+                            <p>{partirEnAvance(r.siguiente_sesion, 100)[1]}</p>
+                        </Desplegable>
+                    </Tarjeta>
+                )}
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                {r.error_de_foco && (
+                    <Tarjeta titulo="Ojo con dónde pones el esfuerzo" tono="aviso" ancho="lg:col-span-2">
+                        <p className="text-gray-300 text-sm leading-relaxed">{r.error_de_foco_mensaje}</p>
+                    </Tarjeta>
+                )}
+                {r.diagnostico_secundario && (
+                    <Tarjeta titulo="Segundo frente">
+                        <p className="text-gray-300 text-sm leading-relaxed">{r.diagnostico_secundario.titulo}</p>
+                    </Tarjeta>
+                )}
+            </div>
+
+            {/* Lo que rodea al diagnóstico va AQUÍ, en la primera pantalla.
+                Metido tras una pestaña no lo vería nadie. */}
+            <div className={`grid grid-cols-1 gap-4 pt-1 ${hayTutoriales ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
+                <SiguientePaso r={r} />
+                <Tutoriales r={r} />
+                <Feedback />
+            </div>
+
+            {r.referencia_temporal && (
+                <p className="text-gray-600 text-xs pt-1">{r.referencia_temporal}</p>
+            )}
+        </div>
+    );
+}
+
+function TabPlan({ r }) {
+    return (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="space-y-4">
+                <Tarjeta titulo="Todas las prioridades, en orden" tono="ok">
+                    <div className="space-y-3">
+                        {r.prioridades.map((p, i) => <Paso key={i} n={i + 1} texto={p} />)}
+                    </div>
+                </Tarjeta>
+                {r.sugerencias_estructura?.length > 0 && (
+                    <Tarjeta titulo="Estructura: dónde tocar">
+                        <ul className="space-y-2">
+                            {r.sugerencias_estructura.map((s, i) => (
+                                <li key={i} className="text-gray-300 text-sm leading-relaxed flex gap-2">
+                                    <span className="text-gray-600 flex-none">—</span>{s}
+                                </li>
+                            ))}
+                        </ul>
+                    </Tarjeta>
+                )}
+            </div>
+            <div className="space-y-4">
+                {r.no_tocar_aun?.length > 0 && (
+                    <Tarjeta titulo="No toques esto todavía" tono="aviso">
+                        <p className="text-gray-600 text-xs mb-3">
+                            Tan importante como lo que hay que hacer: lo que va a hacerte perder el tiempo ahora.
+                        </p>
+                        <ul className="space-y-3">
+                            {r.no_tocar_aun.map((n, i) => (
+                                <li key={i} className="text-gray-300 text-sm leading-relaxed flex gap-2">
+                                    <span className="text-gray-600 flex-none">×</span>{n}
+                                </li>
+                            ))}
+                        </ul>
+                    </Tarjeta>
+                )}
+                {(r.tips_genero?.length > 0 || r.tip_objetivo) && (
+                    <Tarjeta titulo="Por tu género y tu objetivo">
+                        {r.tips_genero?.map((t, i) => (
+                            <p key={i} className="text-gray-300 text-sm leading-relaxed mb-2">{t}</p>
+                        ))}
+                        {r.tip_objetivo && (
+                            <Desplegable avance={partirEnAvance(r.tip_objetivo, 100)[0]}>
+                                <p>{partirEnAvance(r.tip_objetivo, 100)[1]}</p>
+                            </Desplegable>
+                        )}
+                    </Tarjeta>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function TabMezcla({ r }) {
+    const d = r.datos_audio, s = r.senales || {}, m = d.mono_compat || {}, h = d.harshness || {};
+    const tonoBalance = d.balance_grave === 'elevado' ? 'aviso' : 'neutro';
+    const tonoMono = m.nivel_compatibilidad === 'excelente' ? 'neutro' : 'aviso';
+    return (
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+            <Tarjeta titulo="Balance espectral" tono={tonoBalance}
+                     datos={<Dato etiqueta="Graves" valor={d.balance_grave} tono={tonoBalance} />}>
+                <Espectro grave={s.db_grave} media={s.db_media} aguda={s.db_aguda} />
+                <p className="text-gray-400 text-xs mt-3">
+                    Diferencia graves–medios: <span className="text-white cifra">{s.diff_grave_media?.toFixed(1)} dB</span>
+                </p>
+                <Desplegable etiqueta="Qué significa">
+                    <p>Una diferencia grande entre graves y medios suele significar que el low end
+                       se está comiendo el sitio del resto. No es que falten agudos: es que hay
+                       demasiado grave tapándolos.</p>
+                </Desplegable>
+            </Tarjeta>
+
+            <Tarjeta titulo="Densidad y dinámica"
+                     datos={<Dato etiqueta="Densidad" valor={d.densidad} />}>
+                <div className="space-y-2.5">
+                    {[['Rango dinámico', `${s.rango_dinamico?.toFixed(1)} dB`],
+                      ['Contraste entre secciones', d.contraste],
+                      ['Cambios significativos', s.cambios_significativos]].map(([k, v]) => (
+                        <div key={k} className="flex justify-between text-sm">
+                            <span className="text-gray-400">{k}</span>
+                            <span className="text-white font-medium cifra">{v}</span>
+                        </div>
+                    ))}
+                </div>
+            </Tarjeta>
+
+            <Tarjeta titulo="Compatibilidad mono" tono={tonoMono}
+                     datos={<Dato etiqueta="Estado" valor={m.nivel_compatibilidad} tono={tonoMono} />}>
+                <Anillo pct={(m.correlacion_lr || 0) * 100}
+                        etiqueta={`Correlación L/R · pérdida en mono ${m.perdida_mono_db} dB`} />
+                <Desplegable etiqueta="Detalle por bandas">
+                    <p>{m.resumen}</p>
+                    {m.bandas && Object.entries(m.bandas).map(([banda, v]) => (
+                        <div key={banda} className="flex justify-between text-xs">
+                            <span className="capitalize text-gray-500">{banda}</span>
+                            <span className="text-gray-300 cifra">
+                                {(v.correlacion * 100).toFixed(0)}% · {v.perdida_db} dB · {v.estado}
+                            </span>
+                        </div>
+                    ))}
+                </Desplegable>
+            </Tarjeta>
+
+            <Tarjeta titulo="Aspereza en medios-altos" tono={h.tiene_harshness ? 'aviso' : 'neutro'}
+                     datos={<Dato etiqueta="Frames ásperos" valor={`${h.pct_frames_harsh}%`}
+                                  tono={h.tiene_harshness ? 'aviso' : 'neutro'} />}>
+                {h.tiene_harshness ? (
+                    <p className="text-gray-300 text-sm">
+                        Zona: <span className="text-white">{h.zona_problema}</span> · pico en <span className="cifra">{h.peak_freq_hz} Hz</span> · carácter {h.caracter}
+                    </p>
+                ) : (
+                    <p className="text-gray-400 text-sm">Sin picos molestos en la zona de 2 a 6 kHz.</p>
+                )}
+            </Tarjeta>
+        </div>
+    );
+}
+
+function TabMaster({ r }) {
+    const lo = r.datos_audio.loudness || {};
+    const tonoPicos = lo.severidad_picos === 'atencion' ? 'aviso' : 'neutro';
+    const tonoRec = lo.severidad_recorte === 'atencion' ? 'alerta' : 'neutro';
+    const tp = lo.true_peak_dbtp;
+    const MIN = -3, MAX = 6;
+    const p = v => Math.max(0, Math.min(100, ((v - MIN) / (MAX - MIN)) * 100));
+    return (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Tarjeta titulo="Loudness"
+                     datos={<><Dato etiqueta="LUFS" valor={lo.lufs_integrado} />
+                              <Dato etiqueta="Rango" valor={`${lo.rango_loudness} LU`} /></>}>
+                <BarraRango valor={lo.lufs_integrado} min={-24} max={-4} objetivoMin={-9} objetivoMax={-7} />
+                <p className="text-gray-400 text-xs mt-3">{lo.referencia_genero}</p>
+                <Desplegable etiqueta="Qué hacer con esto">
+                    <p>{lo.referencia}</p>
+                    <p>{lo.consejo_master}</p>
+                </Desplegable>
+            </Tarjeta>
+
+            <Tarjeta titulo="Picos" tono={tonoPicos}
+                     datos={<><Dato etiqueta="True peak" valor={`${tp?.toFixed(1)} dBTP`} tono={tonoPicos} />
+                              <Dato etiqueta="Sample peak" valor={`${lo.sample_peak_dbfs?.toFixed(1)} dBFS`} /></>}>
+                {/* La escala llega a +6: un máster recortado se va a +5 con
+                    facilidad y con el tope en +3 la marca no se leía. */}
+                <div className="relative h-5 barra-fondo mb-1">
+                    <div className="absolute top-0 bottom-0 bg-[#25F464]/12" style={{ left: 0, width: `${p(-1)}%` }} />
+                    <div className="absolute top-0 bottom-0 bg-yellow-400/10" style={{ left: `${p(-1)}%`, width: `${p(0.3) - p(-1)}%` }} />
+                    <div className="absolute top-0 bottom-0 bg-red-400/10" style={{ left: `${p(0.3)}%`, right: 0 }} />
+                    <div className="absolute top-0 bottom-0 w-[2px]"
+                         style={{ left: `calc(${p(tp)}% - 1px)`, background: tonoPicos === 'neutro' ? COLOR.ok : COLOR.aviso }} />
+                </div>
+                <div className="flex justify-between text-[10px] text-gray-600 mb-3 cifra">
+                    <span>{MIN} dBTP</span>
+                    <span className="text-gray-500">−1 recomendado · 0 el techo</span>
+                    <span>+{MAX}</span>
+                </div>
+                <p className="text-white text-sm font-medium mb-1">{lo.titulo_picos}</p>
+                <Desplegable avance={partirEnAvance(lo.aviso_picos || '', 80)[0]}>
+                    <p>{partirEnAvance(lo.aviso_picos || '', 80)[1]}</p>
+                    {lo.nota_lossy_picos && <p className="text-gray-500">{lo.nota_lossy_picos}</p>}
+                </Desplegable>
+            </Tarjeta>
+
+            <Tarjeta titulo="Recorte de muestras" tono={tonoRec}
+                     datos={lo.recorte_medible
+                         ? <><Dato etiqueta="En el techo" valor={num(lo.muestras_en_techo_total)} tono={tonoRec} />
+                             <Dato etiqueta="Meseta máx" valor={`${(lo.racha_maxima_ms || 0).toFixed(2)} ms`} tono={tonoRec} /></>
+                         : <Dato etiqueta="Medible" valor="no aplica" />}>
+                <p className="text-white text-sm font-medium mb-1">{lo.titulo_recorte}</p>
+                <Desplegable avance={partirEnAvance(lo.aviso_recorte || '', 80)[0]}>
+                    <p>{partirEnAvance(lo.aviso_recorte || '', 80)[1]}</p>
+                </Desplegable>
+            </Tarjeta>
+
+            <Tarjeta titulo="Saturación dinámica" tono={lo.saturacion_dinamica === 'ok' ? 'neutro' : 'aviso'}
+                     datos={<Dato etiqueta="Estado" valor={lo.saturacion_dinamica}
+                                  tono={lo.saturacion_dinamica === 'ok' ? 'neutro' : 'aviso'} />}>
+                {lo.aviso_saturacion
+                    ? <Desplegable avance={partirEnAvance(lo.aviso_saturacion, 90)[0]}>
+                          <p>{partirEnAvance(lo.aviso_saturacion, 90)[1]}</p>
+                      </Desplegable>
+                    : lo.saturacion_dinamica === 'ok'
+                    ? <p className="text-gray-400 text-sm">El limitador no ha aplastado la dinámica.</p>
+                    /* Sin este caso, un estado 'moderada' sin texto asociado
+                       enseñaba el indicador en amarillo y debajo "no ha
+                       aplastado": la tarjeta se contradecía a sí misma. */
+                    : <p className="text-gray-400 text-sm">
+                          La compresión del máster está en <span className="text-white">{lo.saturacion_dinamica}</span>.
+                          No llega a nivel de aviso, pero es la zona en la que conviene comparar
+                          con una referencia del género antes de apretar más.
+                      </p>}
+            </Tarjeta>
+        </div>
+    );
+}
+
+function TabDetalle({ r }) {
+    const d = r.datos_audio, a = d.armonia || {}, f = d.formato || {}, lo = d.loudness || {};
+    const fila = (k, v) => (
+        <div key={k} className="flex justify-between py-1.5 border-b border-[#2e2e2e] last:border-0">
+            <span className="text-gray-500 text-xs">{k}</span>
+            <span className="text-gray-300 text-xs text-right cifra">{String(v)}</span>
+        </div>
+    );
+    return (
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+            <Tarjeta titulo="Estructura">
+                {fila('Duración', d.duracion)}
+                {fila('BPM', d.bpm ?? 'no detectado')}
+                {fila('Bloques', d.n_bloques)}
+                {fila('Contraste', d.contraste)}
+                {fila('Desarrollo', d.desarrollo_temporal ? 'sí' : 'no')}
+            </Tarjeta>
+            <Tarjeta titulo="Armonía">
+                {fila('Tonalidad', `${a.key} ${a.modo}`)}
+                {fila('Confianza', a.key_confidence)}
+                {fila('Complejidad', a.complejidad_armonica)}
+                {fila('Tonal vs percusivo', a.ratio_tonal_percusivo)}
+                <p className="text-gray-600 text-[11px] mt-3 leading-relaxed">
+                    El motor no juzga si las notas o los acordes son acertados. Esto es
+                    descripción, no criterio.
+                </p>
+            </Tarjeta>
+            <Tarjeta titulo="El archivo que subiste">
+                {fila('Formato', `${f.archivo_container} · ${f.archivo_codec}`)}
+                {fila('Sample rate', `${f.archivo_sample_rate} Hz`)}
+                {fila('Canales', f.archivo_canales)}
+                {fila('Con pérdida', f.archivo_lossy ? 'sí' : 'no')}
+            </Tarjeta>
+            <Tarjeta titulo="Cómo se ha medido" ancho="lg:col-span-2">
+                {fila('Método de picos', `${lo.true_peak_method} (${lo.true_peak_oversampling}×)`)}
+                {fila('Medidor certificado', lo.true_peak_validated ? 'sí' : 'no')}
+                {fila('Motor', r.versiones?.analysis_engine_version)}
+                {fila('Taxonomía de picos', `v${lo.peak_taxonomy_version}`)}
+            </Tarjeta>
+            <Tarjeta titulo="Alcance del análisis">
+                <p className="text-gray-400 text-xs leading-relaxed">{r.alcance_analisis}</p>
+            </Tarjeta>
+        </div>
+    );
+}
+
+// ===========================================================================
+// Armazón
+// ===========================================================================
+
+function Cabecera({ r }) {
+    const d = r.datos_audio, lo = d.loudness || {};
+    const cfg = r.estado_track === 'verde'
+        ? { color: COLOR.alerta, label: 'Fase temprana' }
+        : r.estado_track === 'avanzado'
+        ? { color: COLOR.info, label: 'Listo para pulir' }
+        : { color: COLOR.aviso, label: 'En desarrollo' };
+    const tonoPicos = lo.severidad_picos === 'atencion' ? 'aviso' : 'neutro';
+    return (
+        <div className="card p-5 mb-4" style={{ borderTop: `2px solid ${cfg.color}` }}>
+            <div className="flex flex-col xl:flex-row xl:items-center gap-4 justify-between">
+                <div className="min-w-0">
+                    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                        <span className="punto" style={{ background: cfg.color }} />
+                        <span className="rotulo" style={{ color: cfg.color }}>{cfg.label}</span>
+                        <span className="text-gray-600 text-xs">· {r.estado_texto}</span>
+                    </div>
+                    <h1 className="text-white text-lg xl:text-xl font-bold leading-snug break-words">
+                        {r.diagnostico_principal.titulo}
+                    </h1>
+                </div>
+                <div className="flex gap-2 flex-wrap xl:justify-end xl:flex-shrink-0 min-w-0">
+                    <Dato etiqueta="Duración" valor={d.duracion} />
+                    <Dato etiqueta="BPM" valor={d.bpm ?? '—'} />
+                    <Dato etiqueta="LUFS" valor={lo.lufs_integrado} />
+                    <Dato etiqueta="True peak" valor={lo.true_peak_dbtp?.toFixed(1)} tono={tonoPicos} />
+                    <Dato etiqueta="Mono" valor={d.mono_compat?.nivel_compatibilidad || '—'} />
+                </div>
+            </div>
+        </div>
+    );
+}
+
+const TABS = [
+    { id: 'resumen', label: 'Resumen' },
+    { id: 'plan', label: 'Plan de acción' },
+    { id: 'mezcla', label: 'Mezcla' },
+    { id: 'master', label: 'Máster' },
+    { id: 'detalle', label: 'Detalle' },
+];
+
+/** Lee ?tab= y ?caso= de la URL. Sirve para enlazar una vista concreta. */
+function deLaUrl(clave, porDefecto) {
+    try { return new URLSearchParams(location.search).get(clave) || porDefecto; }
+    catch (e) { return porDefecto; }
+}
+
+function Diagnostico({ r }) {
+    const [tab, setTab] = useState(() => deLaUrl('tab', 'resumen'));
+    const lo = r.datos_audio.loudness || {};
+    const avisos = {
+        master: lo.severidad_picos === 'atencion' || lo.severidad_recorte === 'atencion'
+                || (lo.saturacion_dinamica && lo.saturacion_dinamica !== 'ok'),
+        mezcla: r.datos_audio.harshness?.tiene_harshness
+                || r.datos_audio.balance_grave === 'elevado',
+    };
+    return (
+        <div className="max-w-7xl mx-auto px-5 py-6">
+            <Cabecera r={r} />
+
+            <div className="flex gap-1 mb-4 border-b border-[#2e2e2e] overflow-x-auto">
+                {TABS.map(t => (
+                    <button key={t.id} onClick={() => setTab(t.id)}
+                            className={`tab px-4 py-2.5 text-sm text-gray-400 flex items-center gap-2 ${tab === t.id ? 'on' : ''}`}>
+                        {t.label}
+                        {avisos[t.id] && <span className="punto" style={{ background: COLOR.aviso }}
+                                               title="Hay algo que mirar aquí" />}
+                    </button>
+                ))}
+            </div>
+
+            <div className="fade-in" key={tab}>
+                {tab === 'resumen' && <TabResumen r={r} />}
+                {tab === 'plan' && <TabPlan r={r} />}
+                {tab === 'mezcla' && <TabMezcla r={r} />}
+                {tab === 'master' && <TabMaster r={r} />}
+                {tab === 'detalle' && <TabDetalle r={r} />}
+            </div>
+
+            <div className="mt-8 flex flex-wrap gap-3 items-center justify-between border-t border-[#2e2e2e] pt-5">
+                <p className="text-gray-600 text-xs max-w-xl">{r.nota_motivacional}</p>
+                <div className="flex gap-2 flex-wrap">
+                    <button className="btn-secondary px-4 py-2 rounded text-sm">Compartir en la comunidad</button>
+                    <button className="btn-secondary px-4 py-2 rounded text-sm">Descargar informe</button>
+                    <button className="btn-primary px-4 py-2 rounded text-sm font-medium">Analizar otra versión</button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function App() {
+    const claves = Object.keys(CASOS);
+    const [caso, setCaso] = useState(() => {
+        const c = deLaUrl('caso', '');
+        return claves.includes(c) ? c : (claves[1] || claves[0]);
+    });
+    // Los botones de "ancho" que había aquí se quitaron: estrechaban el
+    // contenedor sin mover los puntos de ruptura de CSS, que dependen de la
+    // VENTANA. Enseñaban tres columnas en 420 px, que no es lo que ve un móvil.
+    return (
+        <div>
+            <div className="demo-bar px-4 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm sticky top-0 z-50">
+                <span className="rotulo" style={{ color: '#fff' }}>Prueba de rediseño</span>
+                <div className="flex gap-2 items-center flex-wrap">
+                    {claves.map(k => (
+                        <button key={k} onClick={() => setCaso(k)}
+                                className={`px-2.5 py-1 rounded text-xs ${caso === k ? 'btn-primary' : 'btn-secondary'}`}>
+                            {CASOS[k].etiqueta}
+                        </button>
+                    ))}
+                </div>
+                <span className="text-gray-600 text-xs sm:ml-auto">
+                    Datos reales del motor · para ver el móvil, estrecha la ventana
+                </span>
+            </div>
+            <Diagnostico key={caso} r={CASOS[caso].resultado} />
+        </div>
+    );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

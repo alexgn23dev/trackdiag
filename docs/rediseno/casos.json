@@ -1,0 +1,632 @@
+{
+ "boceto": {
+  "etiqueta": "Boceto temprano",
+  "resultado": {
+   "diagnostico_principal": {
+    "id": "track_verde",
+    "titulo": "Es un boceto temprano — todavía no hay un track, hay una idea que crece.",
+    "explicacion": "• El track parece estar en fase muy temprana\n• Duración muy corta (0:40)\n• Muy pocos bloques de energía detectados",
+    "score": 9
+   },
+   "diagnostico_secundario": {
+    "id": "problema_arreglo",
+    "titulo": "La estructura del arreglo es el cuello de botella — falta forma reconocible.",
+    "score": 8
+   },
+   "prioridades": [
+    "Trabaja la idea, no la mezcla. En esta fase, las preguntas correctas son: ¿qué emoción quieres transmitir? ¿quién bailaría/escucharía esto? ¿en qué momento de un set encajaría? Si no tienes respuesta clara a ninguna, dedica 20 minutos a escribir 3 referencias concretas (artista + track + por qué te gusta) que vayan en la línea de lo que quieres hacer. Sin eso, vas a hacer mil decisiones sin criterio.",
+    "Extiende la duración a 4-5 minutos con secciones básicas, aunque sea con copy/paste y muy poca variación. Plantilla mínima viable: 32 bars de intro (solo kick + 1 elemento), 32 bars de desarrollo (suma elementos), 16 bars de break (quita kick + ambient), 32 bars de drop (todo activo), 16 bars de outro. Eso solo, con tu material actual duplicado y arrastrado, ya te pone en posición de empezar a tomar decisiones reales.",
+    "Limita el alcance de la sesión: en esta fase, terminar la estructura completa (aunque suene mal) vale infinitamente más que perfeccionar 16 compases. La razón es psicológica: con la estructura completa ves dónde fallan las cosas; sin ella te quedas dando vueltas al mismo loop.",
+    "Antes de aplicar los cambios, escucha el track e intenta identificar tú el problema que se describe. Entrenar el oído es más valioso que arreglar un track."
+   ],
+   "sugerencias_estructura": [],
+   "no_tocar_aun": [
+    "No mezcles ni ecualices nada todavía. Salvo high-pass evidente o sidechain básico, todo plugin que metas ahora se va a tener que rehacer cuando cambien las decisiones del arreglo.",
+    "No te compares con tracks terminados de tus referencias. Es un boceto vs un release pulido — la comparación no es informativa, solo te frustra.",
+    "No busques presets ni samples nuevos como excusa para no decidir. La paralización por exceso de opciones es el error #1 en esta fase. Cierra el navegador y trabaja con lo que ya tienes en sesión."
+   ],
+   "siguiente_sesion": "Próxima sesión: 60 minutos máximo. Objetivo único — terminar la estructura completa de principio a fin con el material actual + las plantillas mínimas (intro, desarrollo, break, drop, outro). Aunque suene repetitivo o aburrido. Cuando tengas eso, escúchalo entero sin parar y apunta los 3 puntos que más te molesten. Esos serán los target de la SIGUIENTE sesión, no de esta.",
+   "estado_track": "verde",
+   "estado_texto": "Fase temprana — aún necesita desarrollo",
+   "datos_audio": {
+    "bpm": 129,
+    "tempo_detectado": true,
+    "tempo_fuente": "detectado",
+    "duracion": "0:40",
+    "contraste": "medio",
+    "balance_grave": "elevado",
+    "densidad": "baja",
+    "desarrollo_temporal": false,
+    "n_bloques": 2,
+    "distribucion": {
+     "break_largo": false,
+     "drop_corto": false,
+     "sin_intro": false,
+     "sin_outro": false,
+     "estructura_problematica": false
+    },
+    "armonia": {
+     "key": "A",
+     "modo": "menor",
+     "key_confidence": 0.682,
+     "contenido_tonal": 0.791,
+     "consistencia_armonica": 1.0,
+     "notas_dominantes": [
+      "A",
+      "G#",
+      "A#"
+     ],
+     "complejidad_armonica": "simple",
+     "ratio_tonal_percusivo": 3.78
+    },
+    "loudness": {
+     "lufs_integrado": -23.2,
+     "lufs_short_term_max": -20.9,
+     "rango_loudness": 6.0,
+     "true_peak_dbtp": -5.996762683113878,
+     "sample_peak_dbfs": -6.0000004906757844,
+     "sample_peak_source": "archivo_nativo",
+     "true_peak_method": "soxr_hq_8x",
+     "true_peak_oversampling": 8,
+     "true_peak_ground_truth_validation_passed": true,
+     "true_peak_internal_validation_passed": true,
+     "true_peak_external_validation_passed": false,
+     "true_peak_validated": true,
+     "recorte_medible": true,
+     "categoria_recorte": "sin_muestras_en_techo",
+     "severidad_recorte": "info",
+     "titulo_recorte": "Ninguna muestra llega al techo",
+     "aviso_recorte": "Ni una sola muestra del archivo alcanza el valor máximo que admite el formato. Eso descarta el recorte por muestras: la forma de onda está entera. Ojo, no es lo mismo que el true peak — ese mide la onda reconstruida entre muestras y puede asomar por encima de 0 sin que aquí haya nada recortado.",
+     "muestras_en_techo_total": 0,
+     "muestras_en_techo_por_canal": [
+      0,
+      0
+     ],
+     "pct_muestras_en_techo": 0.0,
+     "racha_maxima_muestras": 0,
+     "racha_maxima_ms": 0.0,
+     "n_mesetas": 0,
+     "canal_afectado": "",
+     "concentracion_en_transitorios": null,
+     "posicion_maximo_seg": 10.3146,
+     "true_peak_at_file_edge": false,
+     "peak_measurement_sample_rate": 44100,
+     "peak_measurement_channels": 2,
+     "nivel": "muy_bajo",
+     "referencia": "Nivel muy bajo. Puede ser que el track esté en fase muy temprana o que los niveles de mezcla estén demasiado bajos.",
+     "consejo_master": "Antes de pensar en mastering, sube los niveles de mezcla. Apunta a que el bus master marque picos en -6dB y RMS en torno a -18dB. Luego ya aplicas limiter para llegar al target del género.",
+     "referencia_genero": "Tu LUFS integrado (-23.2) está 15.2dB por debajo del target típico de Techno (-8 LUFS, rango -7 a -9).",
+     "saturacion_dinamica": "ok",
+     "aviso_saturacion": "",
+     "nivel_true_peak": "ok",
+     "aviso_true_peak": "",
+     "categoria_picos": "ok",
+     "peak_taxonomy_version": 3,
+     "true_peak_classification_value": -6.0,
+     "sample_peak_classification_value": -6.0,
+     "severidad_picos": "info",
+     "titulo_picos": "Margen de picos correcto",
+     "aviso_picos": "El true peak está en -6.0 dBTP, dentro del margen de -1 dBTP que recomiendan las plataformas. Ojo a qué significa esto y qué no: habla del techo del archivo, no de lo que pase dentro de la señal. Un track puede haber pasado por un clipper o un limitador agresivo antes del bounce y seguir teniendo el techo perfectamente puesto.",
+     "nota_lossy_picos": ""
+    },
+    "mono_compat": {
+     "es_stereo": true,
+     "correlacion_lr": 1.0,
+     "perdida_mono_db": 0.0,
+     "nivel_compatibilidad": "excelente",
+     "fase_invertida": false,
+     "bandas": {
+      "graves": {
+       "correlacion": 1.0,
+       "perdida_db": 0.0,
+       "estado": "ok"
+      },
+      "medios": {
+       "correlacion": 1.0,
+       "perdida_db": 0.0,
+       "estado": "ok"
+      },
+      "agudos": {
+       "correlacion": 1.0,
+       "perdida_db": 0.0,
+       "estado": "ok"
+      }
+     },
+     "resumen": "Compatibilidad mono perfecta — los canales L y R son casi idénticos (correlación 100%). Eso garantiza que suena bien en cualquier sistema (club, smartphone, radio), pero también significa que el track tiene poca anchura estéreo: si buscas sensación de profundidad o movimiento lateral, abre el panning de hats, pads o FX hacia los lados. No toques kick ni bajo — deben quedarse al centro."
+    },
+    "harshness": {
+     "tiene_harshness": false,
+     "nivel": "",
+     "pico_p95": -0.1,
+     "pct_frames_harsh": 5.0,
+     "zona_problema": "",
+     "peak_freq_hz": 0,
+     "caracter": ""
+    },
+    "formato": {
+     "archivo_extension": ".wav",
+     "archivo_container": "WAV",
+     "archivo_codec": "Signed 24 bit PCM",
+     "archivo_subtype": "PCM_24",
+     "archivo_sample_format": "integer",
+     "archivo_storage_bits": 24,
+     "archivo_pcm_bit_depth": 24,
+     "archivo_sample_rate": 44100,
+     "archivo_canales": 2,
+     "archivo_lossy": false,
+     "archivo_metadata_source": "soundfile"
+    }
+   },
+   "versiones": {
+    "analysis_engine_version": "engine-2026.08.06-1",
+    "peak_algorithm_version": "peak-soxr_hq_8x-1",
+    "loudness_algorithm_version": "loudness-pyloudnorm-22k-2"
+   },
+   "senales": {
+    "db_grave": -31.2,
+    "db_media": -55.9,
+    "db_aguda": -64.9,
+    "diff_grave_media": 24.8,
+    "diff_sub_low": 30.2,
+    "densidad_espectral": 0.0014,
+    "varianza_energia": 0.1623,
+    "rango_dinamico": 1.98,
+    "cambios_significativos": 0,
+    "madurez_estimada": "verde",
+    "carencia_medios": true,
+    "carencia_agudos": true
+   },
+   "error_de_foco": false,
+   "error_de_foco_mensaje": "",
+   "scores": {
+    "track_verde": 9,
+    "problema_arreglo": 8,
+    "carencia_espectral": 5,
+    "enmascaramiento_bajo": 2,
+    "exceso_lowend": 1,
+    "mezcla_prematura": 0,
+    "exceso_densidad": 0,
+    "arreglo_repetitivo": 0,
+    "conflicto_armonico": 0,
+    "pobreza_armonica": 0,
+    "harshness_mezcla": 0,
+    "poco_contraste": -2,
+    "falta_impacto": -4,
+    "break_sin_payoff": -5
+   },
+   "nota_contextual": "Tienes una idea que funciona como punto de partida. El reto ahora es extenderla sin perder lo que la hace interesante. Referencia práctica: a 129 BPM, 16 compases duran ~30s y 32 compases ~60s. Úsalo para planificar la duración de tus secciones.",
+   "tips_genero": [
+    "En techno la evolución es más importante que los golpes de efecto. Las transiciones pueden ser lentas y funcionar perfectamente.",
+    "Tu track dura 0:40. Para Techno, lo habitual es 5:30–8 minutos. No hace falta que llegues ahí ahora, pero tenlo como referencia."
+   ],
+   "tip_objetivo": "Este track es tu campo de entrenamiento. No importa si el resultado final no es publicable — lo que importa es que entiendas POR QUÉ el diagnóstico detecta esto y aprendas a escucharlo tú.",
+   "referencia_temporal": "A 129 BPM, 8 compases duran ~15s y 16 compases ~30s.",
+   "nota_motivacional": "Buen trabajo llegando hasta aquí.",
+   "disclaimer": "",
+   "aviso_genero": "",
+   "alcance_analisis": "Este análisis evalúa mezcla, balance espectral, estructura, dinámica y loudness. No juzga si las notas, los acordes o la melodía están bien afinados o son acertados — eso queda a tu oído y tu intención artística."
+  }
+ },
+ "caliente": {
+  "etiqueta": "Máster caliente",
+  "resultado": {
+   "diagnostico_principal": {
+    "id": "problema_arreglo",
+    "titulo": "La estructura del arreglo es el cuello de botella — falta forma reconocible.",
+    "explicacion": "• Hay una sección de baja energía desproporcionadamente larga (6 bloques de 13) (aprox. entre 1:47 y 3:20)\n• No se detectan cambios significativos de energía entre secciones",
+    "score": 6
+   },
+   "diagnostico_secundario": {
+    "id": "poco_contraste",
+    "titulo": "El track suena como un loop continuo — falta una curva de energía clara.",
+    "score": 6
+   },
+   "prioridades": [
+    "Mira qué señal ha disparado el diagnóstico: la tienes justo encima, en «por qué lo decimos». Cada una pide una cosa distinta. Si es poco contraste entre secciones, mete drops y breaks claros. Si es que no hay desarrollo, añade transiciones: filtros que abren, capas que van entrando. Si el break es desproporcionado, recórtalo o súbele intensidad. Y si el track tiene pocas secciones, el problema es que aún no hay estructura que arreglar: hay que crearla.",
+    "Estructura base de track de club (4-6 minutos): intro de 32 bars con kick + percusión + 1 elemento (DJ-friendly); build-up de 16 bars donde entran elementos progresivamente; drop principal de 32-64 bars con todo activo; break de 16-32 bars con la mitad de elementos quitados y un giro melódico/atmosférico; segundo drop de 32-64 bars (variado, no idéntico al primero); outro de 16-32 bars perdiendo elementos para mix. Si tu track no encaja vagamente con esto, tienes ahí los huecos.",
+    "Antes de seguir, haz el ejercicio del mapa de bloques en papel: divide el tiempo del track en bloques de 32 compases y, para cada bloque, escribe (a) qué energía tiene (1-5), (b) qué elementos están sonando, (c) qué cambia respecto al bloque anterior. Si dos bloques contiguos tienen exactamente lo mismo, ahí está el problema — o añades variación o recortas el bloque repetido."
+   ],
+   "sugerencias_estructura": [
+    "Break largo: la sección de baja energía entre 1:47 y 3:20 es desproporcionada. En Techno los breaks suelen ser pueden ser largos si mantienen tensión (percusión, texturas) — acórtala o mete variación dentro (percusión, textura, un giro) para que no se desinfle.",
+    "Duración: tu track dura 3:20; en Techno lo habitual es 5:30–8 minutos. Si es para pista, extiende intro/outro y añade una segunda variación del drop."
+   ],
+   "no_tocar_aun": [
+    "No mezcles ni masterices hasta que la estructura esté cerrada — vas a tomar decisiones de EQ/compresión que se invalidan en cuanto muevas las secciones.",
+    "No busques sonidos nuevos como excusa. La estructura se trabaja con lo que ya tienes — copy/paste de patrones, mutes, automatizaciones de volumen. Solo después decides si hace falta material nuevo.",
+    "No copies la duración de tu track favorito sin más. Los tracks de DJ extendidos miden 5-7 min con varias variaciones, no 8 min del mismo loop. La duración debe estar justificada por la información musical, no por el género."
+   ],
+   "siguiente_sesion": "Próxima sesión: ignora todo lo que no sea estructura durante 60-90 minutos. Cierra plugins, haz el mapa de bloques en papel, define qué pasa en cada bloque y mueve/duplica/recorta tu material actual para encajar en ese mapa. Objetivo realista: tu track debe poder escucharse plano (sin mezcla) y reconocerse la forma a primera escucha. Cuando lo consigas, vuelves a mezcla.",
+   "estado_track": "en_desarrollo",
+   "estado_texto": "Mezcla casi lista — 5 puntos pendientes antes del máster",
+   "datos_audio": {
+    "bpm": 129,
+    "tempo_detectado": true,
+    "tempo_fuente": "detectado",
+    "duracion": "3:20",
+    "contraste": "medio",
+    "balance_grave": "elevado",
+    "densidad": "baja",
+    "desarrollo_temporal": false,
+    "n_bloques": 13,
+    "distribucion": {
+     "break_largo": true,
+     "drop_corto": false,
+     "sin_intro": false,
+     "sin_outro": false,
+     "estructura_problematica": true
+    },
+    "armonia": {
+     "key": "A",
+     "modo": "menor",
+     "key_confidence": 0.682,
+     "contenido_tonal": 0.845,
+     "consistencia_armonica": 1.0,
+     "notas_dominantes": [
+      "A",
+      "G#",
+      "A#"
+     ],
+     "complejidad_armonica": "simple",
+     "ratio_tonal_percusivo": 5.45
+    },
+    "loudness": {
+     "lufs_integrado": -8.8,
+     "lufs_short_term_max": -6.7,
+     "rango_loudness": 5.4,
+     "true_peak_dbtp": 4.857194782418504,
+     "sample_peak_dbfs": 0.0,
+     "sample_peak_source": "archivo_nativo",
+     "true_peak_method": "soxr_hq_8x",
+     "true_peak_oversampling": 8,
+     "true_peak_ground_truth_validation_passed": true,
+     "true_peak_internal_validation_passed": true,
+     "true_peak_external_validation_passed": false,
+     "true_peak_validated": true,
+     "recorte_medible": true,
+     "categoria_recorte": "recorte_sostenido",
+     "severidad_recorte": "atencion",
+     "titulo_recorte": "Hay tramos de onda aplanados",
+     "aviso_recorte": "La racha más larga son 175 muestras seguidas pegadas al techo: 4.0 ms de onda completamente plana, y en total el 1.435% de las muestras del archivo están ahí. Eso ya no encaja con un clipper recortando picos — un clipper actúa durante décimas de milisegundo sobre transitorios. Un tramo plano de milisegundos significa que material sostenido (un bajo, un pad, una nota larga) se ha quedado sin sitio. Lo que oyes de eso es distorsión armónica añadida, y a diferencia de un pico alto esto no se arregla después: la información que había en esa parte de la onda ya no está en el archivo. Qué hacer: baja el gain de entrada del máster unos dB y vuelve a exportar desde el proyecto. Si el recorte viene de la mezcla y no del máster, búscalo en el elemento que suena en ese momento (~0.0s). Y si esto es una decisión estética tuya —distorsión buscada—, ignóralo: lo marcamos porque no podemos distinguir tu intención, solo la forma de la onda.",
+     "muestras_en_techo_total": 253164,
+     "muestras_en_techo_por_canal": [
+      126582,
+      126582
+     ],
+     "pct_muestras_en_techo": 1.43517,
+     "racha_maxima_muestras": 175,
+     "racha_maxima_ms": 3.9683,
+     "n_mesetas": 2856,
+     "canal_afectado": "ambos",
+     "concentracion_en_transitorios": 0.9983,
+     "posicion_maximo_seg": 0.0151,
+     "true_peak_at_file_edge": false,
+     "peak_measurement_sample_rate": 44100,
+     "peak_measurement_channels": 2,
+     "nivel": "alto",
+     "referencia": "Nivel alto, en línea con masters de club/pista actuales. Spotify normaliza a -14 LUFS, así que parte del volumen se perderá en streaming.",
+     "consejo_master": "Nivel coherente con masters de club y pista actuales.",
+     "referencia_genero": "Tu LUFS integrado (-8.8) está en el rango habitual de Techno (-7 a -9 LUFS).",
+     "saturacion_dinamica": "moderada",
+     "aviso_saturacion": "",
+     "nivel_true_peak": "clipping",
+     "aviso_true_peak": "True peak en +4.9 dBTP — el master clipea digitalmente. Habrá distorsión audible en cualquier sistema de reproducción. Baja el ceiling del limiter del master a -1 dBTP y reanaliza.",
+     "categoria_picos": "true_peak_over",
+     "peak_taxonomy_version": 3,
+     "true_peak_classification_value": 4.9,
+     "sample_peak_classification_value": 0.0,
+     "severidad_picos": "atencion",
+     "titulo_picos": "Picos reconstruidos por encima del techo",
+     "aviso_picos": "El true peak llega a +4.9 dBTP, por encima de 0. Son picos que aparecen al reconstruir la onda entre muestras. Esto no demuestra que las muestras de tu archivo estén recortadas: el sample peak está en +0.0 dBFS. Sí implica riesgo de distorsión en la reproducción — el conversor del oyente puede no tener margen para esos picos — y al codificar a MP3 o AAC, que puede generar picos adicionales. Qué hacer: baja el ceiling del limiter (prueba -1 dBTP) y vuelve a analizar para ver cuánto se mueve.",
+     "nota_lossy_picos": ""
+    },
+    "mono_compat": {
+     "es_stereo": true,
+     "correlacion_lr": 1.0,
+     "perdida_mono_db": 0.0,
+     "nivel_compatibilidad": "excelente",
+     "fase_invertida": false,
+     "bandas": {
+      "graves": {
+       "correlacion": 1.0,
+       "perdida_db": 0.0,
+       "estado": "ok"
+      },
+      "medios": {
+       "correlacion": 1.0,
+       "perdida_db": 0.0,
+       "estado": "ok"
+      },
+      "agudos": {
+       "correlacion": 1.0,
+       "perdida_db": 0.0,
+       "estado": "ok"
+      }
+     },
+     "resumen": "Compatibilidad mono perfecta — los canales L y R son casi idénticos (correlación 100%). Eso garantiza que suena bien en cualquier sistema (club, smartphone, radio), pero también significa que el track tiene poca anchura estéreo: si buscas sensación de profundidad o movimiento lateral, abre el panning de hats, pads o FX hacia los lados. No toques kick ni bajo — deben quedarse al centro."
+    },
+    "harshness": {
+     "tiene_harshness": false,
+     "nivel": "",
+     "pico_p95": 0.2,
+     "pct_frames_harsh": 5.4,
+     "zona_problema": "",
+     "peak_freq_hz": 0,
+     "caracter": ""
+    },
+    "formato": {
+     "archivo_extension": ".wav",
+     "archivo_container": "WAV",
+     "archivo_codec": "Signed 24 bit PCM",
+     "archivo_subtype": "PCM_24",
+     "archivo_sample_format": "integer",
+     "archivo_storage_bits": 24,
+     "archivo_pcm_bit_depth": 24,
+     "archivo_sample_rate": 44100,
+     "archivo_canales": 2,
+     "archivo_lossy": false,
+     "archivo_metadata_source": "soundfile"
+    }
+   },
+   "versiones": {
+    "analysis_engine_version": "engine-2026.08.06-1",
+    "peak_algorithm_version": "peak-soxr_hq_8x-1",
+    "loudness_algorithm_version": "loudness-pyloudnorm-22k-2"
+   },
+   "senales": {
+    "db_grave": -29.5,
+    "db_media": -54.2,
+    "db_aguda": -61.0,
+    "diff_grave_media": 24.6,
+    "diff_sub_low": 30.8,
+    "densidad_espectral": 0.0022,
+    "varianza_energia": 0.2317,
+    "rango_dinamico": 1.6,
+    "cambios_significativos": 0,
+    "madurez_estimada": "en_desarrollo",
+    "carencia_medios": true,
+    "carencia_agudos": true
+   },
+   "error_de_foco": true,
+   "error_de_foco_mensaje": "Mencionas estar enfocado en la mezcla, pero el diagnóstico principal apunta a un problema más fundamental de estructura o desarrollo. Antes de mezclar, conviene resolver eso primero.",
+   "scores": {
+    "problema_arreglo": 6,
+    "poco_contraste": 6,
+    "carencia_espectral": 6,
+    "mezcla_prematura": 5,
+    "enmascaramiento_bajo": 2,
+    "track_verde": 1,
+    "exceso_lowend": 0,
+    "exceso_densidad": 0,
+    "break_sin_payoff": 0,
+    "arreglo_repetitivo": 0,
+    "conflicto_armonico": 0,
+    "pobreza_armonica": 0,
+    "harshness_mezcla": 0,
+    "falta_impacto": -2
+   },
+   "nota_contextual": "Mencionas que la mezcla es tu mayor dificultad habitual, pero en este track el primer cuello de botella es otro. La buena noticia: una vez resuelvas la estructura, la mezcla será más fácil porque cada elemento tendrá su sitio. Sé que el objetivo es enviarlo a sellos, pero este track aún no está en ese punto. Cierra primero lo que marca el diagnóstico — el enfoque de sello (máster competitivo, comparar con releases del sello) llega cuando el track esté terminado, no antes. Referencia práctica: a 129 BPM, 16 compases duran ~30s y 32 compases ~60s. Úsalo para planificar la duración de tus secciones.",
+   "tips_genero": [
+    "En techno la evolución es más importante que los golpes de efecto. Las transiciones pueden ser lentas y funcionar perfectamente.",
+    "Tu track dura 3:20. Para Techno, lo habitual es 5:30–8 minutos. No hace falta que llegues ahí ahora, pero tenlo como referencia.",
+    "En Techno, los breaks son pueden ser largos si mantienen tensión (percusión, texturas). Si tu sección de baja energía es muy larga, considera acortarla o añadir elementos que mantengan el interés (percusión, texturas, variaciones rítmicas)."
+   ],
+   "tip_objetivo": "Tu objetivo es enviar a sellos, pero este track todavía está en una fase temprana. Antes de pensar en máster o en A&Rs, céntrate en cerrar la estructura y la mezcla — un sello descarta en los primeros segundos un track sin terminar. Cuando esté cerrado, volvemos al enfoque de sello.",
+   "referencia_temporal": "A 129 BPM, 8 compases duran ~15s y 16 compases ~30s.",
+   "nota_motivacional": "Buen trabajo llegando hasta aquí.",
+   "disclaimer": "",
+   "aviso_genero": "",
+   "alcance_analisis": "Este análisis evalúa mezcla, balance espectral, estructura, dinámica y loudness. No juzga si las notas, los acordes o la melodía están bien afinados o son acertados — eso queda a tu oído y tu intención artística."
+  }
+ },
+ "cuidado": {
+  "etiqueta": "Track cuidado",
+  "resultado": {
+   "diagnostico_principal": {
+    "id": "problema_arreglo",
+    "titulo": "La estructura del arreglo es el cuello de botella — falta forma reconocible.",
+    "explicacion": "• Hay una sección de baja energía desproporcionadamente larga (10 bloques de 21) (aprox. entre 2:47 y 5:20)\n• No se detectan cambios significativos de energía entre secciones",
+    "score": 6
+   },
+   "diagnostico_secundario": {
+    "id": "poco_contraste",
+    "titulo": "El track suena como un loop continuo — falta una curva de energía clara.",
+    "score": 6
+   },
+   "prioridades": [
+    "Mira qué señal ha disparado el diagnóstico: la tienes justo encima, en «por qué lo decimos». Cada una pide una cosa distinta. Si es poco contraste entre secciones, mete drops y breaks claros. Si es que no hay desarrollo, añade transiciones: filtros que abren, capas que van entrando. Si el break es desproporcionado, recórtalo o súbele intensidad. Y si el track tiene pocas secciones, el problema es que aún no hay estructura que arreglar: hay que crearla.",
+    "Estructura base de track de club (4-6 minutos): intro de 32 bars con kick + percusión + 1 elemento (DJ-friendly); build-up de 16 bars donde entran elementos progresivamente; drop principal de 32-64 bars con todo activo; break de 16-32 bars con la mitad de elementos quitados y un giro melódico/atmosférico; segundo drop de 32-64 bars (variado, no idéntico al primero); outro de 16-32 bars perdiendo elementos para mix. Si tu track no encaja vagamente con esto, tienes ahí los huecos.",
+    "Antes de seguir, haz el ejercicio del mapa de bloques en papel: divide el tiempo del track en bloques de 32 compases y, para cada bloque, escribe (a) qué energía tiene (1-5), (b) qué elementos están sonando, (c) qué cambia respecto al bloque anterior. Si dos bloques contiguos tienen exactamente lo mismo, ahí está el problema — o añades variación o recortas el bloque repetido."
+   ],
+   "sugerencias_estructura": [
+    "Break largo: la sección de baja energía entre 2:47 y 5:20 es desproporcionada. En Techno los breaks suelen ser pueden ser largos si mantienen tensión (percusión, texturas) — acórtala o mete variación dentro (percusión, textura, un giro) para que no se desinfle.",
+    "Duración: tu track dura 5:20; en Techno lo habitual es 5:30–8 minutos. Si es para pista, extiende intro/outro y añade una segunda variación del drop."
+   ],
+   "no_tocar_aun": [
+    "No mezcles ni masterices hasta que la estructura esté cerrada — vas a tomar decisiones de EQ/compresión que se invalidan en cuanto muevas las secciones.",
+    "No busques sonidos nuevos como excusa. La estructura se trabaja con lo que ya tienes — copy/paste de patrones, mutes, automatizaciones de volumen. Solo después decides si hace falta material nuevo.",
+    "No copies la duración de tu track favorito sin más. Los tracks de DJ extendidos miden 5-7 min con varias variaciones, no 8 min del mismo loop. La duración debe estar justificada por la información musical, no por el género."
+   ],
+   "siguiente_sesion": "Próxima sesión: ignora todo lo que no sea estructura durante 60-90 minutos. Cierra plugins, haz el mapa de bloques en papel, define qué pasa en cada bloque y mueve/duplica/recorta tu material actual para encajar en ese mapa. Objetivo realista: tu track debe poder escucharse plano (sin mezcla) y reconocerse la forma a primera escucha. Cuando lo consigas, vuelves a mezcla.",
+   "estado_track": "en_desarrollo",
+   "estado_texto": "Mezcla casi lista — 6 puntos pendientes antes del máster",
+   "datos_audio": {
+    "bpm": 129,
+    "tempo_detectado": true,
+    "tempo_fuente": "detectado",
+    "duracion": "5:20",
+    "contraste": "medio",
+    "balance_grave": "elevado",
+    "densidad": "baja",
+    "desarrollo_temporal": false,
+    "n_bloques": 21,
+    "distribucion": {
+     "break_largo": true,
+     "drop_corto": false,
+     "sin_intro": false,
+     "sin_outro": false,
+     "estructura_problematica": true
+    },
+    "armonia": {
+     "key": "A",
+     "modo": "menor",
+     "key_confidence": 0.683,
+     "contenido_tonal": 0.789,
+     "consistencia_armonica": 1.0,
+     "notas_dominantes": [
+      "A",
+      "A#",
+      "G#"
+     ],
+     "complejidad_armonica": "simple",
+     "ratio_tonal_percusivo": 3.75
+    },
+    "loudness": {
+     "lufs_integrado": -20.3,
+     "lufs_short_term_max": -17.9,
+     "rango_loudness": 6.1,
+     "true_peak_dbtp": -1.199998975710161,
+     "sample_peak_dbfs": -1.199998975710161,
+     "sample_peak_source": "archivo_nativo",
+     "true_peak_method": "soxr_hq_8x",
+     "true_peak_oversampling": 8,
+     "true_peak_ground_truth_validation_passed": true,
+     "true_peak_internal_validation_passed": true,
+     "true_peak_external_validation_passed": false,
+     "true_peak_validated": true,
+     "recorte_medible": true,
+     "categoria_recorte": "sin_muestras_en_techo",
+     "severidad_recorte": "info",
+     "titulo_recorte": "Ninguna muestra llega al techo",
+     "aviso_recorte": "Ni una sola muestra del archivo alcanza el valor máximo que admite el formato. Eso descarta el recorte por muestras: la forma de onda está entera. Ojo, no es lo mismo que el true peak — ese mide la onda reconstruida entre muestras y puede asomar por encima de 0 sin que aquí haya nada recortado.",
+     "muestras_en_techo_total": 0,
+     "muestras_en_techo_por_canal": [
+      0,
+      0
+     ],
+     "pct_muestras_en_techo": 0.0,
+     "racha_maxima_muestras": 0,
+     "racha_maxima_ms": 0.0,
+     "n_mesetas": 0,
+     "canal_afectado": "",
+     "concentracion_en_transitorios": null,
+     "posicion_maximo_seg": 118.8282,
+     "true_peak_at_file_edge": false,
+     "peak_measurement_sample_rate": 44100,
+     "peak_measurement_channels": 2,
+     "nivel": "muy_bajo",
+     "referencia": "Nivel muy bajo. Puede ser que el track esté en fase muy temprana o que los niveles de mezcla estén demasiado bajos.",
+     "consejo_master": "Antes de pensar en mastering, sube los niveles de mezcla. Apunta a que el bus master marque picos en -6dB y RMS en torno a -18dB. Luego ya aplicas limiter para llegar al target del género.",
+     "referencia_genero": "Tu LUFS integrado (-20.3) está 12.3dB por debajo del target típico de Techno (-8 LUFS, rango -7 a -9).",
+     "saturacion_dinamica": "ok",
+     "aviso_saturacion": "",
+     "nivel_true_peak": "ok",
+     "aviso_true_peak": "",
+     "categoria_picos": "ok",
+     "peak_taxonomy_version": 3,
+     "true_peak_classification_value": -1.2,
+     "sample_peak_classification_value": -1.2,
+     "severidad_picos": "info",
+     "titulo_picos": "Margen de picos correcto",
+     "aviso_picos": "El true peak está en -1.2 dBTP, dentro del margen de -1 dBTP que recomiendan las plataformas. Ojo a qué significa esto y qué no: habla del techo del archivo, no de lo que pase dentro de la señal. Un track puede haber pasado por un clipper o un limitador agresivo antes del bounce y seguir teniendo el techo perfectamente puesto.",
+     "nota_lossy_picos": ""
+    },
+    "mono_compat": {
+     "es_stereo": true,
+     "correlacion_lr": 1.0,
+     "perdida_mono_db": 0.0,
+     "nivel_compatibilidad": "excelente",
+     "fase_invertida": false,
+     "bandas": {
+      "graves": {
+       "correlacion": 1.0,
+       "perdida_db": 0.0,
+       "estado": "ok"
+      },
+      "medios": {
+       "correlacion": 1.0,
+       "perdida_db": 0.0,
+       "estado": "ok"
+      },
+      "agudos": {
+       "correlacion": 1.0,
+       "perdida_db": 0.0,
+       "estado": "ok"
+      }
+     },
+     "resumen": "Compatibilidad mono perfecta — los canales L y R son casi idénticos (correlación 100%). Eso garantiza que suena bien en cualquier sistema (club, smartphone, radio), pero también significa que el track tiene poca anchura estéreo: si buscas sensación de profundidad o movimiento lateral, abre el panning de hats, pads o FX hacia los lados. No toques kick ni bajo — deben quedarse al centro."
+    },
+    "harshness": {
+     "tiene_harshness": false,
+     "nivel": "",
+     "pico_p95": 0.4,
+     "pct_frames_harsh": 6.1,
+     "zona_problema": "",
+     "peak_freq_hz": 0,
+     "caracter": ""
+    },
+    "formato": {
+     "archivo_extension": ".wav",
+     "archivo_container": "WAV",
+     "archivo_codec": "Signed 24 bit PCM",
+     "archivo_subtype": "PCM_24",
+     "archivo_sample_format": "integer",
+     "archivo_storage_bits": 24,
+     "archivo_pcm_bit_depth": 24,
+     "archivo_sample_rate": 44100,
+     "archivo_canales": 2,
+     "archivo_lossy": false,
+     "archivo_metadata_source": "soundfile"
+    }
+   },
+   "versiones": {
+    "analysis_engine_version": "engine-2026.08.06-1",
+    "peak_algorithm_version": "peak-soxr_hq_8x-1",
+    "loudness_algorithm_version": "loudness-pyloudnorm-22k-2"
+   },
+   "senales": {
+    "db_grave": -31.7,
+    "db_media": -57.0,
+    "db_aguda": -63.6,
+    "diff_grave_media": 25.3,
+    "diff_sub_low": 31.2,
+    "densidad_espectral": 0.0025,
+    "varianza_energia": 0.2495,
+    "rango_dinamico": 1.99,
+    "cambios_significativos": 0,
+    "madurez_estimada": "en_desarrollo",
+    "carencia_medios": true,
+    "carencia_agudos": true
+   },
+   "error_de_foco": true,
+   "error_de_foco_mensaje": "Mencionas estar enfocado en la mezcla, pero el diagnóstico principal apunta a un problema más fundamental de estructura o desarrollo. Antes de mezclar, conviene resolver eso primero.",
+   "scores": {
+    "problema_arreglo": 6,
+    "poco_contraste": 6,
+    "carencia_espectral": 5,
+    "arreglo_repetitivo": 4,
+    "mezcla_prematura": 3,
+    "enmascaramiento_bajo": 2,
+    "track_verde": 1,
+    "exceso_lowend": 0,
+    "exceso_densidad": 0,
+    "break_sin_payoff": 0,
+    "conflicto_armonico": 0,
+    "pobreza_armonica": 0,
+    "harshness_mezcla": 0,
+    "falta_impacto": -2
+   },
+   "nota_contextual": "Mencionas que la mezcla es tu mayor dificultad habitual, pero en este track el primer cuello de botella es otro. La buena noticia: una vez resuelvas la estructura, la mezcla será más fácil porque cada elemento tendrá su sitio. Sé que el objetivo es enviarlo a sellos, pero este track aún no está en ese punto. Cierra primero lo que marca el diagnóstico — el enfoque de sello (máster competitivo, comparar con releases del sello) llega cuando el track esté terminado, no antes. Referencia práctica: a 129 BPM, 16 compases duran ~30s y 32 compases ~60s. Úsalo para planificar la duración de tus secciones.",
+   "tips_genero": [
+    "En techno la evolución es más importante que los golpes de efecto. Las transiciones pueden ser lentas y funcionar perfectamente.",
+    "Tu track dura 5:20. Para Techno, lo habitual es 5:30–8 minutos. No hace falta que llegues ahí ahora, pero tenlo como referencia.",
+    "En Techno, los breaks son pueden ser largos si mantienen tensión (percusión, texturas). Si tu sección de baja energía es muy larga, considera acortarla o añadir elementos que mantengan el interés (percusión, texturas, variaciones rítmicas)."
+   ],
+   "tip_objetivo": "Tu objetivo es enviar a sellos, pero este track todavía está en una fase temprana. Antes de pensar en máster o en A&Rs, céntrate en cerrar la estructura y la mezcla — un sello descarta en los primeros segundos un track sin terminar. Cuando esté cerrado, volvemos al enfoque de sello.",
+   "referencia_temporal": "A 129 BPM, 8 compases duran ~15s y 16 compases ~30s.",
+   "nota_motivacional": "Buen trabajo llegando hasta aquí.",
+   "disclaimer": "",
+   "aviso_genero": "",
+   "alcance_analisis": "Este análisis evalúa mezcla, balance espectral, estructura, dinámica y loudness. No juzga si las notas, los acordes o la melodía están bien afinados o son acertados — eso queda a tu oído y tu intención artística."
+  }
+ }
+}

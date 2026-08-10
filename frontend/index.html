@@ -203,7 +203,7 @@
     // /api/health. Si no coincide, este fichero viene de la caché del
     // navegador y puede estar dejando de enviar campos que el backend ya
     // espera — se recarga una sola vez y, si aun así no cuadra, se avisa.
-    const APP_VERSION = '0.5.76';
+    const APP_VERSION = '0.5.79';
 
     function comprobarVersionFrontend(onDesfase, onEntorno) {
         fetch(`${API_URL}/api/health`, { cache: 'no-store' })
@@ -678,6 +678,16 @@
                         </div>
                     )}
 
+                    {/* ==========================================================
+                        Discriminación de género ANTES del botón de análisis.
+                        Mentotrack está calibrado solo para electrónica de club;
+                        hasta ahora el aviso llegaba en el informe, cuando el
+                        usuario ya había esperado el análisis entero. Estas
+                        listas son copia de las de engine/contextualizador.py
+                        (`_whitelist_electronic` y `_palabras_no_electronicas`):
+                        si allí se tocan, hay que tocarlas aquí — lo comprueba
+                        backend/tests/test_genero_no_electronico.py.
+                    ========================================================== */}
                     <SelectField
                         label="¿Qué género estás produciendo?"
                         options={opciones.generos}
@@ -709,6 +719,30 @@
                                     <p className="text-xs text-red-400 mt-1">
                                         Escribe el género para poder analizar correctamente tu track.
                                     </p>
+                                )}
+                                {!customVacio && esGeneroNoElectronico(customTxt) && (
+                                    <div
+                                        className="mt-2 p-3 rounded-lg text-xs leading-relaxed"
+                                        style={{
+                                            background: 'rgba(250,204,21,0.06)',
+                                            border: '1px solid rgba(250,204,21,0.28)',
+                                            color: 'var(--po-light)',
+                                        }}
+                                    >
+                                        <p className="text-yellow-400 font-medium mb-1">
+                                            Mentotrack está calibrado para electrónica de club
+                                        </p>
+                                        <p>
+                                            House, techno, trance y derivados. Con «{customTxt}» el motor
+                                            aplicará igualmente sus reglas, pero varios diagnósticos —estructura
+                                            de club, loudness de pista, compatibilidad mono— dan por supuestas
+                                            convenciones que tu estilo no tiene por qué seguir.
+                                        </p>
+                                        <p className="mt-1.5 text-gray-400">
+                                            Puedes analizarlo igualmente y tratarlo como una segunda opinión
+                                            técnica, pero preferimos decírtelo antes y no después.
+                                        </p>
+                                    </div>
                                 )}
                             </div>
                         );
@@ -867,27 +901,27 @@
     const TUTORIALES_MAP = {
         problema_arreglo: [
             { titulo: 'Cómo Estructurar TECHNO con Fluidez (Studio Session Real)', url: 'https://www.youtube.com/watch?v=xYnblZrPjq4', descripcion: 'Sesión real donde se construye un track techno con estructura completa: intro, build, drop, break y outro.' },
-            { titulo: '4 técnicas de transiciones para sonar más profesional', url: 'https://www.youtube.com/watch?v=zQeNv4t6nb4', descripcion: 'Cómo conectar secciones con transiciones que den cohesión y movimiento al arreglo.' },
+            { titulo: '4 técnicas de transiciones para sonar más profesional (sin librerías)', url: 'https://www.youtube.com/watch?v=zQeNv4t6nb4', descripcion: 'Cómo conectar secciones con transiciones que den cohesión y movimiento al arreglo.' },
         ],
         poco_contraste: [
-            { titulo: '7 Técnicas para Crear TENSIÓN en tus SUBIDONES', url: 'https://www.youtube.com/watch?v=Hb7JJwWTL0c', descripcion: 'Técnicas de build-up y tensión para crear contrastes de energía entre secciones.' },
-            { titulo: 'Técnica del DROP RETARDADO (para Hacer SUBIDONES Más Interesantes)', url: 'https://www.youtube.com/watch?v=jK_aYGg41ek', descripcion: 'Cómo jugar con las expectativas del oyente para crear impacto real en los drops.' },
+            { titulo: '7 Técnicas para Crear TENSIÓN en tus SUBIDONES como los PROS', url: 'https://www.youtube.com/watch?v=DYVl5EWTEjs', descripcion: 'Técnicas de build-up y tensión para crear contrastes de energía entre secciones.' },
+            { titulo: 'Técnica del DROP RETARDADO (para Hacer SUBIDONES Más Interesantes)', url: 'https://www.youtube.com/watch?v=wevfW0I5W8U', descripcion: 'Cómo jugar con las expectativas del oyente para crear impacto real en los drops.' },
         ],
         falta_impacto: [
             { titulo: '6 Técnicas para MEZCLAR Kicks y Sonar POTENTE', url: 'https://www.youtube.com/watch?v=F1cY4JXW6DU', descripcion: 'Layering, procesado y técnicas para que tus kicks peguen fuerte en la mezcla.' },
             { titulo: 'Haz Esto para que tus BREAKS suenen LLENOS', url: 'https://www.youtube.com/watch?v=HZRHXJ2iILU', descripcion: 'Cómo mantener interés y energía en los breaks sin que suenen vacíos.' },
         ],
         mezcla_prematura: [
-            { titulo: 'DEBES saber esto ANTES de empezar a MEZCLAR', url: 'https://www.youtube.com/watch?v=jywd2lDSao0', descripcion: 'Audio flow, clipping y conceptos clave que debes dominar antes de tocar un EQ.' },
-            { titulo: '¿Y si la mezcla no es tan difícil como te han hecho creer?', url: 'https://www.youtube.com/watch?v=bIBuLhMfbCQ', descripcion: 'Perspectiva práctica sobre mezcla: cuándo hacerla y cómo no complicarte la vida.' },
+            { titulo: 'DEBES saber esto ANTES de empezar a MEZCLAR | Audio Flow y Clipping', url: 'https://www.youtube.com/watch?v=jywd2lDSao0', descripcion: 'Audio flow, clipping y conceptos clave que debes dominar antes de tocar un EQ.' },
+            { titulo: '¿Y si la mezcla no es tan difícil como te han hecho creer?', url: 'https://www.youtube.com/watch?v=yopdfkiuwvM', descripcion: 'Perspectiva práctica sobre mezcla: cuándo hacerla y cómo no complicarte la vida.' },
         ],
         exceso_lowend: [
-            { titulo: 'Por qué tus bajos suenan flacos? | Errores típicos', url: 'https://www.youtube.com/watch?v=h5B2x9LGHLE', descripcion: 'Errores comunes en el low end y cómo conseguir graves limpios y potentes.' },
-            { titulo: '¿Por qué tu KICK y BASS no suenan bien? | Técnica', url: 'https://www.youtube.com/watch?v=nRBfN7Enxs8', descripcion: 'Cómo hacer que kick y bass convivan sin competir por el mismo espacio.' },
+            { titulo: 'Por qué tus bajos suenan flacos? | Errores típicos', url: 'https://www.youtube.com/watch?v=YQmkWukJyrM', descripcion: 'Errores comunes en el low end y cómo conseguir graves limpios y potentes.' },
+            { titulo: '¿Por qué tu KICK y BASS no suenan bien? | Técnica de MEZCLA (súper fácil)', url: 'https://www.youtube.com/watch?v=tGeTblz-kNE', descripcion: 'Cómo hacer que kick y bass convivan sin competir por el mismo espacio.' },
         ],
         exceso_densidad: [
-            { titulo: '¿Cuantas Pistas debe tener Tu Canción?', url: 'https://www.youtube.com/watch?v=uK2ek1Z28PA', descripcion: 'Cuántos elementos son suficientes y cuándo estás saturando la mezcla.' },
-            { titulo: '6 Pasos para BALANCEAR tus MEZCLAS siempre BIEN', url: 'https://www.youtube.com/watch?v=B9JYjCBXRCg', descripcion: 'Método paso a paso para conseguir una mezcla equilibrada sin saturar el espectro.' },
+            { titulo: '¿Cuantas Pistas debe tener Tu Canción? | Producción Música Electrónica', url: 'https://www.youtube.com/watch?v=nsthUOqeCY8', descripcion: 'Cuántos elementos son suficientes y cuándo estás saturando la mezcla.' },
+            { titulo: '6 Pasos para BALANCEAR tus MEZCLAS siempre BIEN (Muy fácil)', url: 'https://www.youtube.com/watch?v=wHQbuJYFABU', descripcion: 'Método paso a paso para conseguir una mezcla equilibrada sin saturar el espectro.' },
         ],
         track_verde: [
             { titulo: 'Cómo PRODUCIR Música con ABLETON LIVE | 10 Primeros Pasos', url: 'https://www.youtube.com/watch?v=N-vrz5xlyYU', descripcion: 'Guía completa para empezar a producir desde cero con Ableton Live.' },
@@ -895,19 +929,19 @@
         ],
         carencia_espectral: [
             { titulo: 'Por qué tus MEZCLAS suenan Flacas | 5 puntos a revisar', url: 'https://www.youtube.com/watch?v=3P1BJZKpuxE', descripcion: 'Identifica qué le falta a tu mezcla y cómo rellenar huecos en el espectro.' },
-            { titulo: 'Cómo crear ATMÓSFERAS Fácil y Rápido | Ableton Rack', url: 'https://www.youtube.com/watch?v=D5sRcKk2ZWA', descripcion: 'Añade texturas y capas atmosféricas que llenen el espectro sin saturar.' },
+            { titulo: 'Cómo crear ATMÓSFERAS Fácil y Rápido | Ableton Rack GRATIS 🎁', url: 'https://www.youtube.com/watch?v=a1V_Hl3Otgc', descripcion: 'Añade texturas y capas atmosféricas que llenen el espectro sin saturar.' },
         ],
         conflicto_armonico: [
-            { titulo: 'Cual es la Mejor TONALIDAD para tu BASSLINE según la IA', url: 'https://www.youtube.com/watch?v=4CuCYb_4vXk', descripcion: 'Entiende cómo elegir tonalidades que funcionen para tus líneas de bajo y melodías.' },
-            { titulo: 'Cómo DAFT PUNK me enseñó a Crear Progresiones de Acordes', url: 'https://www.youtube.com/watch?v=4AEq0I5h7dk', descripcion: 'Aprende a crear progresiones armónicas que funcionan en música electrónica.' },
+            { titulo: 'Cual es la Mejor TONALIDAD para tu BASSLINE según la IA', url: 'https://www.youtube.com/watch?v=7C6mRpBpan0', descripcion: 'Entiende cómo elegir tonalidades que funcionen para tus líneas de bajo y melodías.' },
+            { titulo: 'Cómo DAFT PUNK me enseñó a Crear Progresiones de Acordes', url: 'https://www.youtube.com/watch?v=Nq9ldN66YEw', descripcion: 'Aprende a crear progresiones armónicas que funcionan en música electrónica.' },
         ],
         pobreza_armonica: [
-            { titulo: 'Cómo Hacer MELODÍAS que FUNCIONAN (súper fácil)', url: 'https://www.youtube.com/watch?v=LYOGQplQi-Q', descripcion: 'Técnicas simples para crear melodías efectivas aunque no sepas teoría musical.' },
-            { titulo: 'LA FÓRMULA para Crear MELODÍAS Pegadizas', url: 'https://www.youtube.com/watch?v=rPf3z-GTVD4', descripcion: 'Método paso a paso para escribir melodías que se quedan en la cabeza.' },
+            { titulo: 'Cómo Hacer MELODÍAS que FUNCIONAN (súper fácil)', url: 'https://www.youtube.com/watch?v=hov7jnTUEVY', descripcion: 'Técnicas simples para crear melodías efectivas aunque no sepas teoría musical.' },
+            { titulo: 'LA FÓRMULA para Crear MELODÍAS Pegadizas (funciona)', url: 'https://www.youtube.com/watch?v=iBtjAsWa4A8', descripcion: 'Método paso a paso para escribir melodías que se quedan en la cabeza.' },
         ],
         harshness_mezcla: [
-            { titulo: '5 ERRORES de Ecualización que debes EVITAR', url: 'https://www.youtube.com/watch?v=xaJ1KkuBxIw', descripcion: 'Errores de EQ que causan dureza y fatiga auditiva en tus mezclas.' },
-            { titulo: 'Cambios simples que mejorarán tus mezclas ahora', url: 'https://www.youtube.com/watch?v=bIBuLhMfbCQ', descripcion: 'Ajustes rápidos para suavizar mezclas agresivas sin perder definición.' },
+            { titulo: '5 ERRORES de Ecualización que debes EVITAR', url: 'https://www.youtube.com/watch?v=Z4-83bMxzs8', descripcion: 'Errores de EQ que causan dureza y fatiga auditiva en tus mezclas.' },
+            { titulo: 'Cambios simples que mejorarán tus mezclas ahora', url: 'https://www.youtube.com/watch?v=3LrLsiAb-Uc', descripcion: 'Ajustes rápidos para suavizar mezclas agresivas sin perder definición.' },
         ],
         sin_diagnostico: [
             { titulo: '¿Estás preparado para lanzar música? (cómo saberlo)', url: 'https://www.youtube.com/watch?v=tVxW8nBeS_Q', descripcion: 'Evalúa si tu producción está lista para enviar a sellos o publicar.' },
@@ -1075,6 +1109,48 @@
     // que NO se muestra el CTA de Relesit (nunca dos tarjetas). El texto se
     // adapta a la categoría dominante del diagnóstico.
     // =====================================================================
+    // Espejo de engine/contextualizador.py. Se comprueba en
+    // backend/tests/test_genero_no_electronico.py que las dos listas coincidan.
+    const GENEROS_ELECTRONICOS = [
+        "tech", "techno", "house", "trance", "minimal", "ambient", "drum",
+        "dnb", "d&b", "garage", "dubstep", "electro", "edm", "dance",
+        "downtempo", "breakbeat", "breaks", "psy", "hardstyle", "hardcore",
+        "dub techno", "deep", "future", "club", "rave",
+    ];
+    const GENEROS_NO_ELECTRONICOS = [
+        "vallenato", "salsa", "bachata", "merengue", "cumbia", "mariachi",
+        "ranchera", "banda", "mambo", "rumba", "tango", "samba", "bossa",
+        "reggaeton", "reggaetón", "dembow", "perreo",
+        "pop ", " pop", "indie pop", "k-pop", "kpop",
+        "rock", "metal", "punk", "grunge", "hardcore punk",
+        "rap", "hip hop", "hip-hop", "trap latino", "drill",
+        "jazz", "blues", "soul", "gospel", "r&b", "rnb",
+        "country", "folk", "bluegrass",
+        "reggae", "ska",
+        "classical", "clásica", "clasica", "sinfónic", "sinfonic",
+        "opera", "ópera", "flamenco", "fandango",
+        "vals", "paso doble", "polka", "celta", "afrobeat", "afrobeats",
+    ];
+
+    /** ¿El género escrito a mano queda fuera del alcance del motor?
+     *
+     * Misma regla que el backend: si el texto contiene alguna palabra
+     * claramente electrónica NO se avisa, aunque también contenga una de la
+     * otra lista. Evita marcar "rock electrónico" o "indie dance pop". */
+    function esGeneroNoElectronico(texto) {
+        // Sin quitar las tildes, "electro" no casa con "electrónico" y
+        // "rock electrónico" saldría marcado — el falso positivo que la lista
+        // blanca dice evitar. Mismo criterio que _sin_tildes() en el backend.
+        const t = (texto || '').toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        if (t.length < 2) return false;
+        // Se normalizan también las palabras de la lista, para que dé igual
+        // cómo estén escritas ahí.
+        const n = k => k.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        if (GENEROS_ELECTRONICOS.some(k => t.includes(n(k)))) return false;
+        return GENEROS_NO_ELECTRONICOS.some(k => t.includes(n(k)));
+    }
+
     const MASTER_CTA_VARIANTES = {
         mezcla: 'Lo que el análisis ha detectado en tu track se trabaja a fondo en el bloque de Mezcla del Máster: 7 cursos y 106 clases.',
         mastering: 'Lo que el análisis ha detectado en tu track se trabaja en el bloque de Mastering del Máster: sonido final listo para club, sello y plataformas.',
@@ -3041,6 +3117,8 @@
                 .catch(() => {
                     // Fallback con opciones hardcoded si la API no está disponible
                     setOpciones({
+                        // Ver la nota del campo de género: espejo de las listas
+                        // de engine/contextualizador.py.
                         generos: [
                             {value: "tech_house", label: "Tech House"},
                             {value: "house", label: "House"},

@@ -87,6 +87,67 @@ class TestTruePeakOver(unittest.TestCase):
         self.assertIn("sample peak", clasificar("wav24_pico_menos1")["aviso_picos"])
 
 
+class TestEnElLimite(unittest.TestCase):
+    """B2 (v3). Entre 0 y +0,3 dBTP: por encima, pero no lo bastante para
+    afirmarlo.
+
+    La frontera de 0,0 era más fina de lo que la medida resuelve. Con material
+    muy saturado el margen es de unas tres décimas: soxr se queda 0,39 dB corto
+    frente al pico real y Youlean se desvía 0,16 en sentido contrario. Decir
+    "pasas del techo" con +0,1 era convertir el ruido de la medida en una
+    afirmación.
+    """
+
+    FMT = {"archivo_sample_format": "int", "archivo_pcm_bit_depth": 24,
+           "archivo_lossy": False}
+
+    def _clasificar(self, tp):
+        return _clasificar_picos(
+            {"true_peak_dbtp": tp, "sample_peak_dbfs": min(tp, -0.3),
+             "sample_peak_source": "archivo_nativo"}, self.FMT)
+
+    def test_la_banda_cubre_de_0_a_03(self):
+        for tp in (0.05, 0.1, 0.2, 0.3):
+            self.assertEqual(self._clasificar(tp)["categoria_picos"],
+                             "true_peak_en_el_limite", f"{tp:+.2f}")
+
+    def test_por_debajo_de_0_sigue_siendo_margen_de_streaming(self):
+        for tp in (-0.05, 0.0):
+            self.assertEqual(self._clasificar(tp)["categoria_picos"],
+                             "margen_streaming", f"{tp:+.2f}")
+
+    def test_por_encima_de_03_si_se_afirma(self):
+        for tp in (0.4, 1.0, 3.0):
+            self.assertEqual(self._clasificar(tp)["categoria_picos"],
+                             "true_peak_over", f"{tp:+.2f}")
+
+    def test_no_es_una_alarma(self):
+        """El objetivo del cambio: dejar de asustar con una décima."""
+        c = self._clasificar(0.1)
+        self.assertEqual(c["severidad_picos"], "info")
+
+    def test_el_texto_explica_por_que_no_se_afirma(self):
+        aviso = self._clasificar(0.1)["aviso_picos"]
+        self.assertIn("margen", aviso)
+        self.assertIn("limitador", aviso)
+        # Y da salida accionable sin obligar a nada
+        self.assertIn("-1 dBTP", aviso)
+        self.assertIn("club", aviso)
+
+    def test_no_afirma_que_se_pase(self):
+        aviso = self._clasificar(0.1)["aviso_picos"].lower()
+        for frase in ("te pasas del techo", "estás por encima del techo",
+                      "clipea", "clipping"):
+            self.assertNotIn(frase, aviso, frase)
+
+    def test_la_categoria_concuerda_con_el_numero_que_se_enseña(self):
+        """Se clasifica sobre el valor redondeado, así que un +0,31 se muestra
+        como +0,3 y tiene que caer en la banda, no fuera."""
+        c = self._clasificar(0.31)
+        self.assertEqual(c["categoria_picos"], "true_peak_en_el_limite")
+        self.assertEqual(c["true_peak_classification_value"], 0.3)
+
+
 class TestMargenStreaming(unittest.TestCase):
     """C. Entre -1 y 0: recomendación de margen, no error."""
 
@@ -196,7 +257,11 @@ class TestCompatibilidad(unittest.TestCase):
     def test_las_fronteras_numericas_no_se_mueven(self):
         """La única reclasificación permitida en 2A es la del float. En todo
         lo demás, categoría nueva y nivel antiguo tienen que corresponderse."""
+        # v3 parte el antiguo "clipping" en dos categorías nuevas: las dos
+        # siguen correspondiendo al mismo `nivel_true_peak` de siempre, que es
+        # lo que hace comparables los análisis viejos con los nuevos.
         equivalencia = {"ok": "ok", "margen_streaming": "streaming",
+                        "true_peak_en_el_limite": "clipping",
                         "true_peak_over": "clipping"}
         for nombre in _MANIFIESTO:
             if nombre in ("wav24_silencio",) or nombre.startswith("dc_"):
