@@ -50,10 +50,13 @@ prototipo.html?tab=master&caso=caliente
   sin mover los puntos de ruptura).
 * **La tipografía.** Se usa la pila del sistema en vez de Arimo y Space
   Grotesk, para que el archivo no dependa de Google Fonts y abra sin red.
-* **El comportamiento real de los bloques que rodean al diagnóstico.** Están
-  colocados y con su texto real, pero no llaman a nada: el botón del Máster no
-  navega, el feedback no envía y compartir no sube nada. Lo que se juzga aquí
-  es dónde van y cuánto sitio ocupan.
+* **El comportamiento de la barra de acciones.** «Compartir», «Descargar» y
+  «Analizar otra versión» no hacen nada: en la prueba no hay informe ni
+  sesión. Llevan un `title` que lo dice, para que nadie los persiga.
+
+  Lo que **sí** funciona: el botón del Máster navega a la URL real con sus
+  parámetros UTM, los tutoriales abren su vídeo y el feedback responde (aunque
+  no envía a ningún sitio).
 
 ---
 
