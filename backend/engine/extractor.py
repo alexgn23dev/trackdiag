@@ -1024,8 +1024,8 @@ def _clasificar_recorte(medicion: dict, formato: dict) -> dict:
                 "Ese patrón es exactamente lo que deja un clipper recortando los "
                 "picos de la batería, que es una técnica normal y muy usada en "
                 "electrónica: rebaja los transitorios para poder subir el nivel medio "
-                "sin que el limitador bombee. **Si lo has puesto tú, esto es lo "
-                "esperado y no hay nada que corregir.** "
+                "sin que el limitador bombee. Si lo has puesto tú, esto es lo "
+                "esperado y no hay nada que corregir. "
                 "Lo decimos solo para que sepas que está ahí y hasta dónde llega."
                 + lossy_nota),
         })
@@ -1046,7 +1046,7 @@ def _clasificar_recorte(medicion: dict, formato: dict) -> dict:
                 "milisegundos significa que material sostenido (un bajo, un pad, una "
                 "nota larga) se ha quedado sin sitio. "
                 "Lo que oyes de eso es distorsión armónica añadida, y a diferencia de "
-                "un pico alto **no se arregla después**: la información que había en "
+                "un pico alto esto no se arregla después: la información que había en "
                 "esa parte de la onda ya no está en el archivo. "
                 "Qué hacer: baja el gain de entrada del máster unos dB y vuelve a "
                 "exportar desde el proyecto. Si el recorte viene de la mezcla y no del "
