@@ -273,7 +273,7 @@
     // /api/health. Si no coincide, este fichero viene de la caché del
     // navegador y puede estar dejando de enviar campos que el backend ya
     // espera — se recarga una sola vez y, si aun así no cuadra, se avisa.
-    const APP_VERSION = '0.5.83';
+    const APP_VERSION = '0.5.84';
 
     function comprobarVersionFrontend(onDesfase, onEntorno) {
         fetch(`${API_URL}/api/health`, { cache: 'no-store' })
@@ -1847,20 +1847,23 @@
         // Rango fijo por vista: el oído deja de distinguir matices mucho antes
         // de los 40 dB, y un rango fijo hace comparables dos análisis.
         const RANGO = pond ? 24 : 42;
+        const PASO = pond ? 6 : 10;          // separación de las líneas de nivel
         const suelo = techo - RANGO;
+
         const lg = f => Math.log10(f);
         const total = lg(20000) - lg(20);
         const x = f => ((lg(f) - lg(20)) / total) * 100;
-        const H = 100, W = 100;
-        const y = v => H - Math.max(0, Math.min(1, (v - suelo) / RANGO)) * H;
+
+        // Aire arriba: sin él la curva tocaba el borde y la caja parecía
+        // pequeña y apretada. El pico se queda al 14 % del alto.
+        const H = 100, AIRE = 14, SUELO_PX = 4;
+        const util = H - AIRE - SUELO_PX;
+        const y = v => AIRE + (1 - Math.max(0, Math.min(1, (v - suelo) / RANGO))) * util;
 
         const pts = V2_BANDAS.map(b => {
             const c = Math.sqrt(Math.max(b.f0, 20) * b.f1);   // centro geométrico
             return [x(c), y(datos[b.k] == null ? suelo : datos[b.k])];
         });
-        // Curva suave (Catmull-Rom → Bézier). Con segmentos rectos entre seis
-        // puntos el resultado parecía un gráfico de barras torcido; una curva
-        // se lee como lo que es, un analizador.
         const suave = (p) => {
             if (p.length < 2) return '';
             let d = `M ${p[0][0]},${p[0][1]}`;
@@ -1875,11 +1878,16 @@
         };
         const curva = suave(pts);
         const relleno = `${curva} L ${pts[pts.length - 1][0]},${H} L ${pts[0][0]},${H} Z`;
+
+        // Escalones de nivel, en dB por debajo del pico. Antes solo se veía el
+        // rango total y no había forma de estimar cuánto separa una zona de otra.
+        const escalones = [];
+        for (let dB = 0; dB <= RANGO; dB += PASO) escalones.push(dB);
+
         const ticks = [50, 200, 1000, 5000, 15000];
-        // La unidad solo en la primera marca: repetirla en las cinco satura,
-        // y ponerla suelta al borde se pisaba con la última.
         const etiquetaHz = (f, i) => (f >= 1000 ? `${f / 1000}k` : `${f}${i === 0 ? ' Hz' : ''}`);
         const gid = pond ? 'v2espPond' : 'v2espRaw';
+        const CANAL = 38;   // px reservados para las etiquetas de nivel
 
         return (
             <div>
@@ -1887,9 +1895,6 @@
                     <span className="rotulo-v2">
                         {pond ? 'Compensado al oído' : 'Nivel físico'}
                     </span>
-                    {/* Conmutador de dos posiciones: se ve de un vistazo cuál
-                        está activa, en vez de un botón que dice lo contrario
-                        de lo que estás viendo. */}
                     <div className="flex rounded-md overflow-hidden border border-[#333]">
                         {[[true, 'Oído'], [false, 'Físico']].map(([v, et]) => (
                             <button key={et} onClick={() => setPond(v)}
@@ -1907,40 +1912,62 @@
                 </div>
 
                 <div className="relative rounded-lg border border-[#2f2f2f] overflow-hidden"
-                     style={{ background: 'linear-gradient(180deg,#1e1e1e,#171717)' }}>
-                    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
-                         style={{ width: '100%', height: 104, display: 'block' }}>
-                        <defs>
-                            <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor="#6D10FF" stopOpacity="0.45" />
-                                <stop offset="100%" stopColor="#6D10FF" stopOpacity="0.03" />
-                            </linearGradient>
-                        </defs>
-                        {/* Rejilla: líneas cada 6 dB, la referencia de siempre */}
-                        {[0.25, 0.5, 0.75].map(g => (
-                            <line key={g} x1="0" x2={W} y1={H * g} y2={H * g}
-                                  stroke="#2b2b2b" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+                     style={{ background: 'linear-gradient(180deg,#1e1e1e,#171717)', height: 140 }}>
+                    {/* Las etiquetas de nivel van en HTML, no dentro del SVG:
+                        el SVG se estira con preserveAspectRatio="none" y el
+                        texto saldría deformado. */}
+                    <div className="absolute left-0 top-0 bottom-0"
+                         style={{ width: CANAL, borderRight: '1px solid #262626' }}>
+                        {escalones.map(dB => (
+                            <span key={dB} className="absolute cifra-v2"
+                                  style={{
+                                      right: 5, top: `${AIRE + (dB / RANGO) * util}%`,
+                                      transform: 'translateY(-50%)',
+                                      fontSize: '9px', color: dB === 0 ? '#8a8a8a' : '#5a5a5a',
+                                  }}>
+                                {dB === 0 ? '0' : `−${dB}`}
+                            </span>
                         ))}
-                        {ticks.map(f => (
-                            <line key={f} x1={x(f)} x2={x(f)} y1="0" y2={H}
-                                  stroke="#242424" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-                        ))}
-                        <path d={relleno} fill={`url(#${gid})`} />
-                        <path d={curva} fill="none" stroke="#25F464" strokeWidth="2"
-                              vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
-                        {marcas && marcas.filter(m => m && m.f > 20).map((m, k) => (
-                            <line key={k} x1={x(m.f)} x2={x(m.f)} y1="0" y2={H}
-                                  stroke={m.color || V2_COLOR.aviso} strokeWidth="1.5"
-                                  vectorEffect="non-scaling-stroke" strokeDasharray="4 3" />
-                        ))}
-                    </svg>
-                    <div className="absolute left-2 top-1.5 cifra-v2"
-                         style={{ fontSize: '9px', color: '#5a5a5a' }}>
-                        {RANGO} dB
                     </div>
+
+                    <div className="absolute top-0 bottom-0" style={{ left: CANAL, right: 0 }}>
+                        <svg viewBox={`0 0 100 ${H}`} preserveAspectRatio="none"
+                             style={{ width: '100%', height: '100%', display: 'block' }}>
+                            <defs>
+                                <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor="#6D10FF" stopOpacity="0.45" />
+                                    <stop offset="100%" stopColor="#6D10FF" stopOpacity="0.03" />
+                                </linearGradient>
+                            </defs>
+                            {escalones.map(dB => (
+                                <line key={dB} x1="0" x2="100"
+                                      y1={AIRE + (dB / RANGO) * util} y2={AIRE + (dB / RANGO) * util}
+                                      stroke={dB === 0 ? '#3a3a3a' : '#272727'} strokeWidth="1"
+                                      vectorEffect="non-scaling-stroke"
+                                      strokeDasharray={dB === 0 ? '' : '3 4'} />
+                            ))}
+                            {ticks.map(f => (
+                                <line key={f} x1={x(f)} x2={x(f)} y1="0" y2={H}
+                                      stroke="#242424" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+                            ))}
+                            <path d={relleno} fill={`url(#${gid})`} />
+                            <path d={curva} fill="none" stroke="#25F464" strokeWidth="2"
+                                  vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
+                            {marcas && marcas.filter(m => m && m.f > 20).map((m, k) => (
+                                <line key={k} x1={x(m.f)} x2={x(m.f)} y1="0" y2={H}
+                                      stroke={m.color || V2_COLOR.aviso} strokeWidth="1.5"
+                                      vectorEffect="non-scaling-stroke" strokeDasharray="4 3" />
+                            ))}
+                        </svg>
+                    </div>
+
+                    <span className="absolute cifra-v2"
+                          style={{ left: CANAL + 6, top: 5, fontSize: '9px', color: '#5a5a5a' }}>
+                        dB bajo el pico
+                    </span>
                 </div>
 
-                <div className="relative h-3.5 mt-1">
+                <div className="relative h-3.5 mt-1" style={{ marginLeft: CANAL }}>
                     {ticks.map((f, i) => (
                         <span key={f} className="absolute cifra-v2"
                               style={{ left: `${x(f)}%`,
@@ -1949,7 +1976,6 @@
                             {etiquetaHz(f, i)}
                         </span>
                     ))}
-
                 </div>
 
                 {marcas && marcas.filter(m => m && m.f > 20).map((m, k) => (
