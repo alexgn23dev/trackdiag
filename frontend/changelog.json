@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "version": "0.5.83",
+      "date": "2026-08-11",
+      "title": "Barra de navegación y espectro afinado",
+      "changes": [
+        "La vista nueva estrena barra de navegación arriba: nuevo análisis, tus proyectos, ideas y tu perfil. El botón flotante de Mi panel se encimaba al contenido cuando la ventana era estrecha; ya no está.",
+        "El gráfico del espectro se ha rehecho: curva suave, rejilla de referencia y un conmutador claro entre la vista compensada al oído y la del nivel físico.",
+        "Y los textos del informe bajan un escalón de tamaño, para que peguen con el resto de la web."
+      ]
+    },
+    {
       "version": "0.5.82",
       "date": "2026-08-11",
       "title": "El espectro, medido en el drop y compensado al oído",

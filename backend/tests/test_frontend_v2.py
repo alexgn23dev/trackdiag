@@ -122,6 +122,19 @@ class TestNoDuplicaLoQueYaFunciona(unittest.TestCase):
         self.assertGreater(i, 0, "no se pinta la tarjeta de Relesit")
         self.assertLess(i, j, "Relesit tiene que ir ANTES de las pestañas")
 
+    def test_hay_barra_de_navegacion_propia(self):
+        """El botón flotante "Mi panel" se encimaba al contenido en cuanto la
+        ventana se estrechaba. La v2 lleva barra propia y el flotante se oculta."""
+        self.assertIn("function V2Nav(", self.html)
+        self.assertIn("<V2Nav", self.v2)
+        self.assertIn("!(screen === 'diagnostico' && usarVistaV2())", self.html)
+
+    def test_la_barra_lleva_las_cuatro_acciones(self):
+        i = self.html.find("function V2Nav(")
+        cuerpo = self.html[i:i + 2500]
+        for accion in ("Mis proyectos", "Ideas", "Nuevo análisis"):
+            self.assertIn(accion, cuerpo, accion)
+
     def test_el_cierre_es_el_mismo_que_la_clasica(self):
         """Para que el footer global del sitio quede igual en las dos."""
         self.assertIn("Mentotrack no almacena el archivo de tu canción", self.v2)

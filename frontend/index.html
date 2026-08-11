@@ -171,6 +171,52 @@
         .tab-v2.on { border-bottom-color: var(--po-white); color: #fff; }
         .barra-v2 { background: #1c1c1c; border: 1px solid var(--po-border); border-radius: 3px; overflow: hidden; }
         .v2-wrap { overflow-x: hidden; max-width: 100%; }
+
+        /* --- Barra de navegación de la v2 ---------------------------------
+           Sustituye al botón flotante "Mi panel", que se encimaba al contenido
+           en cuanto la ventana se estrechaba. Al ser sticky y ocupar su propio
+           alto, nada puede quedar debajo. */
+        .v2-nav {
+            position: sticky; top: 0; z-index: 45;
+            background: rgba(20, 20, 20, 0.92);
+            backdrop-filter: saturate(140%) blur(10px);
+            -webkit-backdrop-filter: saturate(140%) blur(10px);
+            border-bottom: 1px solid #2a2a2a;
+        }
+        .v2-nav-inner {
+            max-width: 80rem; margin: 0 auto;
+            padding: 0.6rem 1.25rem;
+            display: flex; align-items: center; gap: 1rem;
+        }
+        .v2-nav a, .v2-nav button.v2-nav-link {
+            color: #9a9a9a; font-size: 12.5px; text-decoration: none;
+            padding: 0.35rem 0.6rem; border-radius: 6px;
+            transition: color .15s, background .15s; white-space: nowrap;
+            background: transparent; border: 0; cursor: pointer;
+        }
+        .v2-nav a:hover, .v2-nav button.v2-nav-link:hover { color: #fff; background: #232323; }
+        .v2-nav .v2-nav-cta {
+            color: #fff; background: var(--po-purple);
+            padding: 0.4rem 0.85rem; border-radius: 7px; font-size: 12.5px;
+            font-weight: 600; border: 0; cursor: pointer; white-space: nowrap;
+            transition: background .15s;
+        }
+        .v2-nav .v2-nav-cta:hover { background: #5a0dd6; }
+        .v2-nav-links { display: flex; align-items: center; gap: 0.15rem; margin-left: auto; }
+        @media (max-width: 720px) {
+            .v2-nav-inner { padding: 0.5rem 0.85rem; gap: 0.5rem; }
+            .v2-nav-links { gap: 0; overflow-x: auto; }
+            .v2-nav a, .v2-nav button.v2-nav-link { padding: 0.3rem 0.45rem; font-size: 12px; }
+        }
+
+        /* --- Escala tipográfica de la v2 ----------------------------------
+           El cuerpo de las tarjetas iba a `text-sm` (14 px), que al lado de los
+           rótulos de 10 px se veía enorme. Se baja un escalón: 13 px para el
+           cuerpo y 11 px para lo secundario, que es la proporción que usa el
+           resto de la web. */
+        .v2-cuerpo { font-size: 13px; line-height: 1.55; }
+        .v2-sec { font-size: 11px; line-height: 1.5; }
+
         /* El widget de calibración se reutiliza tal cual dentro de una tarjeta
            estrecha. Sus botones usan `sm:flex-row`, que depende del ANCHO DE
            VENTANA y no del de la tarjeta: en escritorio se ponían en fila
@@ -227,7 +273,7 @@
     // /api/health. Si no coincide, este fichero viene de la caché del
     // navegador y puede estar dejando de enviar campos que el backend ya
     // espera — se recarga una sola vez y, si aun así no cuadra, se avisa.
-    const APP_VERSION = '0.5.82';
+    const APP_VERSION = '0.5.83';
 
     function comprobarVersionFrontend(onDesfase, onEntorno) {
         fetch(`${API_URL}/api/health`, { cache: 'no-store' })
@@ -1632,8 +1678,8 @@
             c => c && (typeof c !== 'object' || c.props === undefined || c.props.children));
         return (
             <div>
-                {avance && <p className="text-gray-300 text-sm leading-relaxed">{avance}</p>}
-                {abierto && <div className="mt-2.5 text-gray-400 text-sm leading-relaxed space-y-2 fade-in">{children}</div>}
+                {avance && <p className="text-gray-300 v2-cuerpo">{avance}</p>}
+                {abierto && <div className="mt-2.5 text-gray-400 v2-cuerpo space-y-2 fade-in">{children}</div>}
                 {hayResto && (
                     <button onClick={() => setAbierto(!abierto)}
                             className="mt-2 text-xs text-gray-500 hover:text-white transition">
@@ -1722,7 +1768,7 @@
                         {Math.round(p)}%
                     </text>
                 </svg>
-                <span className="text-xs text-gray-400 leading-snug">{etiqueta}</span>
+                <span className="v2-sec text-gray-400">{etiqueta}</span>
             </div>
         );
     }
@@ -1798,76 +1844,119 @@
         const vals = V2_BANDAS.map(b => datos[b.k]).filter(v => typeof v === 'number');
         if (!vals.length) return null;
         const techo = Math.max(...vals);
-        // Suelo fijo por vista: el oído deja de distinguir matices mucho antes
+        // Rango fijo por vista: el oído deja de distinguir matices mucho antes
         // de los 40 dB, y un rango fijo hace comparables dos análisis.
         const RANGO = pond ? 24 : 42;
         const suelo = techo - RANGO;
         const lg = f => Math.log10(f);
         const total = lg(20000) - lg(20);
         const x = f => ((lg(f) - lg(20)) / total) * 100;
-        const H = 90;
-        const y = v => {
-            const t = Math.max(0, Math.min(1, (v - suelo) / RANGO));
-            return H - t * H;
-        };
-        // Una polilínea por los centros de banda: lectura de analizador, sin
-        // los escalones que hacían parecer un muro el grave.
+        const H = 100, W = 100;
+        const y = v => H - Math.max(0, Math.min(1, (v - suelo) / RANGO)) * H;
+
         const pts = V2_BANDAS.map(b => {
             const c = Math.sqrt(Math.max(b.f0, 20) * b.f1);   // centro geométrico
             return [x(c), y(datos[b.k] == null ? suelo : datos[b.k])];
         });
-        const linea = pts.map(pt => `${pt[0].toFixed(2)},${pt[1].toFixed(2)}`).join(' ');
-        const area = `0,${H} ` + linea + ` 100,${H}`;
+        // Curva suave (Catmull-Rom → Bézier). Con segmentos rectos entre seis
+        // puntos el resultado parecía un gráfico de barras torcido; una curva
+        // se lee como lo que es, un analizador.
+        const suave = (p) => {
+            if (p.length < 2) return '';
+            let d = `M ${p[0][0]},${p[0][1]}`;
+            for (let i = 0; i < p.length - 1; i++) {
+                const p0 = p[i - 1] || p[i], p1 = p[i], p2 = p[i + 1], p3 = p[i + 2] || p2;
+                const t = 0.5;
+                d += ` C ${p1[0] + (p2[0] - p0[0]) / 6 * t},${p1[1] + (p2[1] - p0[1]) / 6 * t}`
+                   + ` ${p2[0] - (p3[0] - p1[0]) / 6 * t},${p2[1] - (p3[1] - p1[1]) / 6 * t}`
+                   + ` ${p2[0]},${p2[1]}`;
+            }
+            return d;
+        };
+        const curva = suave(pts);
+        const relleno = `${curva} L ${pts[pts.length - 1][0]},${H} L ${pts[0][0]},${H} Z`;
         const ticks = [50, 200, 1000, 5000, 15000];
-        const etiquetaHz = f => (f >= 1000 ? `${f / 1000} kHz` : `${f} Hz`);
+        // La unidad solo en la primera marca: repetirla en las cinco satura,
+        // y ponerla suelta al borde se pisaba con la última.
+        const etiquetaHz = (f, i) => (f >= 1000 ? `${f / 1000}k` : `${f}${i === 0 ? ' Hz' : ''}`);
+        const gid = pond ? 'v2espPond' : 'v2espRaw';
 
         return (
             <div>
                 <div className="flex items-center justify-between mb-2 gap-2">
-                    <span className="text-[10px] text-gray-500">
-                        {pond ? 'Como lo oye el oído' : 'Nivel físico'}
+                    <span className="rotulo-v2">
+                        {pond ? 'Compensado al oído' : 'Nivel físico'}
                     </span>
-                    <button onClick={() => setPond(!pond)}
-                            className="text-[10px] text-gray-500 hover:text-white transition border border-[#3a3a3a] rounded px-2 py-0.5">
-                        {pond ? 'Ver sin compensar' : 'Ver compensado'}
-                    </button>
-                </div>
-                <div className="relative rounded border border-[#333] bg-[#1c1c1c] overflow-hidden">
-                    <svg viewBox={`0 0 100 ${H}`} preserveAspectRatio="none"
-                         style={{ width: '100%', height: 92, display: 'block' }}>
-                        {[0.25, 0.5, 0.75].map(g => (
-                            <line key={g} x1="0" x2="100" y1={H * g} y2={H * g}
-                                  stroke="#2e2e2e" strokeWidth="0.4" vectorEffect="non-scaling-stroke" />
+                    {/* Conmutador de dos posiciones: se ve de un vistazo cuál
+                        está activa, en vez de un botón que dice lo contrario
+                        de lo que estás viendo. */}
+                    <div className="flex rounded-md overflow-hidden border border-[#333]">
+                        {[[true, 'Oído'], [false, 'Físico']].map(([v, et]) => (
+                            <button key={et} onClick={() => setPond(v)}
+                                    className="px-2 py-0.5 transition"
+                                    style={{
+                                        fontSize: '10px', letterSpacing: '.06em',
+                                        textTransform: 'uppercase', fontWeight: 700,
+                                        background: pond === v ? '#2f2f2f' : 'transparent',
+                                        color: pond === v ? '#fff' : '#6f6f6f',
+                                    }}>
+                                {et}
+                            </button>
                         ))}
-                        <polygon points={area} fill="rgba(109,16,255,0.16)" />
-                        <polyline points={linea} fill="none" stroke="#BCBCBC" strokeWidth="1.6"
-                                  vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+                    </div>
+                </div>
+
+                <div className="relative rounded-lg border border-[#2f2f2f] overflow-hidden"
+                     style={{ background: 'linear-gradient(180deg,#1e1e1e,#171717)' }}>
+                    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
+                         style={{ width: '100%', height: 104, display: 'block' }}>
+                        <defs>
+                            <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#6D10FF" stopOpacity="0.45" />
+                                <stop offset="100%" stopColor="#6D10FF" stopOpacity="0.03" />
+                            </linearGradient>
+                        </defs>
+                        {/* Rejilla: líneas cada 6 dB, la referencia de siempre */}
+                        {[0.25, 0.5, 0.75].map(g => (
+                            <line key={g} x1="0" x2={W} y1={H * g} y2={H * g}
+                                  stroke="#2b2b2b" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+                        ))}
+                        {ticks.map(f => (
+                            <line key={f} x1={x(f)} x2={x(f)} y1="0" y2={H}
+                                  stroke="#242424" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+                        ))}
+                        <path d={relleno} fill={`url(#${gid})`} />
+                        <path d={curva} fill="none" stroke="#25F464" strokeWidth="2"
+                              vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
                         {marcas && marcas.filter(m => m && m.f > 20).map((m, k) => (
                             <line key={k} x1={x(m.f)} x2={x(m.f)} y1="0" y2={H}
                                   stroke={m.color || V2_COLOR.aviso} strokeWidth="1.5"
-                                  vectorEffect="non-scaling-stroke" strokeDasharray="3 3" />
-                        ))}
-                        {pts.map((pt, k) => (
-                            <circle key={k} cx={pt[0]} cy={pt[1]} r="1.6" fill="#fff"
-                                    vectorEffect="non-scaling-stroke">
-                                <title>{`${V2_BANDAS[k].et} · ${datos[V2_BANDAS[k].k]} dB`}</title>
-                            </circle>
+                                  vectorEffect="non-scaling-stroke" strokeDasharray="4 3" />
                         ))}
                     </svg>
+                    <div className="absolute left-2 top-1.5 cifra-v2"
+                         style={{ fontSize: '9px', color: '#5a5a5a' }}>
+                        {RANGO} dB
+                    </div>
                 </div>
-                <div className="relative h-4 mt-0.5">
-                    {ticks.map(f => (
-                        <span key={f} className="absolute text-[9px] text-gray-600 cifra-v2"
-                              style={{ left: `${x(f)}%`, transform: 'translateX(-50%)' }}>
-                            {etiquetaHz(f)}
+
+                <div className="relative h-3.5 mt-1">
+                    {ticks.map((f, i) => (
+                        <span key={f} className="absolute cifra-v2"
+                              style={{ left: `${x(f)}%`,
+                                       transform: i === ticks.length - 1 ? 'translateX(-100%)' : 'translateX(-50%)',
+                                       fontSize: '9px', color: '#6a6a6a' }}>
+                            {etiquetaHz(f, i)}
                         </span>
                     ))}
+
                 </div>
+
                 {marcas && marcas.filter(m => m && m.f > 20).map((m, k) => (
-                    <p key={k} className="text-[11px] text-gray-500 mt-1">{m.texto}</p>
+                    <p key={k} className="v2-sec text-gray-500 mt-1.5">{m.texto}</p>
                 ))}
                 {ventana && !ventana.track_completo && (
-                    <p className="text-[10px] text-gray-600 mt-1.5">
+                    <p className="v2-sec text-gray-600 mt-1.5">
                         Medido entre {ventana.inicio_seg}s y {ventana.fin_seg}s, la parte con más
                         energía del track.
                     </p>
@@ -1902,6 +1991,44 @@
         );
     }
 
+    /** Barra de navegación de la v2.
+     *
+     * La vista clásica solo tiene un botón flotante "Mi panel" en una esquina,
+     * que se encima al contenido cuando la ventana se estrecha. Aquí es una
+     * barra de verdad: ocupa su sitio, se queda arriba al hacer scroll y
+     * reúne las cuatro cosas que se pueden hacer desde un informe.
+     */
+    function V2Nav({ onNuevo, onPanel, onPerfil, sesionIniciada }) {
+        return (
+            <div className="v2-nav">
+                <div className="v2-nav-inner">
+                    <a href="/" onClick={e => { e.preventDefault(); onNuevo && onNuevo(); }}
+                       className="mt-logo" style={{ fontSize: '17px', padding: 0 }}>
+                        <span>ment</span>
+                        <span className="mt-knob" aria-hidden="true">
+                            <svg viewBox="0 0 100 100" width="100%" height="100%">
+                                <circle cx="50" cy="50" r="46" fill="none" stroke="#25F464" strokeWidth="8" />
+                                <line x1="50" y1="12" x2="50" y2="42" stroke="#25F464" strokeWidth="10"
+                                      strokeLinecap="round" />
+                            </svg>
+                        </span>
+                        <span>track</span>
+                    </a>
+                    <div className="v2-nav-links">
+                        <button className="v2-nav-link" onClick={onPanel}>Mis proyectos</button>
+                        <a href="/ideas">Ideas</a>
+                        <button className="v2-nav-link" onClick={onPerfil}>
+                            {sesionIniciada ? 'Mi perfil' : 'Entrar'}
+                        </button>
+                        <button className="v2-nav-cta" onClick={onNuevo} style={{ marginLeft: '0.5rem' }}>
+                            Nuevo análisis
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     /** Un paso del plan: número, avance y "cómo se hace". */
     function V2Paso({ n, texto }) {
         const par = v2Partir(texto);
@@ -1913,7 +2040,7 @@
                 <div className="min-w-0">
                     {par[1]
                         ? <V2Desplegable avance={par[0]} etiqueta="Cómo se hace"><p>{par[1]}</p></V2Desplegable>
-                        : <p className="text-gray-300 text-sm leading-relaxed">{par[0]}</p>}
+                        : <p className="text-gray-300 v2-cuerpo">{par[0]}</p>}
                 </div>
             </div>
         );
@@ -1948,7 +2075,7 @@
                             {prioridades.map((pp, i) => <V2Paso key={i} n={i + 1} texto={pp} />)}
                         </div>
                         {r.prioridades.length > 3 && (
-                            <p className="text-gray-600 text-xs mt-4">
+                            <p className="text-gray-600 v2-sec mt-4">
                                 Hay {r.prioridades.length - 3} más en «Plan de acción».
                             </p>
                         )}
@@ -1957,7 +2084,7 @@
 
                 {r.aviso_genero && (
                     <V2Tarjeta titulo="Sobre tu género" tono="aviso">
-                        <p className="text-gray-300 text-sm leading-relaxed">{r.aviso_genero}</p>
+                        <p className="text-gray-300 v2-cuerpo">{r.aviso_genero}</p>
                     </V2Tarjeta>
                 )}
 
@@ -1965,7 +2092,7 @@
                     {r.diagnostico_principal && r.diagnostico_principal.explicacion && (
                         <V2Tarjeta titulo="Por qué lo decimos" tono="aviso">
                             {r.diagnostico_principal.explicacion.split('\n').filter(Boolean).map((l, i) => (
-                                <p key={i} className="text-gray-300 text-sm leading-relaxed">{l}</p>
+                                <p key={i} className="text-gray-300 v2-cuerpo">{l}</p>
                             ))}
                         </V2Tarjeta>
                     )}
@@ -1990,13 +2117,13 @@
                         {r.error_de_foco && (
                             <V2Tarjeta titulo="Ojo con dónde pones el esfuerzo" tono="aviso"
                                        ancho={r.diagnostico_secundario ? 'lg:col-span-2' : 'lg:col-span-3'}>
-                                <p className="text-gray-300 text-sm leading-relaxed">{r.error_de_foco_mensaje}</p>
+                                <p className="text-gray-300 v2-cuerpo">{r.error_de_foco_mensaje}</p>
                             </V2Tarjeta>
                         )}
                         {r.diagnostico_secundario && (
                             <V2Tarjeta titulo="Segundo frente"
                                        ancho={r.error_de_foco ? '' : 'lg:col-span-3'}>
-                                <p className="text-gray-300 text-sm leading-relaxed">{r.diagnostico_secundario.titulo}</p>
+                                <p className="text-gray-300 v2-cuerpo">{r.diagnostico_secundario.titulo}</p>
                             </V2Tarjeta>
                         )}
                     </div>
@@ -2037,7 +2164,7 @@
                         <V2Tarjeta titulo="Estructura: dónde tocar">
                             <ul className="space-y-2">
                                 {r.sugerencias_estructura.map((x, i) => (
-                                    <li key={i} className="text-gray-300 text-sm leading-relaxed flex gap-2">
+                                    <li key={i} className="text-gray-300 v2-cuerpo flex gap-2">
                                         <span className="text-gray-600 flex-none">—</span>{x}
                                     </li>
                                 ))}
@@ -2048,12 +2175,12 @@
                 <div className="space-y-4">
                     {r.no_tocar_aun && r.no_tocar_aun.length > 0 && (
                         <V2Tarjeta titulo="No toques esto todavía" tono="aviso">
-                            <p className="text-gray-600 text-xs mb-3">
+                            <p className="text-gray-600 v2-sec mb-3">
                                 Tan importante como lo que hay que hacer: lo que va a hacerte perder el tiempo ahora.
                             </p>
                             <ul className="space-y-3">
                                 {r.no_tocar_aun.map((x, i) => (
-                                    <li key={i} className="text-gray-300 text-sm leading-relaxed flex gap-2">
+                                    <li key={i} className="text-gray-300 v2-cuerpo flex gap-2">
                                         <span className="text-gray-600 flex-none">×</span>{x}
                                     </li>
                                 ))}
@@ -2100,7 +2227,7 @@
                     {Object.keys(disp).length > 0
                         ? <V2Espectro2 display={disp} displayPond={dispP} ventana={vent} />
                         : <V2Espectro grave={sg.db_grave} media={sg.db_media} aguda={sg.db_aguda} />}
-                    <p className="text-gray-400 text-xs mt-3">
+                    <p className="text-gray-400 v2-sec mt-3">
                         Diferencia graves–medios: <span className="text-white cifra-v2">{fmt(sg.diff_grave_media)} dB</span>
                     </p>
                     <V2Desplegable etiqueta="Qué es la compensación del oído">
@@ -2134,18 +2261,18 @@
                                  actual={d.densidad}
                                  tonos={{ media: 'ok', alta: 'aviso', saturada: 'alerta' }} />
                     <div className="mt-4 space-y-2.5">
-                        <div className="flex justify-between text-sm gap-3">
+                        <div className="flex justify-between v2-cuerpo gap-3">
                             <span className="text-gray-400">Rango dinámico</span>
                             <span className="text-white font-medium cifra-v2">{fmt(sg.rango_dinamico)} dB</span>
                         </div>
-                        <div className="flex justify-between text-sm gap-3">
+                        <div className="flex justify-between v2-cuerpo gap-3">
                             <span className="text-gray-400">Contraste entre secciones</span>
                             <span className="font-medium cifra-v2"
                                   style={{ color: tonoContr === 'neutro' ? '#fff' : V2_COLOR[tonoContr] }}>
                                 {d.contraste || '—'}
                             </span>
                         </div>
-                        <div className="flex justify-between text-sm gap-3">
+                        <div className="flex justify-between v2-cuerpo gap-3">
                             <span className="text-gray-400">Cambios significativos</span>
                             <span className="text-white font-medium cifra-v2">
                                 {sg.cambios_significativos == null ? '—' : sg.cambios_significativos}
@@ -2226,7 +2353,7 @@
                     {typeof lo.lufs_integrado === 'number' && lo.lufs_integrado > -60 && (
                         <V2BarraRango valor={lo.lufs_integrado} min={-24} max={-4} objetivoMin={-9} objetivoMax={-7} />
                     )}
-                    {lo.referencia_genero && <p className="text-gray-400 text-xs mt-3">{lo.referencia_genero}</p>}
+                    {lo.referencia_genero && <p className="text-gray-400 v2-sec mt-3">{lo.referencia_genero}</p>}
                     <V2Desplegable etiqueta="Qué hacer con esto">
                         <p>{lo.referencia}</p>
                         <p>{lo.consejo_master}</p>
@@ -2254,7 +2381,7 @@
                             </div>
                         </>
                     )}
-                    {lo.titulo_picos && <p className="text-white text-sm font-medium mb-1">{lo.titulo_picos}</p>}
+                    {lo.titulo_picos && <p className="text-white v2-cuerpo font-medium mb-1">{lo.titulo_picos}</p>}
                     <V2Desplegable avance={avPicos[0]}>
                         <p>{avPicos[1]}</p>
                         {lo.nota_lossy_picos && <p className="text-gray-500">{lo.nota_lossy_picos}</p>}
@@ -2267,7 +2394,7 @@
                                    ? <><V2Dato etiqueta="En el techo" valor={v2Num(lo.muestras_en_techo_total)} tono={tonoRec} />
                                        <V2Dato etiqueta="Meseta máx" valor={`${(lo.racha_maxima_ms || 0).toFixed(2)} ms`} tono={tonoRec} /></>
                                    : <V2Dato etiqueta="Medible" valor="no aplica" />}>
-                        {lo.titulo_recorte && <p className="text-white text-sm font-medium mb-1">{lo.titulo_recorte}</p>}
+                        {lo.titulo_recorte && <p className="text-white v2-cuerpo font-medium mb-1">{lo.titulo_recorte}</p>}
                         <V2Desplegable avance={avRec[0]}><p>{avRec[1]}</p></V2Desplegable>
                     </V2Tarjeta>
                 )}
@@ -2278,11 +2405,11 @@
                     {lo.aviso_saturacion
                         ? <V2Desplegable avance={avSat[0]}><p>{avSat[1]}</p></V2Desplegable>
                         : lo.saturacion_dinamica === 'ok'
-                        ? <p className="text-gray-400 text-sm">El limitador no ha aplastado la dinámica.</p>
+                        ? <p className="text-gray-400 v2-cuerpo">El limitador no ha aplastado la dinámica.</p>
                         /* Sin este caso, un estado 'moderada' sin texto asociado
                            enseñaba el indicador en amarillo y debajo "no ha
                            aplastado": la tarjeta se contradecía a sí misma. */
-                        : <p className="text-gray-400 text-sm">
+                        : <p className="text-gray-400 v2-cuerpo">
                               La compresión del máster está en <span className="text-white">{lo.saturacion_dinamica || '—'}</span>.
                               No llega a nivel de aviso, pero es la zona en la que conviene comparar
                               con una referencia del género antes de apretar más.
@@ -2345,7 +2472,8 @@
     }
 
     function DiagnosticoScreen({ resultado, onReset, contexto, userEmail, file, opciones, nombreProyecto, onIrAPerfil, comunidadOk,
-                                proyectoNombreResuelto, versionActual, proyectoIdActual, onVerComparativa }) {
+                                proyectoNombreResuelto, versionActual, proyectoIdActual, onVerComparativa,
+                                onAbrirPanel, sesionIniciada }) {
         const r = resultado;
         const d = r.datos_audio;
         const [feedbackStep, setFeedbackStep] = useState(0); // 0=coincide?, 1=detalle, 2=feedback real
@@ -2766,8 +2894,10 @@
             ) : null;
 
             return (
-                <div className="min-h-screen py-6 px-4 fade-in v2-wrap">
-                    <div className="max-w-7xl mx-auto">
+                <div className="min-h-screen fade-in v2-wrap">
+                    <V2Nav onNuevo={onReset} onPanel={onAbrirPanel} onPerfil={onIrAPerfil}
+                           sesionIniciada={sesionIniciada} />
+                    <div className="max-w-7xl mx-auto px-4 sm:px-5 py-5">
                         {/* Cabecera: estado, titular y las cifras que se miran
                             de un vistazo, siempre visibles sin hacer scroll. */}
                         <div className="card p-5 mb-4" style={{ borderTop: `2px solid ${cfgV2.color}` }}>
@@ -2835,17 +2965,12 @@
 
                         <div className="mt-8 flex flex-wrap gap-3 items-center justify-between border-t border-[#2e2e2e] pt-5">
                             <p className="text-gray-600 text-xs max-w-xl">{r.nota_motivacional}</p>
-                            <div className="flex gap-2 flex-wrap">
-                                <button onClick={() => { try { sessionStorage.removeItem('mt_v2'); } catch (e) {}
-                                                         location.search = ''; }}
-                                        className="btn-secondary px-4 py-2 rounded text-sm"
-                                        title="Vuelve a la vista de siempre">
-                                    Vista clásica
-                                </button>
-                                <button onClick={onReset} className="btn-primary px-4 py-2 rounded text-sm font-medium">
-                                    Analizar otro track
-                                </button>
-                            </div>
+                            <button onClick={() => { try { sessionStorage.removeItem('mt_v2'); } catch (e) {}
+                                                     location.search = ''; }}
+                                    className="btn-secondary px-3 py-1.5 rounded v2-sec"
+                                    title="Vuelve a la vista de siempre">
+                                Vista clásica
+                            </button>
                         </div>
 
                         {/* El mismo cierre que la vista clásica. Debajo va el
@@ -5385,8 +5510,11 @@
                         {' '}— si persiste, vacía la caché del navegador.
                     </div>
                 )}
-                {/* Botón Mi panel — siempre visible arriba a la derecha (no en panel) */}
-                {screen !== 'panel' && (
+                {/* Botón Mi panel — siempre visible arriba a la derecha (no en panel).
+                    En la vista v2 del diagnóstico NO se pinta: allí hay una barra
+                    de navegación propia y este botón flotante se le encimaba en
+                    cuanto la ventana se estrechaba. */}
+                {screen !== 'panel' && !(screen === 'diagnostico' && usarVistaV2()) && (
                     <div className="fixed top-4 right-4 z-40">
                         <button
                             onClick={handleOpenPanel}
@@ -5458,6 +5586,8 @@
                         proyectoIdActual={proyectoActual.id}
                         onVerComparativa={handleVerComparativa}
                         onIrAPerfil={() => { setPanelView('perfil'); handleOpenPanel(); }}
+                        onAbrirPanel={handleOpenPanel}
+                        sesionIniciada={!!panelAuth}
                     />
                 )}
 
