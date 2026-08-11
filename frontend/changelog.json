@@ -1,6 +1,18 @@
 {
   "entries": [
     {
+      "version": "0.5.86",
+      "date": "2026-08-11",
+      "title": "El espectro deja de exagerar el desbalance",
+      "changes": [
+        "Toda la música tiene más energía en el grave que en el agudo, esté bien o mal mezclada. El gráfico dibujaba esa caída universal como si fuera un defecto de tu track, así que ningún tema podía salir plano y el gráfico contradecía al veredicto que aparece justo al lado.",
+        "Ahora la escala va inclinada +4.5 dB por octava, la misma convención que SPAN o Pro-Q: puedes comparar la curva directamente con el analizador que tengas abierto en el DAW, y un tema equilibrado sale recto.",
+        "Comprobado sobre 163 temas editados de 26 sellos: entre 100 Hz y 8 kHz, el tema mediano sale casi recto. La curva pasa de ocupar el 63 % de la caja al 41 % — SPAN ocupa el 45 %.",
+        "Por encima de 16 kHz ya no se dibuja: ahí lo que hay es el filtro del formato y el suelo de ruido, no música. Metía un desplome en el borde derecho que se leía como falta de agudos.",
+        "La vista se abre en «Espectro» (la nueva) y la compensada al oído sigue disponible en el botón. El informe se recalcula al vuelo, así que los análisis que ya tenías hechos también salen corregidos."
+      ]
+    },
+    {
       "version": "0.5.85",
       "date": "2026-08-11",
       "title": "El espectro, con resolución de analizador",
