@@ -299,6 +299,68 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None,
     db_shifted = db_vals - np.min(db_vals)
     ratios = db_shifted / np.sum(db_shifted) if np.sum(db_shifted) > 0 else np.array([.33, .33, .33])
 
+    # ---------------------------------------------------------------------
+    # Ventana de lectura: el DROP, no el track entero
+    # ---------------------------------------------------------------------
+    # Promediar el espectro de todo el track mezcla la intro, el break y el
+    # drop. El resultado no describe ningún momento real: sale un balance
+    # aguado que subestima los graves (la intro suele ir filtrada) y no se
+    # parece a lo que oye nadie. La lectura útil es la del punto de máxima
+    # densidad, que es donde el arreglo está completo.
+    #
+    # Se busca la ventana continua de ~10 s con más energía media. Si el track
+    # es más corto que eso, se usa entero y se marca como tal.
+    _VENTANA_DROP_SEG = 10.0
+    frames_ventana = max(1, int(_VENTANA_DROP_SEG * sr / hop_length))
+    if len(rms) > frames_ventana:
+        # Media móvil por suma acumulada: O(n) y exacta.
+        acum = np.concatenate([[0.0], np.cumsum(rms)])
+        sumas = acum[frames_ventana:] - acum[:-frames_ventana]
+        i_drop = int(np.argmax(sumas))
+        drop_ini, drop_fin = i_drop, i_drop + frames_ventana
+        drop_completo = False
+    else:
+        drop_ini, drop_fin = 0, len(rms)
+        drop_completo = True
+    drop_ini_seg = round(drop_ini * hop_length / sr, 1)
+    drop_fin_seg = round(min(drop_fin, len(rms)) * hop_length / sr, 1)
+
+    # El mel recortado a esa ventana. Se protege por si el número de frames
+    # del mel y del rms no coincide exactamente.
+    _hasta = min(drop_fin, mel_db.shape[1])
+    _desde = min(drop_ini, max(0, _hasta - 1))
+    mel_drop = mel_db[:, _desde:_hasta] if _hasta > _desde else mel_db
+
+    # ---------------------------------------------------------------------
+    # Ponderación isofónica
+    # ---------------------------------------------------------------------
+    # El oído no es plano: a igual nivel físico, un grave se percibe más flojo
+    # que un medio. Por eso un espectro sin ponderar SIEMPRE enseña una
+    # montaña de graves, aunque el balance sea correcto — y se lee como un
+    # problema que no existe.
+    #
+    # Se aplica la ponderación A, que es la forma normalizada y con fórmula
+    # cerrada de la curva de 40 fon de Fletcher-Munson. Se usa la fórmula, no
+    # una tabla copiada, para no arrastrar errores de transcripción.
+    #
+    # Límite declarado: 40 fon es volumen de escucha moderado. A volumen de
+    # club el oído es bastante más plano, así que la ponderación A exagera un
+    # poco la corrección del grave. Por eso se enseñan las dos vistas y no
+    # solo la ponderada.
+    def _ponderacion_a_db(f):
+        f = np.asarray(f, dtype=np.float64)
+        f2 = f ** 2
+        num = (12194.0 ** 2) * (f2 ** 2)
+        den = ((f2 + 20.6 ** 2)
+               * np.sqrt((f2 + 107.7 ** 2) * (f2 + 737.9 ** 2))
+               * (f2 + 12194.0 ** 2))
+        with np.errstate(divide="ignore", invalid="ignore"):
+            ra = np.where(den > 0, num / den, 0.0)
+            db = np.where(ra > 0, 20.0 * np.log10(np.maximum(ra, 1e-30)) + 2.0, -80.0)
+        return db
+
+    pond_a = _ponderacion_a_db(np.maximum(mel_freqs, 1.0))
+
     # Balance espectral detallado — 6 bandas
     bandas_freq = {
         "sub":       (0, 60),
@@ -311,11 +373,39 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None,
     espectro_bandas = {}
     for nombre_banda, (f_min, f_max) in bandas_freq.items():
         mask = (mel_freqs >= f_min) & (mel_freqs < f_max)
-        if mask.any():
-            db_val = float(np.mean(mel_db[mask, :]))
-        else:
-            db_val = -80.0
+        db_val = float(np.mean(mel_db[mask, :])) if mask.any() else -80.0
         espectro_bandas[nombre_banda] = round(db_val, 1)
+
+    # -----------------------------------------------------------------
+    # Espectro PARA ENSEÑAR — otra medida, y a propósito
+    # -----------------------------------------------------------------
+    # `espectro_bandas` (arriba) promedia dB por banda sobre el track entero.
+    # Lo leen las reglas y no se toca: cambiarlo movería diagnósticos.
+    #
+    # Para enseñar no sirve, por dos motivos medidos:
+    #   1. Promediar dB penaliza a las bandas anchas. La banda de medios cubre
+    #      59 bins del mel y la de sub solo 2: la primera promedia un montón de
+    #      huecos entre armónicos y sale hundida. Aquí se suma ENERGÍA, que es
+    #      la cuota real de potencia de cada zona.
+    #   2. El promedio del track mezcla intro, break y drop. Aquí se lee la
+    #      ventana de más energía (el drop), que es donde el arreglo está
+    #      completo y donde tiene sentido juzgar el balance.
+    _mel_pot = librosa.db_to_power(mel_drop)
+    _tot = float(_mel_pot.sum()) or 1.0
+    _pot_pond = _mel_pot * (10.0 ** (pond_a[:, None] / 10.0))
+    _tot_pond = float(_pot_pond.sum()) or 1.0
+
+    espectro_display = {}
+    espectro_display_pond = {}
+    for nombre_banda, (f_min, f_max) in bandas_freq.items():
+        mask = (mel_freqs >= max(f_min, 20.0)) & (mel_freqs < f_max)
+        if mask.any():
+            cuota = float(_mel_pot[mask, :].sum()) / _tot
+            cuota_p = float(_pot_pond[mask, :].sum()) / _tot_pond
+        else:
+            cuota = cuota_p = 1e-9
+        espectro_display[nombre_banda] = round(10.0 * float(np.log10(max(cuota, 1e-9))), 1)
+        espectro_display_pond[nombre_banda] = round(10.0 * float(np.log10(max(cuota_p, 1e-9))), 1)
 
     # Normalizar bandas a escala 0-100 para visualización
     bandas_db_list = list(espectro_bandas.values())
@@ -325,6 +415,11 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None,
     espectro_bandas_norm = {}
     for nombre_banda, db_val in espectro_bandas.items():
         espectro_bandas_norm[nombre_banda] = round(((db_val - db_min) / db_rango) * 100, 1)
+
+    # Nada de normalizar 0-100 en las vistas: eso pone SIEMPRE una banda a 100
+    # y otra a 0, por pequeña que sea la diferencia real, y fabrica montañas
+    # donde no las hay. Se publican los dB tal cual y la interfaz los coloca en
+    # una escala fija.
 
     # Densidad espectral
     flatness = librosa.feature.spectral_flatness(y=y, hop_length=hop_length)[0]
@@ -546,6 +641,18 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None,
         "mono_compat": mono_compat,
         "espectro_bandas": espectro_bandas,
         "espectro_bandas_norm": espectro_bandas_norm,
+        # Para enseñar: cuota de energía por banda, en dB, leída en el drop.
+        # `_pond` la pasa por la curva del oído (ponderación A, la forma
+        # normalizada de la curva de 40 fon de Fletcher-Munson).
+        "espectro_display": espectro_display,
+        "espectro_display_pond": espectro_display_pond,
+        # Dónde se ha leído el espectro: la ventana de más energía, no el
+        # track entero. Sin este dato el número no se puede interpretar.
+        "espectro_ventana": {
+            "inicio_seg": drop_ini_seg,
+            "fin_seg": drop_fin_seg,
+            "track_completo": drop_completo,
+        },
         "loudness": loudness,
         "harshness": harshness,
         "formato": formato,

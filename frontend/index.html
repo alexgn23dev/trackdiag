@@ -227,7 +227,7 @@
     // /api/health. Si no coincide, este fichero viene de la caché del
     // navegador y puede estar dejando de enviar campos que el backend ya
     // espera — se recarga una sola vez y, si aun así no cuadra, se avisa.
-    const APP_VERSION = '0.5.81';
+    const APP_VERSION = '0.5.82';
 
     function comprobarVersionFrontend(onDesfase, onEntorno) {
         fetch(`${API_URL}/api/health`, { cache: 'no-store' })
@@ -1776,63 +1776,102 @@
      *  energía tiene cada zona. Permite ver de un vistazo dónde está cargado
      *  el track. Acepta marcas (`marcas`) para señalar una frecuencia
      *  concreta, como el pico de aspereza. */
-    function V2EspectroBarra({ norm, bandas, marcas, compacto }) {
-        if (!norm || Object.keys(norm).length === 0) return null;
+    /** Espectro del track en el drop, con dos lecturas.
+     *
+     * COMPENSADA (por defecto): pasa cada banda por la curva del oído. El
+     * oído no es plano — a igual nivel físico, un grave se percibe mucho más
+     * flojo que un medio —, así que un espectro crudo SIEMPRE enseña una
+     * montaña de graves aunque el balance sea correcto. Compensando, un track
+     * equilibrado se ve equilibrado.
+     *
+     * SIN COMPENSAR: el nivel físico, tal cual. Es lo que enseña un analizador.
+     *
+     * Se dibuja sobre una escala de dB FIJA, no normalizada 0-100: normalizar
+     * pone siempre una banda arriba del todo y otra abajo, por pequeña que sea
+     * la diferencia real, y fabrica montañas donde no las hay.
+     */
+    function V2Espectro2({ display, displayPond, ventana, marcas }) {
+        const [pond, setPond] = useState(true);
+        const datos = pond ? displayPond : display;
+        if (!datos || Object.keys(datos).length === 0) return null;
+
+        const vals = V2_BANDAS.map(b => datos[b.k]).filter(v => typeof v === 'number');
+        if (!vals.length) return null;
+        const techo = Math.max(...vals);
+        // Suelo fijo por vista: el oído deja de distinguir matices mucho antes
+        // de los 40 dB, y un rango fijo hace comparables dos análisis.
+        const RANGO = pond ? 24 : 42;
+        const suelo = techo - RANGO;
         const lg = f => Math.log10(f);
         const total = lg(20000) - lg(20);
-        const ancho = b => ((lg(b.f1) - lg(b.f0)) / total) * 100;
-        const pos = f => Math.max(0, Math.min(100, ((lg(f) - lg(20)) / total) * 100));
-        const ticks = compacto ? [50, 1000, 15000] : [50, 200, 1000, 5000, 15000];
+        const x = f => ((lg(f) - lg(20)) / total) * 100;
+        const H = 90;
+        const y = v => {
+            const t = Math.max(0, Math.min(1, (v - suelo) / RANGO));
+            return H - t * H;
+        };
+        // Una polilínea por los centros de banda: lectura de analizador, sin
+        // los escalones que hacían parecer un muro el grave.
+        const pts = V2_BANDAS.map(b => {
+            const c = Math.sqrt(Math.max(b.f0, 20) * b.f1);   // centro geométrico
+            return [x(c), y(datos[b.k] == null ? suelo : datos[b.k])];
+        });
+        const linea = pts.map(pt => `${pt[0].toFixed(2)},${pt[1].toFixed(2)}`).join(' ');
+        const area = `0,${H} ` + linea + ` 100,${H}`;
+        const ticks = [50, 200, 1000, 5000, 15000];
         const etiquetaHz = f => (f >= 1000 ? `${f / 1000} kHz` : `${f} Hz`);
-        const H = compacto ? 46 : 68;
-        // La ALTURA es la clave. Con bloques de color a altura fija, una zona
-        // vacía salía como un rectángulo verde y se leía "aquí está todo bien",
-        // cuando lo que significa es "aquí no hay nada". Con altura, el hueco
-        // se ve como hueco.
+
         return (
             <div>
-                <div className="relative rounded overflow-hidden border border-[#333] bg-[#1c1c1c]"
-                     style={{ height: H }}>
-                    <div className="absolute inset-0 flex items-end">
-                        {V2_BANDAS.map(b => {
-                            const n = norm[b.k];
-                            const alto = n == null ? 0 : Math.max(2, Math.min(100, n));
-                            return (
-                                <div key={b.k} className="h-full flex items-end"
-                                     style={{ width: `${ancho(b)}%` }}
-                                     title={`${b.et} · ${b.f0}–${b.f1} Hz${
-                                         bandas && bandas[b.k] != null ? ` · ${bandas[b.k]} dB` : ''}`}>
-                                    <div style={{ width: '100%', height: `${alto}%`,
-                                                  background: v2ColorNivel(n),
-                                                  opacity: 0.9,
-                                                  borderRight: '1px solid rgba(0,0,0,0.35)' }} />
-                                </div>
-                            );
-                        })}
-                    </div>
-                    {marcas && marcas.filter(m => m && m.f > 20).map((m, i) => (
-                        <div key={i} className="absolute top-0 bottom-0"
-                             style={{ left: `${pos(m.f)}%`, width: 2, background: m.color || V2_COLOR.aviso }} />
-                    ))}
+                <div className="flex items-center justify-between mb-2 gap-2">
+                    <span className="text-[10px] text-gray-500">
+                        {pond ? 'Como lo oye el oído' : 'Nivel físico'}
+                    </span>
+                    <button onClick={() => setPond(!pond)}
+                            className="text-[10px] text-gray-500 hover:text-white transition border border-[#3a3a3a] rounded px-2 py-0.5">
+                        {pond ? 'Ver sin compensar' : 'Ver compensado'}
+                    </button>
+                </div>
+                <div className="relative rounded border border-[#333] bg-[#1c1c1c] overflow-hidden">
+                    <svg viewBox={`0 0 100 ${H}`} preserveAspectRatio="none"
+                         style={{ width: '100%', height: 92, display: 'block' }}>
+                        {[0.25, 0.5, 0.75].map(g => (
+                            <line key={g} x1="0" x2="100" y1={H * g} y2={H * g}
+                                  stroke="#2e2e2e" strokeWidth="0.4" vectorEffect="non-scaling-stroke" />
+                        ))}
+                        <polygon points={area} fill="rgba(109,16,255,0.16)" />
+                        <polyline points={linea} fill="none" stroke="#BCBCBC" strokeWidth="1.6"
+                                  vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+                        {marcas && marcas.filter(m => m && m.f > 20).map((m, k) => (
+                            <line key={k} x1={x(m.f)} x2={x(m.f)} y1="0" y2={H}
+                                  stroke={m.color || V2_COLOR.aviso} strokeWidth="1.5"
+                                  vectorEffect="non-scaling-stroke" strokeDasharray="3 3" />
+                        ))}
+                        {pts.map((pt, k) => (
+                            <circle key={k} cx={pt[0]} cy={pt[1]} r="1.6" fill="#fff"
+                                    vectorEffect="non-scaling-stroke">
+                                <title>{`${V2_BANDAS[k].et} · ${datos[V2_BANDAS[k].k]} dB`}</title>
+                            </circle>
+                        ))}
+                    </svg>
                 </div>
                 <div className="relative h-4 mt-0.5">
                     {ticks.map(f => (
                         <span key={f} className="absolute text-[9px] text-gray-600 cifra-v2"
-                              style={{ left: `${pos(f)}%`, transform: 'translateX(-50%)' }}>
+                              style={{ left: `${x(f)}%`, transform: 'translateX(-50%)' }}>
                             {etiquetaHz(f)}
                         </span>
                     ))}
                 </div>
-                {marcas && marcas.filter(m => m && m.f > 20).map((m, i) => (
-                    <p key={i} className="text-[11px] text-gray-500 mt-1">
-                        <span className="inline-block w-2 h-2 rounded-sm mr-1.5 align-middle"
-                              style={{ background: m.color || V2_COLOR.aviso }} />
-                        {m.texto}
-                    </p>
+                {marcas && marcas.filter(m => m && m.f > 20).map((m, k) => (
+                    <p key={k} className="text-[11px] text-gray-500 mt-1">{m.texto}</p>
                 ))}
-                <p className="text-[10px] text-gray-600 mt-1 leading-snug">
-                    Energía por zona: la altura es el nivel, el color va de verde a rojo.
-                </p>
+                {ventana && !ventana.track_completo && (
+                    <p className="text-[10px] text-gray-600 mt-1.5">
+                        Medido entre {ventana.inicio_seg}s y {ventana.fin_seg}s, la parte con más
+                        energía del track.
+                    </p>
+                )}
             </div>
         );
     }
@@ -2043,8 +2082,9 @@
         const sg = r.senales || {};
         const m = d.mono_compat || {};
         const h = d.harshness || {};
-        const norm = d.espectro_bandas_norm || {};
-        const bandas = d.espectro_bandas || {};
+        const disp = d.espectro_display || {};
+        const dispP = d.espectro_display_pond || {};
+        const vent = d.espectro_ventana || {};
         const tonoBalance = v2TonoEstado('balance_grave', d.balance_grave);
         const tonoMono = v2TonoEstado('mono', m.nivel_compatibilidad);
         const tonoDens = v2TonoEstado('densidad', d.densidad);
@@ -2057,22 +2097,34 @@
                     escala logarítmica, que es como se oye. */}
                 <V2Tarjeta titulo="Balance espectral" tono={tonoBalance}
                            datos={<V2Dato etiqueta="Graves" valor={d.balance_grave || '—'} tono={tonoBalance} />}>
-                    {Object.keys(norm).length > 0
-                        ? <V2EspectroBarra norm={norm} bandas={bandas} />
+                    {Object.keys(disp).length > 0
+                        ? <V2Espectro2 display={disp} displayPond={dispP} ventana={vent} />
                         : <V2Espectro grave={sg.db_grave} media={sg.db_media} aguda={sg.db_aguda} />}
                     <p className="text-gray-400 text-xs mt-3">
                         Diferencia graves–medios: <span className="text-white cifra-v2">{fmt(sg.diff_grave_media)} dB</span>
                     </p>
-                    <V2Desplegable etiqueta="Cómo se lee esta barra">
-                        <p>Cada bloque es una zona del espectro, con el eje de frecuencia en escala
-                           logarítmica: así es como se oye. La altura es cuánta energía tiene esa zona
-                           y el color va de verde (poco cargada) a rojo (muy cargada).</p>
-                        <p><span className="text-gray-300">Es una descripción, no una nota.</span> En
-                           electrónica los graves cargados son lo normal. Y una zona baja no es
-                           "buena": suele significar que ahí falta contenido.</p>
-                        <p>Una diferencia grande entre graves y medios suele significar que el low end
-                           se está comiendo el sitio del resto. No es que falten agudos: es que hay
-                           demasiado grave tapándolos.</p>
+                    <V2Desplegable etiqueta="Qué es la compensación del oído">
+                        <p><span className="text-gray-300">El oído no es plano.</span> A igual nivel
+                           físico, un grave se percibe mucho más flojo que un medio: para que un tono
+                           de 40 Hz suene igual de alto que uno de 1 kHz hace falta bastante más
+                           energía. Eso lo midieron Fletcher y Munson en los años 30, y de ahí salen
+                           las curvas isofónicas — las que unen los puntos que se oyen igual de
+                           fuertes.</p>
+                        <p>Consecuencia práctica: un analizador sin compensar enseña
+                           <span className="text-gray-300"> siempre</span> una montaña de graves,
+                           aunque tu mezcla esté perfectamente equilibrada. No es que te sobre grave:
+                           es que ahí hace falta más energía para que se oiga igual.</p>
+                        <p>La vista <span className="text-gray-300">compensada</span> aplica esa curva,
+                           así que se parece más a lo que percibes. La vista
+                           <span className="text-gray-300"> sin compensar</span> es el nivel físico,
+                           como en cualquier analizador.</p>
+                        <p className="text-gray-500">Letra pequeña: se usa la ponderación A, que es la
+                           forma normalizada de la curva de 40 fon — volumen de escucha moderado. A
+                           volumen de club el oído es más plano, así que compensa un poco de más. Por
+                           eso están las dos vistas y no solo una.</p>
+                        <p className="text-gray-500">La lectura se hace en el punto de más energía del
+                           track, no promediando de principio a fin: el promedio mezcla intro, break y
+                           drop y no describe ningún momento real.</p>
                     </V2Desplegable>
                 </V2Tarjeta>
 
@@ -2134,8 +2186,8 @@
                            ancho={h.tiene_harshness ? "xl:col-span-2" : ""}>
                     {/* La barra solo cuando hay pico que señalar: sin aspereza
                         repetiría la de arriba sin añadir nada. */}
-                    {h.tiene_harshness && h.peak_freq_hz > 0 && Object.keys(norm).length > 0 && (
-                        <V2EspectroBarra norm={norm} bandas={bandas} compacto
+                    {h.tiene_harshness && h.peak_freq_hz > 0 && Object.keys(disp).length > 0 && (
+                        <V2Espectro2 display={disp} displayPond={dispP} ventana={vent}
                             marcas={[{ f: h.peak_freq_hz, color: V2_COLOR.aviso,
                                        texto: `Pico áspero en ${h.peak_freq_hz} Hz${h.zona_problema ? ` · ${h.zona_problema}` : ''}` }]} />
                     )}
@@ -2369,6 +2421,62 @@
         // rediseño lo mete en la primera pantalla. Duplicarlo habría
         // significado mantener dos veces un formulario de tres pasos que
         // ya funciona.
+        // La barra flotante de feedback también se comparte entre vistas.
+        // Vive fuera del contenedor principal (position: fixed), así que
+        // basta con pintarla al final de cualquiera de las dos.
+        const barraFeedback = (
+            <>
+                    {/* Sticky feedback bar — aparece tras 20s si el usuario no ha respondido */}
+                    {stickyFeedbackVisible && (
+                        <div
+                            className="fixed left-0 right-0 z-40 fade-in"
+                            style={{
+                                bottom: 0,
+                                background: 'rgba(15, 15, 17, 0.96)',
+                                backdropFilter: 'blur(10px)',
+                                borderTop: '1px solid rgba(139, 92, 246, 0.35)',
+                                boxShadow: '0 -8px 24px rgba(0,0,0,0.4)',
+                            }}
+                        >
+                            <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
+                                <p className="text-gray-200 text-sm flex-1 min-w-0">
+                                    <span className="hidden sm:inline">¿Te ha servido el diagnóstico? </span>
+                                    <span className="sm:hidden">¿Útil? </span>
+                                    <span className="text-gray-500 text-xs">Tu respuesta calibra el motor.</span>
+                                </p>
+                                <div className="flex gap-1.5 flex-shrink-0">
+                                    <button
+                                        onClick={() => responderDesdeSticky('si')}
+                                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-green-900/40 hover:bg-green-900/60 accent-green transition-colors"
+                                    >
+                                        Sí
+                                    </button>
+                                    <button
+                                        onClick={() => responderDesdeSticky('masomenos')}
+                                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-yellow-900/30 hover:bg-yellow-900/50 text-yellow-400 transition-colors"
+                                    >
+                                        Parcial
+                                    </button>
+                                    <button
+                                        onClick={() => responderDesdeSticky('no')}
+                                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors"
+                                    >
+                                        No
+                                    </button>
+                                    <button
+                                        onClick={() => { setStickyFeedbackVisible(false); setStickyFeedbackDismissed(true); }}
+                                        className="px-2 py-1.5 rounded-lg text-xs text-gray-600 hover:text-gray-400 transition-colors"
+                                        aria-label="Cerrar"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+            </>
+        );
+
         const bloqueFeedback = (
                     <>
                         {/* ===== FEEDBACK POST-ANÁLISIS — Calibración ===== */}
@@ -2590,12 +2698,21 @@
 
             // Derivación: exactamente la misma regla que la vista clásica —
             // una tarjeta y solo una, Relesit si el track sale fino.
-            const derivacionV2 = (diagId === 'sin_diagnostico' || r.estado_track === 'avanzado') && r.estado_track !== 'verde'
-                ? <RelesitCTA diagId={diagId} estado={r.estado_track} userEmail={userEmail}
-                              bpm={d && d.bpm}
-                              genero={contexto && (contexto.genero === 'otro' ? (contexto.genero_custom || '') : contexto.genero)} />
-                : <MasterCTA diagId={diagId} variante={masterCta.variante}
-                             categoria={masterCta.categoria} userEmail={userEmail} />;
+            // Si el track sale fino, lo primero que tiene que ver el usuario es
+            // "búscale sello", no el plan de arreglos: ya no hay nada urgente
+            // que arreglar. Por eso Relesit sube por encima de las pestañas y
+            // el Máster se queda abajo, con el resto de derivaciones.
+            const esRelesit = (diagId === 'sin_diagnostico' || r.estado_track === 'avanzado')
+                              && r.estado_track !== 'verde';
+            const tarjetaRelesit = esRelesit ? (
+                <RelesitCTA diagId={diagId} estado={r.estado_track} userEmail={userEmail}
+                            bpm={d && d.bpm}
+                            genero={contexto && (contexto.genero === 'otro' ? (contexto.genero_custom || '') : contexto.genero)} />
+            ) : null;
+            const derivacionV2 = esRelesit ? null : (
+                <MasterCTA diagId={diagId} variante={masterCta.variante}
+                           categoria={masterCta.categoria} userEmail={userEmail} />
+            );
 
             // Tutoriales: en la vista clásica están tras un botón al final del
             // informe. Aquí se enseñan directamente — que estuvieran escondidos
@@ -2678,6 +2795,8 @@
                             </div>
                         </div>
 
+                        {tarjetaRelesit}
+
                         <div className="flex gap-1 mb-4 border-b border-[#2e2e2e] overflow-x-auto">
                             {V2_TABS.map(t => (
                                 <button key={t.id} onClick={() => setV2Tab(t.id)}
@@ -2694,7 +2813,10 @@
                                 <V2TabResumen r={r} extras={{
                                     derivacion: derivacionV2,
                                     tutoriales: tutorialesV2,
-                                    feedback: <div className="card p-5 v2-feedback">{bloqueFeedback}</div>,
+                                    // El widget en tarjeta se quitó: Alex lo prefiere
+                                    // como en la vista clásica, en la barra flotante
+                                    // de abajo. Aquí solo estorbaba una tarjeta más.
+                                    feedback: null,
                                 }} />
                             )}
                             {v2Tab === 'plan' && <V2TabPlan r={r} />}
@@ -2726,10 +2848,17 @@
                             </div>
                         </div>
 
-                        <p className="text-center text-gray-700 text-xs mt-6">
-                            Tu audio no se almacena. Se procesa y se descarta.
-                        </p>
+                        {/* El mismo cierre que la vista clásica. Debajo va el
+                            footer global del sitio, que es HTML estático fuera
+                            del SPA y aparece en las dos vistas. */}
+                        <div className="text-center mb-8 mt-6">
+                            <p className="text-gray-600 text-xs">
+                                Mentotrack no almacena el archivo de tu canción, solo los datos
+                                extraídos tras el análisis.
+                            </p>
+                        </div>
                     </div>
+                    {barraFeedback}
                 </div>
             );
         }
@@ -3553,54 +3682,7 @@
                     </div>
                 </div>
 
-                {/* Sticky feedback bar — aparece tras 20s si el usuario no ha respondido */}
-                {stickyFeedbackVisible && (
-                    <div
-                        className="fixed left-0 right-0 z-40 fade-in"
-                        style={{
-                            bottom: 0,
-                            background: 'rgba(15, 15, 17, 0.96)',
-                            backdropFilter: 'blur(10px)',
-                            borderTop: '1px solid rgba(139, 92, 246, 0.35)',
-                            boxShadow: '0 -8px 24px rgba(0,0,0,0.4)',
-                        }}
-                    >
-                        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
-                            <p className="text-gray-200 text-sm flex-1 min-w-0">
-                                <span className="hidden sm:inline">¿Te ha servido el diagnóstico? </span>
-                                <span className="sm:hidden">¿Útil? </span>
-                                <span className="text-gray-500 text-xs">Tu respuesta calibra el motor.</span>
-                            </p>
-                            <div className="flex gap-1.5 flex-shrink-0">
-                                <button
-                                    onClick={() => responderDesdeSticky('si')}
-                                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-green-900/40 hover:bg-green-900/60 accent-green transition-colors"
-                                >
-                                    Sí
-                                </button>
-                                <button
-                                    onClick={() => responderDesdeSticky('masomenos')}
-                                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-yellow-900/30 hover:bg-yellow-900/50 text-yellow-400 transition-colors"
-                                >
-                                    Parcial
-                                </button>
-                                <button
-                                    onClick={() => responderDesdeSticky('no')}
-                                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors"
-                                >
-                                    No
-                                </button>
-                                <button
-                                    onClick={() => { setStickyFeedbackVisible(false); setStickyFeedbackDismissed(true); }}
-                                    className="px-2 py-1.5 rounded-lg text-xs text-gray-600 hover:text-gray-400 transition-colors"
-                                    aria-label="Cerrar"
-                                >
-                                    ✕
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
+                {barraFeedback}
             </div>
         );
     }
