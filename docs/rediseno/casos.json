@@ -36,6 +36,23 @@
     "contraste": "medio",
     "balance_grave": "elevado",
     "densidad": "baja",
+    "espectro_bandas": {
+     "sub": -12.3,
+     "graves": -42.5,
+     "low_mid": -51.6,
+     "mid": -57.6,
+     "presencia": -61.8,
+     "air": -70.7
+    },
+    "espectro_bandas_norm": {
+     "sub": 100.0,
+     "graves": 48.3,
+     "low_mid": 32.7,
+     "mid": 22.4,
+     "presencia": 15.2,
+     "air": 0.0
+    },
+    "densidad_espectral": 0.0014,
     "desarrollo_temporal": false,
     "n_bloques": 2,
     "distribucion": {
@@ -246,6 +263,23 @@
     "contraste": "medio",
     "balance_grave": "elevado",
     "densidad": "baja",
+    "espectro_bandas": {
+     "sub": -10.3,
+     "graves": -41.1,
+     "low_mid": -49.5,
+     "mid": -56.0,
+     "presencia": -60.1,
+     "air": -62.0
+    },
+    "espectro_bandas_norm": {
+     "sub": 100.0,
+     "graves": 40.4,
+     "low_mid": 24.2,
+     "mid": 11.6,
+     "presencia": 3.7,
+     "air": 0.0
+    },
+    "densidad_espectral": 0.0022,
     "desarrollo_temporal": false,
     "n_bloques": 13,
     "distribucion": {
@@ -457,6 +491,23 @@
     "contraste": "medio",
     "balance_grave": "elevado",
     "densidad": "baja",
+    "espectro_bandas": {
+     "sub": -12.2,
+     "graves": -43.4,
+     "low_mid": -52.7,
+     "mid": -58.7,
+     "presencia": -62.7,
+     "air": -64.6
+    },
+    "espectro_bandas_norm": {
+     "sub": 100.0,
+     "graves": 40.5,
+     "low_mid": 22.7,
+     "mid": 11.3,
+     "presencia": 3.6,
+     "air": 0.0
+    },
+    "densidad_espectral": 0.0025,
     "desarrollo_temporal": false,
     "n_bloques": 21,
     "distribucion": {

@@ -171,6 +171,13 @@
         .tab-v2.on { border-bottom-color: var(--po-white); color: #fff; }
         .barra-v2 { background: #1c1c1c; border: 1px solid var(--po-border); border-radius: 3px; overflow: hidden; }
         .v2-wrap { overflow-x: hidden; max-width: 100%; }
+        /* El widget de calibración se reutiliza tal cual dentro de una tarjeta
+           estrecha. Sus botones usan `sm:flex-row`, que depende del ANCHO DE
+           VENTANA y no del de la tarjeta: en escritorio se ponían en fila
+           dentro de 400 px y el texto salía a una palabra por línea. Aquí se
+           fuerza la columna. */
+        .v2-feedback .flex-col.sm\\:flex-row { flex-direction: column !important; }
+        .v2-feedback button { white-space: normal; }
 
         /* Selected option style */
         .opt-selected { background: var(--po-purple) !important; color: var(--po-white) !important; border-color: var(--po-purple) !important; }
@@ -220,7 +227,7 @@
     // /api/health. Si no coincide, este fichero viene de la caché del
     // navegador y puede estar dejando de enviar campos que el backend ya
     // espera — se recarga una sola vez y, si aun así no cuadra, se avisa.
-    const APP_VERSION = '0.5.80';
+    const APP_VERSION = '0.5.81';
 
     function comprobarVersionFrontend(onDesfase, onEntorno) {
         fetch(`${API_URL}/api/health`, { cache: 'no-store' })
@@ -1720,6 +1727,142 @@
         );
     }
 
+    /** Color de una zona del espectro según lo cargada que esté.
+     *  Verde = poca energía, rojo = mucha. Es DESCRIPTIVO, no un veredicto:
+     *  que los graves estén rojos en un techno es lo normal. El juicio lo
+     *  ponen las etiquetas del motor (balance elevado, carencia de medios…),
+     *  no el color. */
+    function v2ColorNivel(n) {
+        const v = Math.max(0, Math.min(100, n || 0));
+        if (v < 25) return '#25F464';
+        if (v < 45) return '#a3e635';
+        if (v < 65) return '#facc15';
+        if (v < 82) return '#fb923c';
+        return '#f87171';
+    }
+
+    /** Traduce los estados del motor a un tono. El vocabulario sale de
+     *  extractor.py: no se inventa ninguna categoría aquí. */
+    function v2TonoEstado(campo, valor) {
+        const v = (valor || '').toLowerCase();
+        if (campo === 'balance_grave')
+            return v === 'normal' ? 'ok' : v === 'elevado' ? 'aviso' : v === 'excesivo' ? 'alerta' : 'neutro';
+        if (campo === 'mono')
+            return (v === 'excelente' || v === 'buena') ? 'ok'
+                 : (v === 'critica' || v === 'problematica') ? 'alerta'
+                 : v ? 'aviso' : 'neutro';
+        if (campo === 'densidad')
+            // "baja" no se pinta: en un minimal es lo normal y en un boceto es
+            // síntoma. El motor ya lo dice en el diagnóstico si toca.
+            return v === 'media' ? 'ok' : v === 'alta' ? 'aviso' : v === 'saturada' ? 'alerta' : 'neutro';
+        if (campo === 'contraste')
+            return v === 'alto' ? 'ok' : v === 'bajo' ? 'aviso' : 'neutro';
+        return 'neutro';
+    }
+
+    // Las seis bandas del extractor, con su rango real. El ancho de cada una
+    // en la barra va en escala logarítmica, que es como se oye la frecuencia:
+    // de 60 a 200 Hz se percibe un salto parecido al de 4 a 8 kHz.
+    const V2_BANDAS = [
+        { k: 'sub',       f0: 20,   f1: 60,    et: 'Sub' },
+        { k: 'graves',    f0: 60,   f1: 200,   et: 'Graves' },
+        { k: 'low_mid',   f0: 200,  f1: 800,   et: 'Medios bajos' },
+        { k: 'mid',       f0: 800,  f1: 4000,  et: 'Medios' },
+        { k: 'presencia', f0: 4000, f1: 8000,  et: 'Presencia' },
+        { k: 'air',       f0: 8000, f1: 20000, et: 'Aire' },
+    ];
+
+    /** Barra del espectro audible, de 20 Hz a 20 kHz, coloreada por cuánta
+     *  energía tiene cada zona. Permite ver de un vistazo dónde está cargado
+     *  el track. Acepta marcas (`marcas`) para señalar una frecuencia
+     *  concreta, como el pico de aspereza. */
+    function V2EspectroBarra({ norm, bandas, marcas, compacto }) {
+        if (!norm || Object.keys(norm).length === 0) return null;
+        const lg = f => Math.log10(f);
+        const total = lg(20000) - lg(20);
+        const ancho = b => ((lg(b.f1) - lg(b.f0)) / total) * 100;
+        const pos = f => Math.max(0, Math.min(100, ((lg(f) - lg(20)) / total) * 100));
+        const ticks = compacto ? [50, 1000, 15000] : [50, 200, 1000, 5000, 15000];
+        const etiquetaHz = f => (f >= 1000 ? `${f / 1000} kHz` : `${f} Hz`);
+        const H = compacto ? 46 : 68;
+        // La ALTURA es la clave. Con bloques de color a altura fija, una zona
+        // vacía salía como un rectángulo verde y se leía "aquí está todo bien",
+        // cuando lo que significa es "aquí no hay nada". Con altura, el hueco
+        // se ve como hueco.
+        return (
+            <div>
+                <div className="relative rounded overflow-hidden border border-[#333] bg-[#1c1c1c]"
+                     style={{ height: H }}>
+                    <div className="absolute inset-0 flex items-end">
+                        {V2_BANDAS.map(b => {
+                            const n = norm[b.k];
+                            const alto = n == null ? 0 : Math.max(2, Math.min(100, n));
+                            return (
+                                <div key={b.k} className="h-full flex items-end"
+                                     style={{ width: `${ancho(b)}%` }}
+                                     title={`${b.et} · ${b.f0}–${b.f1} Hz${
+                                         bandas && bandas[b.k] != null ? ` · ${bandas[b.k]} dB` : ''}`}>
+                                    <div style={{ width: '100%', height: `${alto}%`,
+                                                  background: v2ColorNivel(n),
+                                                  opacity: 0.9,
+                                                  borderRight: '1px solid rgba(0,0,0,0.35)' }} />
+                                </div>
+                            );
+                        })}
+                    </div>
+                    {marcas && marcas.filter(m => m && m.f > 20).map((m, i) => (
+                        <div key={i} className="absolute top-0 bottom-0"
+                             style={{ left: `${pos(m.f)}%`, width: 2, background: m.color || V2_COLOR.aviso }} />
+                    ))}
+                </div>
+                <div className="relative h-4 mt-0.5">
+                    {ticks.map(f => (
+                        <span key={f} className="absolute text-[9px] text-gray-600 cifra-v2"
+                              style={{ left: `${pos(f)}%`, transform: 'translateX(-50%)' }}>
+                            {etiquetaHz(f)}
+                        </span>
+                    ))}
+                </div>
+                {marcas && marcas.filter(m => m && m.f > 20).map((m, i) => (
+                    <p key={i} className="text-[11px] text-gray-500 mt-1">
+                        <span className="inline-block w-2 h-2 rounded-sm mr-1.5 align-middle"
+                              style={{ background: m.color || V2_COLOR.aviso }} />
+                        {m.texto}
+                    </p>
+                ))}
+                <p className="text-[10px] text-gray-600 mt-1 leading-snug">
+                    Energía por zona: la altura es el nivel, el color va de verde a rojo.
+                </p>
+            </div>
+        );
+    }
+
+    /** Medidor de un estado con varios escalones (densidad, contraste…). */
+    function V2Escalones({ valores, actual, tonos }) {
+        const i = valores.indexOf((actual || '').toLowerCase());
+        return (
+            <div>
+                <div className="flex gap-1">
+                    {valores.map((v, k) => {
+                        const activo = k === i;
+                        const tono = tonos && tonos[v] ? V2_COLOR[tonos[v]] : '#4a4a4a';
+                        return (
+                            <div key={v} className="flex-1">
+                                <div className="rounded-sm" style={{
+                                    height: 6,
+                                    background: activo ? tono : (k < i ? '#3a3a3a' : '#242424'),
+                                    border: activo ? 'none' : '1px solid #333',
+                                }} />
+                                <div className="text-[9px] mt-1 text-center capitalize"
+                                     style={{ color: activo ? '#fff' : '#5a5a5a' }}>{v}</div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+    }
+
     /** Un paso del plan: número, avance y "cómo se hace". */
     function V2Paso({ n, texto }) {
         const par = v2Partir(texto);
@@ -1900,42 +2043,75 @@
         const sg = r.senales || {};
         const m = d.mono_compat || {};
         const h = d.harshness || {};
-        const tonoBalance = d.balance_grave === 'elevado' ? 'aviso' : 'neutro';
-        const tonoMono = m.nivel_compatibilidad === 'excelente' ? 'neutro' : 'aviso';
+        const norm = d.espectro_bandas_norm || {};
+        const bandas = d.espectro_bandas || {};
+        const tonoBalance = v2TonoEstado('balance_grave', d.balance_grave);
+        const tonoMono = v2TonoEstado('mono', m.nivel_compatibilidad);
+        const tonoDens = v2TonoEstado('densidad', d.densidad);
+        const tonoContr = v2TonoEstado('contraste', d.contraste);
         const fmt = (v, dec) => (typeof v === 'number' ? v.toFixed(dec == null ? 1 : dec) : '—');
         return (
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                {/* Balance espectral: la barra sustituye a las tres columnas de
+                    antes. Mismo dato, pero con eje de frecuencia real y en
+                    escala logarítmica, que es como se oye. */}
                 <V2Tarjeta titulo="Balance espectral" tono={tonoBalance}
                            datos={<V2Dato etiqueta="Graves" valor={d.balance_grave || '—'} tono={tonoBalance} />}>
-                    <V2Espectro grave={sg.db_grave} media={sg.db_media} aguda={sg.db_aguda} />
+                    {Object.keys(norm).length > 0
+                        ? <V2EspectroBarra norm={norm} bandas={bandas} />
+                        : <V2Espectro grave={sg.db_grave} media={sg.db_media} aguda={sg.db_aguda} />}
                     <p className="text-gray-400 text-xs mt-3">
                         Diferencia graves–medios: <span className="text-white cifra-v2">{fmt(sg.diff_grave_media)} dB</span>
                     </p>
-                    <V2Desplegable etiqueta="Qué significa">
+                    <V2Desplegable etiqueta="Cómo se lee esta barra">
+                        <p>Cada bloque es una zona del espectro, con el eje de frecuencia en escala
+                           logarítmica: así es como se oye. La altura es cuánta energía tiene esa zona
+                           y el color va de verde (poco cargada) a rojo (muy cargada).</p>
+                        <p><span className="text-gray-300">Es una descripción, no una nota.</span> En
+                           electrónica los graves cargados son lo normal. Y una zona baja no es
+                           "buena": suele significar que ahí falta contenido.</p>
                         <p>Una diferencia grande entre graves y medios suele significar que el low end
                            se está comiendo el sitio del resto. No es que falten agudos: es que hay
                            demasiado grave tapándolos.</p>
                     </V2Desplegable>
                 </V2Tarjeta>
 
-                <V2Tarjeta titulo="Densidad y dinámica"
-                           datos={<V2Dato etiqueta="Densidad" valor={d.densidad || '—'} />}>
-                    <div className="space-y-2.5">
-                        {[['Rango dinámico', `${fmt(sg.rango_dinamico)} dB`],
-                          ['Contraste entre secciones', d.contraste || '—'],
-                          ['Cambios significativos', sg.cambios_significativos == null ? '—' : sg.cambios_significativos]
-                        ].map(par => (
-                            <div key={par[0]} className="flex justify-between text-sm gap-3">
-                                <span className="text-gray-400">{par[0]}</span>
-                                <span className="text-white font-medium cifra-v2">{par[1]}</span>
-                            </div>
-                        ))}
+                <V2Tarjeta titulo="Densidad y dinámica" tono={tonoDens}
+                           datos={<V2Dato etiqueta="Densidad" valor={d.densidad || '—'} tono={tonoDens} />}>
+                    <V2Escalones valores={['baja', 'media', 'alta', 'saturada']}
+                                 actual={d.densidad}
+                                 tonos={{ media: 'ok', alta: 'aviso', saturada: 'alerta' }} />
+                    <div className="mt-4 space-y-2.5">
+                        <div className="flex justify-between text-sm gap-3">
+                            <span className="text-gray-400">Rango dinámico</span>
+                            <span className="text-white font-medium cifra-v2">{fmt(sg.rango_dinamico)} dB</span>
+                        </div>
+                        <div className="flex justify-between text-sm gap-3">
+                            <span className="text-gray-400">Contraste entre secciones</span>
+                            <span className="font-medium cifra-v2"
+                                  style={{ color: tonoContr === 'neutro' ? '#fff' : V2_COLOR[tonoContr] }}>
+                                {d.contraste || '—'}
+                            </span>
+                        </div>
+                        <div className="flex justify-between text-sm gap-3">
+                            <span className="text-gray-400">Cambios significativos</span>
+                            <span className="text-white font-medium cifra-v2">
+                                {sg.cambios_significativos == null ? '—' : sg.cambios_significativos}
+                            </span>
+                        </div>
                     </div>
+                    <V2Desplegable etiqueta="Qué es la densidad">
+                        <p>Cuánto ocupa el sonido el espectro en todo momento. Una densidad alta
+                           llena, pero deja menos sitio para que cada elemento se distinga; una baja
+                           respira más, aunque puede sonar vacía. Ninguna de las dos es mejor: depende
+                           de lo que busques.</p>
+                    </V2Desplegable>
                 </V2Tarjeta>
 
                 <V2Tarjeta titulo="Compatibilidad mono" tono={tonoMono}
                            datos={<V2Dato etiqueta="Estado" valor={m.nivel_compatibilidad || '—'} tono={tonoMono} />}>
                     <V2Anillo pct={(m.correlacion_lr || 0) * 100}
+                              tono={tonoMono === 'neutro' ? V2_COLOR.ok : V2_COLOR[tonoMono]}
                               etiqueta={`Correlación L/R · pérdida en mono ${m.perdida_mono_db == null ? '—' : m.perdida_mono_db} dB`} />
                     <V2Desplegable etiqueta="Detalle por bandas">
                         <p>{m.resumen}</p>
@@ -1950,15 +2126,30 @@
                     </V2Desplegable>
                 </V2Tarjeta>
 
+                {/* Aspereza: la misma barra, pero lo que importa es DÓNDE. Si el
+                    motor ha localizado el pico, se marca sobre el eje. */}
                 <V2Tarjeta titulo="Aspereza en medios-altos" tono={h.tiene_harshness ? 'aviso' : 'neutro'}
                            datos={<V2Dato etiqueta="Frames ásperos" valor={`${h.pct_frames_harsh == null ? '—' : h.pct_frames_harsh}%`}
-                                          tono={h.tiene_harshness ? 'aviso' : 'neutro'} />}>
+                                          tono={h.tiene_harshness ? 'aviso' : 'neutro'} />}
+                           ancho={h.tiene_harshness ? "xl:col-span-2" : ""}>
+                    {/* La barra solo cuando hay pico que señalar: sin aspereza
+                        repetiría la de arriba sin añadir nada. */}
+                    {h.tiene_harshness && h.peak_freq_hz > 0 && Object.keys(norm).length > 0 && (
+                        <V2EspectroBarra norm={norm} bandas={bandas} compacto
+                            marcas={[{ f: h.peak_freq_hz, color: V2_COLOR.aviso,
+                                       texto: `Pico áspero en ${h.peak_freq_hz} Hz${h.zona_problema ? ` · ${h.zona_problema}` : ''}` }]} />
+                    )}
                     {h.tiene_harshness ? (
-                        <p className="text-gray-300 text-sm">
-                            Zona: <span className="text-white">{h.zona_problema}</span> · pico en <span className="cifra-v2">{h.peak_freq_hz} Hz</span> · carácter {h.caracter}
+                        <p className="text-gray-300 text-sm mt-2">
+                            Carácter <span className="text-white">{h.caracter}</span>. La aspereza vive
+                            entre 2 y 6 kHz: es la zona donde el oído es más sensible y donde un exceso
+                            cansa a los pocos minutos.
                         </p>
                     ) : (
-                        <p className="text-gray-400 text-sm">Sin picos molestos en la zona de 2 a 6 kHz.</p>
+                        <p className="text-gray-400 text-sm mt-2">
+                            Sin picos molestos en la zona de 2 a 6 kHz, que es donde el oído es más
+                            sensible.
+                        </p>
                     )}
                 </V2Tarjeta>
             </div>
@@ -2430,9 +2621,11 @@
                                        }}
                                        className="flex gap-3 items-start group">
                                         {vid && (
-                                            <span className="relative flex-none w-[104px] rounded overflow-hidden bg-[#1a1a1a]">
+                                            <span className="relative rounded overflow-hidden bg-[#1a1a1a]"
+                                                  style={{ flex: '0 0 104px', width: 104 }}>
                                                 <img src={`https://i.ytimg.com/vi/${vid}/mqdefault.jpg`} alt="" loading="lazy"
-                                                     className="w-full h-[59px] object-cover opacity-80 group-hover:opacity-100 transition" />
+                                                     className="w-full object-cover opacity-80 group-hover:opacity-100 transition"
+                                                     style={{ height: 59 }} />
                                                 <span className="absolute inset-0 flex items-center justify-center">
                                                     <span className="w-6 h-6 rounded-full bg-black/60 flex items-center justify-center">
                                                         <span style={{ width: 0, height: 0, marginLeft: '2px',
@@ -2501,7 +2694,7 @@
                                 <V2TabResumen r={r} extras={{
                                     derivacion: derivacionV2,
                                     tutoriales: tutorialesV2,
-                                    feedback: <div className="card p-5">{bloqueFeedback}</div>,
+                                    feedback: <div className="card p-5 v2-feedback">{bloqueFeedback}</div>,
                                 }} />
                             )}
                             {v2Tab === 'plan' && <V2TabPlan r={r} />}
