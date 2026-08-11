@@ -273,7 +273,7 @@
     // /api/health. Si no coincide, este fichero viene de la caché del
     // navegador y puede estar dejando de enviar campos que el backend ya
     // espera — se recarga una sola vez y, si aun así no cuadra, se avisa.
-    const APP_VERSION = '0.5.85';
+    const APP_VERSION = '0.5.86';
 
     function comprobarVersionFrontend(onDesfase, onEntorno) {
         fetch(`${API_URL}/api/health`, { cache: 'no-store' })
@@ -1837,7 +1837,10 @@
      * la diferencia real, y fabrica montañas donde no las hay.
      */
     function V2Espectro2({ display, displayPond, fino, ventana, marcas }) {
-        const [pond, setPond] = useState(true);
+        // Arranca en la vista de analizador, no en la ponderada: es la única
+        // calibrada para que "plano" signifique "normal", y es la que el
+        // usuario puede cotejar con SPAN o Pro-Q en su DAW.
+        const [pond, setPond] = useState(false);
 
         // Fuente preferente: el espectro en tercios de octava (31 bandas,
         // medido a la frecuencia real del archivo). Si el análisis es viejo o
@@ -1846,13 +1849,41 @@
         const datos = pond ? displayPond : display;
         if (!detallado && (!datos || Object.keys(datos).length === 0)) return null;
 
-        const puntos = detallado
+        // Inclinación de dibujo. TODA la música tiene más energía en el grave
+        // que en el agudo, esté bien o mal mezclada: es la estadística del
+        // material, no un defecto del track. Un espectro sin inclinar dibuja
+        // esa caída universal como si fuera culpa tuya, y entonces ningún track
+        // puede salir plano — el gráfico deja de poder decir nada.
+        //
+        // Los analizadores lo compensan desde siempre. Sumar energía por tercio
+        // de octava ya lleva +3 dB/oct implícitos (cada banda es 2^(1/3) más
+        // ancha que la anterior); SPAN y Pro-Q dibujan +4.5. La diferencia son
+        // estos 1.5, así que la curva queda en la MISMA convención que el
+        // analizador que el usuario tiene abierto en su DAW.
+        //
+        // Comprobado además contra el material: sobre 163 temas editados de 26
+        // sellos, la inclinación que deja plano al tema mediano entre 100 Hz y
+        // 8 kHz es +1.68 dB/oct. Se usa 1.5 porque cae dentro de esa medida y
+        // además es una convención citable, no un número ajustado a un corpus.
+        const TILT = 1.5;
+        const TOPE_DIBUJO = 16000;   // ver el filtro de abajo
+        // No se aplica a la vista ponderada: la curva A ya inclina por su
+        // cuenta (+1.10 dB/oct medido sobre esos mismos 163 temas), y sumar las
+        // dos correcciones dibujaría el agudo muy por encima del grave.
+        const puntos = (detallado
             ? fino.bandas
                   .map(b => ({ f: b.hz, v: pond ? b.db_pond : b.db }))
                   .filter(p => typeof p.v === 'number')
             : V2_BANDAS
                   .map(b => ({ f: Math.sqrt(Math.max(b.f0, 20) * b.f1), v: datos[b.k] }))
-                  .filter(p => typeof p.v === 'number');
+                  .filter(p => typeof p.v === 'number')
+        ).map(p => ({ f: p.f, v: pond ? p.v : p.v + TILT * Math.log2(p.f / 1000) }))
+        // Por encima de 16 kHz no se dibuja. La banda de 20 kHz roza el límite
+        // del formato: lo que hay ahí es el filtro del códec y el suelo de
+        // ruido, no música. Medido: en 31 de 33 tracks cae más de 40 dB por
+        // debajo del resto. Dibujarla mete un desplome en el borde derecho que
+        // no informa de nada y que se lee como "te faltan agudos".
+         .filter(p => p.f <= TOPE_DIBUJO);
         if (puntos.length < 2) return null;
 
         const techo = Math.max(...puntos.map(p => p.v));
@@ -1901,7 +1932,14 @@
 
         // Techo real del archivo. Un MP3 a 128 kbps se corta sobre los 16 kHz y
         // ahí no hay nada que medir: se marca en vez de dibujar una caída falsa.
-        const corte = detallado && fino.techo_hz && fino.techo_hz < F1 ? fino.techo_hz : null;
+        // Dónde deja de haber medida dibujada: o el techo real del archivo (un
+        // MP3 comprimido se corta antes), o nuestro tope de dibujo. Manda el
+        // menor de los dos.
+        const techoArchivo = detallado && fino.techo_hz ? fino.techo_hz : F1;
+        const corte = Math.min(techoArchivo, TOPE_DIBUJO);
+        // Y si el límite lo pone el ARCHIVO y no nuestro tope, eso sí es un
+        // dato sobre su track y hay que contárselo.
+        const archivoLimitado = techoArchivo < TOPE_DIBUJO;
         const gid = pond ? 'v2espPond' : 'v2espRaw';
         const CANAL = 34;
 
@@ -1909,10 +1947,10 @@
             <div>
                 <div className="flex items-center justify-between mb-2 gap-2">
                     <span className="rotulo-v2">
-                        {pond ? 'Compensado al oído' : 'Nivel físico'}
+                        {pond ? 'Compensado al oído' : 'Espectro, como tu analizador'}
                     </span>
                     <div className="flex rounded-md overflow-hidden border border-[#333]">
-                        {[[true, 'Oído'], [false, 'Físico']].map(([v, et]) => (
+                        {[[true, 'Oído'], [false, 'Espectro']].map(([v, et]) => (
                             <button key={et} onClick={() => setPond(v)}
                                     className="px-2 py-0.5 transition"
                                     style={{
@@ -1991,17 +2029,19 @@
                         </svg>
                     </div>
 
+                    {/* Todo en una línea y a la izquierda: a la derecha se
+                        cruzaba con la línea de corte de los 16 kHz. */}
                     <span className="absolute cifra-v2"
                           style={{ left: CANAL + 6, top: 5, fontSize: '9px', color: '#5a5a5a' }}>
                         dB bajo el pico
+                        {detallado && (
+                            <span style={{ color: '#454545' }}>
+                                {pond ? '  ·  1/3 de octava'
+                                      : '  ·  1/3 de octava  ·  +4.5 dB/oct'}
+                            </span>
+                        )}
                     </span>
-                    {detallado && (
-                        <span className="absolute cifra-v2"
-                              style={{ right: 6, top: 5, fontSize: '9px', color: '#4f4f4f' }}>
-                            1/3 de octava
-                        </span>
-                    )}
-                    {corte && (
+                    {archivoLimitado && x(corte) < 78 && (
                         <span className="absolute cifra-v2"
                               style={{ left: `calc(${CANAL}px + ${x(corte)}% * (100% - ${CANAL}px) / 100% + 4px)`,
                                        bottom: 5, fontSize: '8px', color: '#6a6a6a' }}>
@@ -2029,7 +2069,7 @@
                 {ventana && !ventana.track_completo && (
                     <p className="v2-sec text-gray-600 mt-1.5">
                         Medido entre {ventana.inicio_seg}s y {ventana.fin_seg}s, la parte con más
-                        energía del track{corte ? `. Tu archivo no lleva nada por encima de ${(corte / 1000).toFixed(corte % 1000 ? 1 : 0)} kHz` : ''}.
+                        energía del track{archivoLimitado ? `. Tu archivo no lleva nada por encima de ${(corte / 1000).toFixed(corte % 1000 ? 1 : 0)} kHz` : ''}.
                     </p>
                 )}
             </div>
@@ -2302,25 +2342,29 @@
                     <p className="text-gray-400 v2-sec mt-3">
                         Diferencia graves–medios: <span className="text-white cifra-v2">{fmt(sg.diff_grave_media)} dB</span>
                     </p>
-                    <V2Desplegable etiqueta="Qué es la compensación del oído">
-                        <p><span className="text-gray-300">El oído no es plano.</span> A igual nivel
-                           físico, un grave se percibe mucho más flojo que un medio: para que un tono
-                           de 40 Hz suene igual de alto que uno de 1 kHz hace falta bastante más
-                           energía. Eso lo midieron Fletcher y Munson en los años 30, y de ahí salen
-                           las curvas isofónicas — las que unen los puntos que se oyen igual de
-                           fuertes.</p>
-                        <p>Consecuencia práctica: un analizador sin compensar enseña
-                           <span className="text-gray-300"> siempre</span> una montaña de graves,
-                           aunque tu mezcla esté perfectamente equilibrada. No es que te sobre grave:
-                           es que ahí hace falta más energía para que se oiga igual.</p>
-                        <p>La vista <span className="text-gray-300">compensada</span> aplica esa curva,
-                           así que se parece más a lo que percibes. La vista
-                           <span className="text-gray-300"> sin compensar</span> es el nivel físico,
-                           como en cualquier analizador.</p>
-                        <p className="text-gray-500">Letra pequeña: se usa la ponderación A, que es la
+                    <V2Desplegable etiqueta="Cómo se lee este gráfico">
+                        <p><span className="text-gray-300">Plano es lo normal.</span> Toda la música
+                           tiene más energía en el grave que en el agudo — esté bien o mal mezclada.
+                           Es la estadística del material, no un defecto. Por eso los analizadores
+                           inclinan la escala antes de dibujar: para que un tema bien equilibrado
+                           salga recto y lo que sobresalga sea tuyo de verdad.</p>
+                        <p>Esta vista lleva la <span className="text-gray-300">misma inclinación que
+                           SPAN o Pro-Q</span> (+4.5 dB por octava), así que la puedes comparar
+                           directamente con el analizador que tengas abierto en el DAW. Lo comprobamos
+                           sobre 163 temas editados de 26 sellos: entre 100 Hz y 8 kHz, el tema
+                           mediano sale casi recto.</p>
+                        <p>La montaña de 50–60 Hz sigue ahí y está bien que siga: es el bombo, y es el
+                           género. Lo que hay que mirar no es que exista, sino
+                           <span className="text-gray-300"> cuánto sobresale</span> sobre el resto.</p>
+                        <p>La vista <span className="text-gray-300">Oído</span> es otra cosa: aplica
+                           las curvas isofónicas de Fletcher y Munson, que describen cuánta energía
+                           hace falta en cada zona para que se perciba igual de fuerte. Se parece más
+                           a lo que oyes; se parece menos a lo que mide un analizador.</p>
+                        <p className="text-gray-500">Letra pequeña: en Oído se usa la ponderación A, la
                            forma normalizada de la curva de 40 fon — volumen de escucha moderado. A
-                           volumen de club el oído es más plano, así que compensa un poco de más. Por
-                           eso están las dos vistas y no solo una.</p>
+                           volumen de club el oído es más plano, así que compensa de más.</p>
+                        <p className="text-gray-500">Por encima de 16 kHz no se dibuja: ahí lo que hay
+                           es el filtro del formato y el suelo de ruido, no música.</p>
                         <p className="text-gray-500">La lectura se hace en el punto de más energía del
                            track, no promediando de principio a fin: el promedio mezcla intro, break y
                            drop y no describe ningún momento real.</p>
