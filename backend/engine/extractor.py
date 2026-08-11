@@ -407,6 +407,10 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None,
         espectro_display[nombre_banda] = round(10.0 * float(np.log10(max(cuota, 1e-9))), 1)
         espectro_display_pond[nombre_banda] = round(10.0 * float(np.log10(max(cuota_p, 1e-9))), 1)
 
+    # Espectro fino en tercios de octava, para el gráfico
+    espectro_fino = _espectro_tercios_octava(
+        audio_path, drop_ini_seg, drop_fin_seg, _ponderacion_a_db)
+
     # Normalizar bandas a escala 0-100 para visualización
     bandas_db_list = list(espectro_bandas.values())
     db_min = min(bandas_db_list)
@@ -646,6 +650,10 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None,
         # normalizada de la curva de 40 fon de Fletcher-Munson).
         "espectro_display": espectro_display,
         "espectro_display_pond": espectro_display_pond,
+        # El mismo dato con resolución de analizador: tercios de octava, leídos
+        # del archivo a su frecuencia real (el análisis va a 22 kHz y ahí no
+        # existe nada por encima de 11 kHz).
+        "espectro_fino": espectro_fino,
         # Dónde se ha leído el espectro: la ventana de más energía, no el
         # track entero. Sin este dato el número no se puede interpretar.
         "espectro_ventana": {
@@ -723,6 +731,116 @@ def _analizar_formato(audio_path: str) -> dict:
         info_fmt["archivo_lossy"] = extension in _EXTENSIONES_LOSSY if extension else None
         info_fmt["archivo_metadata_source"] = "extension" if extension else "desconocida"
     return info_fmt
+
+
+# Centros ISO 266 de tercio de octava, 20 Hz – 20 kHz (31 bandas). Son los
+# nominales de catálogo, no los exactos: los exactos se calculan abajo con
+# 1000·10^(n/10) y solo se usan los nominales para rotular.
+_CENTROS_TERCIO = [20, 25, 31.5, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315,
+                   400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150,
+                   4000, 5000, 6300, 8000, 10000, 12500, 16000, 20000]
+_N_FFT_TERCIOS = 16384   # 2.7 Hz de resolución a 44.1 kHz: llega al grave
+
+
+def _espectro_tercios_octava(audio_path: str, ini_seg: float, fin_seg: float,
+                             ponderacion_fn) -> dict:
+    """Espectro en tercios de octava de la ventana del drop.
+
+    Se mide aparte del mel por dos razones, las dos de fondo:
+
+    1. **Ancho de banda.** El análisis general carga a 22 050 Hz, así que por
+       encima de 11 kHz no hay NADA que medir. Un gráfico con el eje hasta
+       20 kHz alimentado desde ahí está dibujando una interpolación, no una
+       medida. Aquí se lee el archivo a su frecuencia real.
+    2. **Resolución.** Seis bandas no son un espectro, son un resumen. El
+       tercio de octava es lo que usa cualquier analizador (y lo que define
+       IEC 61260) porque su ancho relativo constante se corresponde con cómo
+       oye el oído: en proporciones, no en hercios.
+
+    Devuelve dB de cuota de energía por banda — misma convención que
+    `espectro_display`, así las dos lecturas son comparables. Las bandas por
+    encima de Nyquist se devuelven como None: no se inventan.
+
+    Si algo falla (formato que soundfile no sabe posicionar, archivo raro), se
+    devuelve `{}` y la interfaz cae al espectro de 6 bandas. Nunca revienta el
+    análisis por un gráfico.
+    """
+    try:
+        info = sf.info(audio_path)
+        sr_nat = int(info.samplerate)
+        if sr_nat <= 0 or info.frames <= 0:
+            return {}
+        ini = max(0, int(ini_seg * sr_nat))
+        fin = min(int(info.frames), int(fin_seg * sr_nat))
+        # Sin una ventana mínima el promediado no tiene sentido estadístico.
+        if fin - ini < _N_FFT_TERCIOS:
+            ini, fin = 0, int(info.frames)
+        if fin - ini < 1024:
+            return {}
+        datos, _ = sf.read(audio_path, start=ini, stop=fin,
+                           always_2d=True, dtype="float64")
+    except Exception:
+        return {}
+
+    if datos.size == 0:
+        return {}
+    # Suma a mono: es un balance tonal, no una imagen estéreo.
+    x = datos.mean(axis=1)
+    if not np.isfinite(x).all():
+        x = np.nan_to_num(x)
+
+    n_fft = min(_N_FFT_TERCIOS, 1 << int(np.floor(np.log2(max(len(x), 2)))))
+    if n_fft < 1024:
+        return {}
+    salto = n_fft // 2
+    ventana = np.hanning(n_fft)
+    # Densidad espectral promediada (Welch): promediar POTENCIA entre tramas,
+    # no dB. Promediar dB daría peso desmedido a los huecos entre armónicos.
+    acumulado = np.zeros(n_fft // 2 + 1)
+    tramas = 0
+    for inicio in range(0, len(x) - n_fft + 1, salto):
+        espectro = np.fft.rfft(x[inicio:inicio + n_fft] * ventana)
+        acumulado += np.abs(espectro) ** 2
+        tramas += 1
+    if tramas == 0:
+        return {}
+    pot = acumulado / tramas
+    freqs = np.fft.rfftfreq(n_fft, 1.0 / sr_nat)
+    pond_lin = 10.0 ** (ponderacion_fn(np.maximum(freqs, 1.0)) / 10.0)
+    pot_pond = pot * pond_lin
+
+    nyquist = sr_nat / 2.0
+    total = float(pot.sum())
+    total_pond = float(pot_pond.sum())
+    # Silencio: sin energía, la "cuota" de cada banda sale igual a cero y el
+    # gráfico dibujaría una línea perfectamente plana — que se lee como un
+    # balance impecable. Mejor no dibujar nada.
+    if not np.isfinite(total) or total <= 0 or total_pond <= 0:
+        return {}
+
+    bandas = []
+    for i, nominal in enumerate(_CENTROS_TERCIO):
+        # Centro exacto por la definición de IEC 61260 en base 10.
+        centro = 1000.0 * (10.0 ** ((i - 17) / 10.0))
+        f_lo = centro / (10.0 ** 0.05)      # ±1/6 de octava en base 10
+        f_hi = centro * (10.0 ** 0.05)
+        if f_lo >= nyquist:
+            bandas.append({"hz": nominal, "db": None, "db_pond": None})
+            continue
+        mask = (freqs >= f_lo) & (freqs < f_hi)
+        if not mask.any():
+            # Banda más estrecha que la resolución de la FFT (pasa abajo del
+            # todo): se toma el bin más cercano en vez de dejar un hueco.
+            mask = np.zeros_like(freqs, dtype=bool)
+            mask[int(np.argmin(np.abs(freqs - centro)))] = True
+        bandas.append({
+            "hz": nominal,
+            "db": round(10.0 * float(np.log10(max(float(pot[mask].sum()) / total, 1e-12))), 1),
+            "db_pond": round(10.0 * float(np.log10(max(float(pot_pond[mask].sum()) / total_pond, 1e-12))), 1),
+        })
+
+    return {"bandas": bandas, "sr": sr_nat, "techo_hz": int(nyquist),
+            "resolucion": "tercio de octava"}
 
 
 def _analizar_harshness(mel_db: np.ndarray, mel_freqs: np.ndarray) -> dict:

@@ -273,7 +273,7 @@
     // /api/health. Si no coincide, este fichero viene de la caché del
     // navegador y puede estar dejando de enviar campos que el backend ya
     // espera — se recarga una sola vez y, si aun así no cuadra, se avisa.
-    const APP_VERSION = '0.5.84';
+    const APP_VERSION = '0.5.85';
 
     function comprobarVersionFrontend(onDesfase, onEntorno) {
         fetch(`${API_URL}/api/health`, { cache: 'no-store' })
@@ -1836,34 +1836,44 @@
      * pone siempre una banda arriba del todo y otra abajo, por pequeña que sea
      * la diferencia real, y fabrica montañas donde no las hay.
      */
-    function V2Espectro2({ display, displayPond, ventana, marcas }) {
+    function V2Espectro2({ display, displayPond, fino, ventana, marcas }) {
         const [pond, setPond] = useState(true);
-        const datos = pond ? displayPond : display;
-        if (!datos || Object.keys(datos).length === 0) return null;
 
-        const vals = V2_BANDAS.map(b => datos[b.k]).filter(v => typeof v === 'number');
-        if (!vals.length) return null;
-        const techo = Math.max(...vals);
-        // Rango fijo por vista: el oído deja de distinguir matices mucho antes
-        // de los 40 dB, y un rango fijo hace comparables dos análisis.
-        const RANGO = pond ? 24 : 42;
-        const PASO = pond ? 6 : 10;          // separación de las líneas de nivel
+        // Fuente preferente: el espectro en tercios de octava (31 bandas,
+        // medido a la frecuencia real del archivo). Si el análisis es viejo o
+        // el archivo no se pudo posicionar, se cae a las 6 bandas de siempre.
+        const detallado = !!(fino && fino.bandas && fino.bandas.length);
+        const datos = pond ? displayPond : display;
+        if (!detallado && (!datos || Object.keys(datos).length === 0)) return null;
+
+        const puntos = detallado
+            ? fino.bandas
+                  .map(b => ({ f: b.hz, v: pond ? b.db_pond : b.db }))
+                  .filter(p => typeof p.v === 'number')
+            : V2_BANDAS
+                  .map(b => ({ f: Math.sqrt(Math.max(b.f0, 20) * b.f1), v: datos[b.k] }))
+                  .filter(p => typeof p.v === 'number');
+        if (puntos.length < 2) return null;
+
+        const techo = Math.max(...puntos.map(p => p.v));
+        // Rango fijo: hace comparables dos análisis, y 36 dB cubre lo que se
+        // oye como diferencia de balance. Medido sobre material real, deja
+        // dentro casi todas las bandas y manda al suelo justo las que no
+        // tienen contenido — que es lo que hay que leer.
+        const RANGO = 36, PASO = 6;
         const suelo = techo - RANGO;
 
+        const F0 = 20, F1 = 20000;
         const lg = f => Math.log10(f);
-        const total = lg(20000) - lg(20);
-        const x = f => ((lg(f) - lg(20)) / total) * 100;
+        const span = lg(F1) - lg(F0);
+        const x = f => ((lg(Math.min(Math.max(f, F0), F1)) - lg(F0)) / span) * 100;
 
-        // Aire arriba: sin él la curva tocaba el borde y la caja parecía
-        // pequeña y apretada. El pico se queda al 14 % del alto.
-        const H = 100, AIRE = 14, SUELO_PX = 4;
-        const util = H - AIRE - SUELO_PX;
+        // Aire arriba para que la curva no toque el borde.
+        const H = 100, AIRE = 12, MARGEN_INF = 3;
+        const util = H - AIRE - MARGEN_INF;
         const y = v => AIRE + (1 - Math.max(0, Math.min(1, (v - suelo) / RANGO))) * util;
 
-        const pts = V2_BANDAS.map(b => {
-            const c = Math.sqrt(Math.max(b.f0, 20) * b.f1);   // centro geométrico
-            return [x(c), y(datos[b.k] == null ? suelo : datos[b.k])];
-        });
+        const pts = puntos.map(p => [x(p.f), y(p.v)]);
         const suave = (p) => {
             if (p.length < 2) return '';
             let d = `M ${p[0][0]},${p[0][1]}`;
@@ -1879,15 +1889,21 @@
         const curva = suave(pts);
         const relleno = `${curva} L ${pts[pts.length - 1][0]},${H} L ${pts[0][0]},${H} Z`;
 
-        // Escalones de nivel, en dB por debajo del pico. Antes solo se veía el
-        // rango total y no había forma de estimar cuánto separa una zona de otra.
         const escalones = [];
         for (let dB = 0; dB <= RANGO; dB += PASO) escalones.push(dB);
 
-        const ticks = [50, 200, 1000, 5000, 15000];
-        const etiquetaHz = (f, i) => (f >= 1000 ? `${f / 1000}k` : `${f}${i === 0 ? ' Hz' : ''}`);
+        // Rejilla de frecuencia con el patrón 1-2-3-5 por década, como cualquier
+        // analizador. Las finas dan sensación de escala; solo unas pocas se rotulan.
+        const finas = [30, 40, 60, 80, 150, 300, 400, 600, 800, 1500, 3000, 4000,
+                       6000, 8000, 15000];
+        const rotuladas = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
+        const etiquetaHz = f => (f >= 1000 ? `${f / 1000}k` : `${f}`);
+
+        // Techo real del archivo. Un MP3 a 128 kbps se corta sobre los 16 kHz y
+        // ahí no hay nada que medir: se marca en vez de dibujar una caída falsa.
+        const corte = detallado && fino.techo_hz && fino.techo_hz < F1 ? fino.techo_hz : null;
         const gid = pond ? 'v2espPond' : 'v2espRaw';
-        const CANAL = 38;   // px reservados para las etiquetas de nivel
+        const CANAL = 34;
 
         return (
             <div>
@@ -1912,18 +1928,18 @@
                 </div>
 
                 <div className="relative rounded-lg border border-[#2f2f2f] overflow-hidden"
-                     style={{ background: 'linear-gradient(180deg,#1e1e1e,#171717)', height: 140 }}>
+                     style={{ background: 'linear-gradient(180deg,#1d1d1d,#151515)', height: 168 }}>
                     {/* Las etiquetas de nivel van en HTML, no dentro del SVG:
                         el SVG se estira con preserveAspectRatio="none" y el
                         texto saldría deformado. */}
-                    <div className="absolute left-0 top-0 bottom-0"
+                    <div className="absolute left-0 top-0 bottom-0 z-10"
                          style={{ width: CANAL, borderRight: '1px solid #262626' }}>
                         {escalones.map(dB => (
                             <span key={dB} className="absolute cifra-v2"
                                   style={{
                                       right: 5, top: `${AIRE + (dB / RANGO) * util}%`,
                                       transform: 'translateY(-50%)',
-                                      fontSize: '9px', color: dB === 0 ? '#8a8a8a' : '#5a5a5a',
+                                      fontSize: '9px', color: dB === 0 ? '#8a8a8a' : '#565656',
                                   }}>
                                 {dB === 0 ? '0' : `−${dB}`}
                             </span>
@@ -1935,24 +1951,38 @@
                              style={{ width: '100%', height: '100%', display: 'block' }}>
                             <defs>
                                 <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor="#6D10FF" stopOpacity="0.45" />
-                                    <stop offset="100%" stopColor="#6D10FF" stopOpacity="0.03" />
+                                    <stop offset="0%" stopColor="#8B5CFF" stopOpacity="0.5" />
+                                    <stop offset="60%" stopColor="#6D10FF" stopOpacity="0.18" />
+                                    <stop offset="100%" stopColor="#6D10FF" stopOpacity="0.02" />
                                 </linearGradient>
                             </defs>
+                            {finas.map(f => (
+                                <line key={f} x1={x(f)} x2={x(f)} y1="0" y2={H}
+                                      stroke="#202020" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+                            ))}
+                            {rotuladas.map(f => (
+                                <line key={f} x1={x(f)} x2={x(f)} y1="0" y2={H}
+                                      stroke="#282828" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+                            ))}
                             {escalones.map(dB => (
                                 <line key={dB} x1="0" x2="100"
                                       y1={AIRE + (dB / RANGO) * util} y2={AIRE + (dB / RANGO) * util}
-                                      stroke={dB === 0 ? '#3a3a3a' : '#272727'} strokeWidth="1"
+                                      stroke={dB === 0 ? '#3d3d3d' : '#242424'} strokeWidth="1"
                                       vectorEffect="non-scaling-stroke"
-                                      strokeDasharray={dB === 0 ? '' : '3 4'} />
+                                      strokeDasharray={dB === 0 ? '' : '2 5'} />
                             ))}
-                            {ticks.map(f => (
-                                <line key={f} x1={x(f)} x2={x(f)} y1="0" y2={H}
-                                      stroke="#242424" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-                            ))}
+                            {corte && (
+                                <rect x={x(corte)} y="0" width={100 - x(corte)} height={H}
+                                      fill="#0d0d0d" fillOpacity="0.72" />
+                            )}
                             <path d={relleno} fill={`url(#${gid})`} />
-                            <path d={curva} fill="none" stroke="#25F464" strokeWidth="2"
+                            <path d={curva} fill="none" stroke="#25F464" strokeWidth="1.75"
                                   vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
+                            {corte && (
+                                <line x1={x(corte)} x2={x(corte)} y1="0" y2={H}
+                                      stroke="#4a4a4a" strokeWidth="1"
+                                      vectorEffect="non-scaling-stroke" strokeDasharray="3 3" />
+                            )}
                             {marcas && marcas.filter(m => m && m.f > 20).map((m, k) => (
                                 <line key={k} x1={x(m.f)} x2={x(m.f)} y1="0" y2={H}
                                       stroke={m.color || V2_COLOR.aviso} strokeWidth="1.5"
@@ -1965,15 +1995,30 @@
                           style={{ left: CANAL + 6, top: 5, fontSize: '9px', color: '#5a5a5a' }}>
                         dB bajo el pico
                     </span>
+                    {detallado && (
+                        <span className="absolute cifra-v2"
+                              style={{ right: 6, top: 5, fontSize: '9px', color: '#4f4f4f' }}>
+                            1/3 de octava
+                        </span>
+                    )}
+                    {corte && (
+                        <span className="absolute cifra-v2"
+                              style={{ left: `calc(${CANAL}px + ${x(corte)}% * (100% - ${CANAL}px) / 100% + 4px)`,
+                                       bottom: 5, fontSize: '8px', color: '#6a6a6a' }}>
+                            sin datos
+                        </span>
+                    )}
                 </div>
 
                 <div className="relative h-3.5 mt-1" style={{ marginLeft: CANAL }}>
-                    {ticks.map((f, i) => (
+                    {rotuladas.map((f, i) => (
                         <span key={f} className="absolute cifra-v2"
                               style={{ left: `${x(f)}%`,
-                                       transform: i === ticks.length - 1 ? 'translateX(-100%)' : 'translateX(-50%)',
+                                       transform: i === 0 ? 'translateX(0)'
+                                                 : i === rotuladas.length - 1 ? 'translateX(-100%)'
+                                                 : 'translateX(-50%)',
                                        fontSize: '9px', color: '#6a6a6a' }}>
-                            {etiquetaHz(f, i)}
+                            {etiquetaHz(f)}
                         </span>
                     ))}
                 </div>
@@ -1984,7 +2029,7 @@
                 {ventana && !ventana.track_completo && (
                     <p className="v2-sec text-gray-600 mt-1.5">
                         Medido entre {ventana.inicio_seg}s y {ventana.fin_seg}s, la parte con más
-                        energía del track.
+                        energía del track{corte ? `. Tu archivo no lleva nada por encima de ${(corte / 1000).toFixed(corte % 1000 ? 1 : 0)} kHz` : ''}.
                     </p>
                 )}
             </div>
@@ -2238,6 +2283,7 @@
         const disp = d.espectro_display || {};
         const dispP = d.espectro_display_pond || {};
         const vent = d.espectro_ventana || {};
+        const fino = d.espectro_fino || {};
         const tonoBalance = v2TonoEstado('balance_grave', d.balance_grave);
         const tonoMono = v2TonoEstado('mono', m.nivel_compatibilidad);
         const tonoDens = v2TonoEstado('densidad', d.densidad);
@@ -2250,8 +2296,8 @@
                     escala logarítmica, que es como se oye. */}
                 <V2Tarjeta titulo="Balance espectral" tono={tonoBalance}
                            datos={<V2Dato etiqueta="Graves" valor={d.balance_grave || '—'} tono={tonoBalance} />}>
-                    {Object.keys(disp).length > 0
-                        ? <V2Espectro2 display={disp} displayPond={dispP} ventana={vent} />
+                    {(Object.keys(disp).length > 0 || (fino.bandas || []).length > 0)
+                        ? <V2Espectro2 display={disp} displayPond={dispP} fino={fino} ventana={vent} />
                         : <V2Espectro grave={sg.db_grave} media={sg.db_media} aguda={sg.db_aguda} />}
                     <p className="text-gray-400 v2-sec mt-3">
                         Diferencia graves–medios: <span className="text-white cifra-v2">{fmt(sg.diff_grave_media)} dB</span>
@@ -2340,7 +2386,7 @@
                     {/* La barra solo cuando hay pico que señalar: sin aspereza
                         repetiría la de arriba sin añadir nada. */}
                     {h.tiene_harshness && h.peak_freq_hz > 0 && Object.keys(disp).length > 0 && (
-                        <V2Espectro2 display={disp} displayPond={dispP} ventana={vent}
+                        <V2Espectro2 display={disp} displayPond={dispP} fino={fino} ventana={vent}
                             marcas={[{ f: h.peak_freq_hz, color: V2_COLOR.aviso,
                                        texto: `Pico áspero en ${h.peak_freq_hz} Hz${h.zona_problema ? ` · ${h.zona_problema}` : ''}` }]} />
                     )}
