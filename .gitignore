@@ -12,3 +12,6 @@ sesiones.jsonl
 TrackDiag - Feedback Requests - Hoja 1.csv
 analyze_*.py
 feedback-real-links.txt
+
+# Caché de backend/scripts/previsualizar.py (análisis locales)
+backend/.cache_previsualizacion/
