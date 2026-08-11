@@ -1,6 +1,17 @@
 {
   "entries": [
     {
+      "version": "0.5.85",
+      "date": "2026-08-11",
+      "title": "El espectro, con resolución de analizador",
+      "changes": [
+        "El gráfico del balance espectral pasa de 6 bandas a 31, en tercios de octava — la resolución que usa cualquier analizador (IEC 61260) y la que se corresponde con cómo oye el oído: en proporciones, no en hercios.",
+        "Y se mide del archivo a su frecuencia real. El análisis general trabaja a 22 kHz, así que por encima de 11 kHz no había nada: la mitad derecha del gráfico era una interpolación entre dos puntos, no una medida.",
+        "Si tu archivo no llega a 20 kHz (un MP3 comprimido se corta antes), la zona sin datos sale sombreada en vez de dibujar una caída que no es tuya, sino del códec.",
+        "La lectura se sigue haciendo en el drop, y las dos vistas —compensada al oído y nivel físico— siguen igual."
+      ]
+    },
+    {
       "version": "0.5.84",
       "date": "2026-08-11",
       "title": "El espectro, con escala de niveles",
