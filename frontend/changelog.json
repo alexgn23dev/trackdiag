@@ -1,6 +1,17 @@
 {
   "entries": [
     {
+      "version": "0.5.82",
+      "date": "2026-08-11",
+      "title": "El espectro, medido en el drop y compensado al oído",
+      "changes": [
+        "El balance espectral ya no se promedia de principio a fin: se mide en el punto de más energía del track, que es donde el arreglo está completo. Promediar mezclaba intro, break y drop y no describía ningún momento real.",
+        "Y se puede ver compensado con las curvas isofónicas de Fletcher-Munson. El oído no es plano: a igual nivel físico un grave se percibe más flojo, así que un analizador crudo siempre enseña una montaña de graves aunque tu mezcla esté bien. Con un botón cambias entre la vista compensada y la del nivel físico.",
+        "Si tu track sale listo para sello, la sugerencia de buscar sello en Relesit aparece ahora arriba del todo.",
+        "La pregunta de si acertamos vuelve a la barra de abajo, como en la vista clásica."
+      ]
+    },
+    {
       "version": "0.5.81",
       "date": "2026-08-11",
       "title": "La pestaña de Mezcla, más visual",

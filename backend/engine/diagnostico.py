@@ -125,6 +125,11 @@ def generar_diagnostico(senales: dict, contexto: dict) -> dict:
             "espectro_bandas": senales.get("espectro_bandas", {}),
             "espectro_bandas_norm": senales.get("espectro_bandas_norm", {}),
             "densidad_espectral": senales.get("densidad_espectral"),
+            # Para enseñar: cuota de energía por banda en dB, leída en el drop.
+            # `_pond` la pasa por la curva del oído. Ver extractor.py.
+            "espectro_display": senales.get("espectro_display", {}),
+            "espectro_display_pond": senales.get("espectro_display_pond", {}),
+            "espectro_ventana": senales.get("espectro_ventana", {}),
             "desarrollo_temporal": senales["tiene_desarrollo"],
             "n_bloques": senales["n_bloques"],
             "distribucion": {

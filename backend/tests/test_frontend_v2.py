@@ -92,14 +92,39 @@ class TestNoDuplicaLoQueYaFunciona(unittest.TestCase):
     def setUp(self):
         self.html = fuente()
         i = self.html.find("if (v2Activo) {")
-        self.v2 = self.html[i:i + 12000]
+        # Hasta el final real de la rama, no un número fijo: la v2 ha crecido y
+        # un corte corto dejaba fuera lo que hay al final (la barra flotante).
+        j = self.html.find("\n        return (\n            <div className=\"min-h-screen py-12", i)
+        self.v2 = self.html[i:j if j > i else i + 20000]
 
     def test_el_widget_de_calibracion_es_el_mismo(self):
-        """Se extrajo a una variable para que lo usen las dos vistas."""
+        """Ambos se extrajeron a variables para que los usen las dos vistas.
+
+        La v2 NO lo pinta en tarjeta: Alex lo prefiere como en la clásica, en
+        la barra flotante de abajo. Pero la barra es el mismo componente."""
         self.assertIn("const bloqueFeedback = (", self.html)
-        self.assertIn("{bloqueFeedback}", self.v2)
-        # Y la clásica también lo usa
-        self.assertEqual(self.html.count("{bloqueFeedback}"), 2)
+        self.assertIn("const barraFeedback = (", self.html)
+        self.assertIn("{barraFeedback}", self.v2)
+        # La clásica pinta los dos; la v2 solo la barra.
+        self.assertEqual(self.html.count("{bloqueFeedback}"), 1)
+        self.assertEqual(self.html.count("{barraFeedback}"), 2)
+
+    def test_el_feedback_no_va_en_tarjeta_en_la_v2(self):
+        """Decisión de Alex tras probarlo: la tarjeta estorbaba."""
+        self.assertIn("feedback: null", self.v2)
+
+    def test_relesit_va_arriba_cuando_el_track_esta_fino(self):
+        """Si no hay nada urgente que arreglar, lo principal es "búscale
+        sello", no el plan de acción. Por eso sube sobre las pestañas."""
+        self.assertIn("const tarjetaRelesit", self.v2)
+        i = self.v2.find("{tarjetaRelesit}")
+        j = self.v2.find("V2_TABS.map")
+        self.assertGreater(i, 0, "no se pinta la tarjeta de Relesit")
+        self.assertLess(i, j, "Relesit tiene que ir ANTES de las pestañas")
+
+    def test_el_cierre_es_el_mismo_que_la_clasica(self):
+        """Para que el footer global del sitio quede igual en las dos."""
+        self.assertIn("Mentotrack no almacena el archivo de tu canción", self.v2)
 
     def test_las_tarjetas_de_derivacion_son_los_componentes_reales(self):
         self.assertIn("<RelesitCTA", self.v2)
