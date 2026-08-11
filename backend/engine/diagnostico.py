@@ -117,6 +117,14 @@ def generar_diagnostico(senales: dict, contexto: dict) -> dict:
             "contraste": senales["contraste_energetico"],
             "balance_grave": senales["balance_grave"],
             "densidad": senales["densidad_global"],
+            # Espectro en 6 bandas. El extractor ya lo calculaba; hasta la
+            # v0.5.81 no viajaba al informe y la interfaz solo podía pintar
+            # tres barras (graves/medios/agudos) sin eje de frecuencia.
+            # `_norm` es el nivel relativo dentro de ESTE track, 0-100: sirve
+            # para colorear sin inventarse un objetivo por género.
+            "espectro_bandas": senales.get("espectro_bandas", {}),
+            "espectro_bandas_norm": senales.get("espectro_bandas_norm", {}),
+            "densidad_espectral": senales.get("densidad_espectral"),
             "desarrollo_temporal": senales["tiene_desarrollo"],
             "n_bloques": senales["n_bloques"],
             "distribucion": {

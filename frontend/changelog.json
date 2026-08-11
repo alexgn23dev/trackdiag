@@ -1,6 +1,17 @@
 {
   "entries": [
     {
+      "version": "0.5.81",
+      "date": "2026-08-11",
+      "title": "La pestaña de Mezcla, más visual",
+      "changes": [
+        "En la vista nueva (?v2=1), el balance espectral pasa a ser una barra con el eje de frecuencia real, de 20 Hz a 20 kHz: la altura es cuánta energía tiene cada zona y el color va de verde a rojo. De un vistazo ves dónde está cargado tu track.",
+        "La densidad se ve ahora en una escala de cuatro pasos (baja, media, alta, saturada) en vez de una palabra suelta.",
+        "Los estados que están bien salen en verde y los que piden atención en amarillo, como ya pasaba en la pestaña de Máster.",
+        "Arreglado que los títulos de los tutoriales y los botones de la pregunta final se vieran encogidos."
+      ]
+    },
+    {
       "version": "0.5.80",
       "date": "2026-08-10",
       "title": "Nueva vista del diagnóstico (en pruebas)",
