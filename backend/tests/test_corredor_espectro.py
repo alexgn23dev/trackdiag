@@ -43,13 +43,13 @@ def fuente():
 
 
 def bandas():
-    """Las filas de V2_CORREDOR, parseadas."""
+    """Las filas de V2_CORREDOR: (hz, p5, p25, p50, p75, p95)."""
     h = fuente()
     i = h.index("const V2_CORREDOR")
     j = h.index("];", i)
-    pat = r"\{ hz: ([\d.]+), lo: (-?[\d.]+), med: (-?[\d.]+), hi: (-?[\d.]+) \}"
-    return [(float(a), float(b), float(c), float(d))
-            for a, b, c, d in re.findall(pat, h[i:j])]
+    pat = (r"\{ hz: ([\d.]+), lo: (-?[\d.]+), lo2: (-?[\d.]+), "
+           r"med: (-?[\d.]+), hi2: (-?[\d.]+), hi: (-?[\d.]+) \}")
+    return [tuple(float(v) for v in m) for m in re.findall(pat, h[i:j])]
 
 
 class TestElDatoEstaBienFormado(unittest.TestCase):
@@ -60,9 +60,19 @@ class TestElDatoEstaBienFormado(unittest.TestCase):
         self.assertEqual([x[0] for x in self.b], CENTROS_ESPERADOS)
 
     def test_los_percentiles_estan_ordenados(self):
-        for hz, lo, med, hi in self.b:
-            self.assertLess(lo, med, f"en {hz} Hz el p5 no está por debajo de la mediana")
-            self.assertLess(med, hi, f"en {hz} Hz la mediana no está por debajo del p95")
+        """Los cinco, en orden. Si se cruzaran, el corredor se dibujaría del
+        revés y nadie lo notaría a simple vista."""
+        for hz, p5, p25, p50, p75, p95 in self.b:
+            self.assertLess(p5, p25, f"en {hz} Hz")
+            self.assertLess(p25, p50, f"en {hz} Hz")
+            self.assertLess(p50, p75, f"en {hz} Hz")
+            self.assertLess(p75, p95, f"en {hz} Hz")
+
+    def test_la_banda_interior_cabe_dentro_de_la_exterior(self):
+        """El 25-75 se dibuja encima del 5-95 para dar profundidad. Si fuera
+        más ancha en alguna banda, el efecto se vería como un escalón."""
+        for hz, p5, p25, p50, p75, p95 in self.b:
+            self.assertLess(p75 - p25, p95 - p5, f"en {hz} Hz")
 
     def test_se_corta_en_12_5_khz_y_no_en_16(self):
         """No es un descuido. El corpus son MP3: en 16 kHz el corredor se
@@ -73,7 +83,7 @@ class TestElDatoEstaBienFormado(unittest.TestCase):
 
     def test_ninguna_banda_es_absurdamente_ancha(self):
         """Un corredor de 30 dB no informa de nada: cabe todo dentro."""
-        for hz, lo, med, hi in self.b:
+        for hz, lo, _p25, med, _p75, hi in self.b:
             if hz >= 50:     # por debajo de 50 Hz la dispersión real es enorme
                 self.assertLess(hi - lo, 22.0,
                                 f"el corredor mide {hi - lo:.1f} dB en {hz} Hz")
@@ -86,19 +96,19 @@ class TestElDatoEstaBienFormado(unittest.TestCase):
 
         Con el 0 en el cuerpo del tema (200 Hz - 2 kHz) hay margen por arriba en
         toda la zona grave, que es lo que vigila este test."""
-        por_hz = {x[0]: (x[2], x[3]) for x in self.b}
+        por_hz = {x[0]: (x[3], x[5]) for x in self.b}
         for hz in (40, 50, 63, 80, 100):
             med, hi = por_hz[hz]
             self.assertGreater(hi - med, 3.0,
                                f"en {hz} Hz solo hay {hi - med:.1f} dB de margen "
                                f"sobre la mediana: el exceso de grave sería "
                                f"indetectable")
-        cuerpo = [x[2] for x in self.b if 200 <= x[0] <= 2000]
+        cuerpo = [x[3] for x in self.b if 200 <= x[0] <= 2000]
         self.assertLess(abs(sum(cuerpo) / len(cuerpo)), 2.5,
                         "el 0 de la escala no está donde dice estar")
 
     def test_el_pico_del_corredor_esta_en_el_grave(self):
-        por_hz = {x[0]: x[2] for x in self.b}
+        por_hz = {x[0]: x[3] for x in self.b}
         cima = max(por_hz, key=lambda k: por_hz[k])
         self.assertIn(cima, (40, 50, 63, 80), f"la mediana pica en {cima} Hz")
 
@@ -173,7 +183,7 @@ class TestElGraficoYElVeredictoNoPuedenDivergir(unittest.TestCase):
         i = self.h.index("function V2TabMezcla(")
         j = self.h.index("function V2TabMaster(", i)
         cuerpo = self.h[i:j]
-        self.assertIn("veredicto.equilibrado ? 'ok' : 'aviso'", cuerpo)
+        self.assertIn("veredicto.dentro ? 'ok' : 'aviso'", cuerpo)
         # pero la vieja sigue de respaldo por si no hay espectro fino
         self.assertIn("v2TonoEstado('balance_grave'", cuerpo)
 
@@ -208,9 +218,12 @@ class TestLaReglaEsHonesta(unittest.TestCase):
         temas de usuario, eso puede leerse como "tu tema está bien" — que no es
         lo que se ha medido. La contrapartida obligatoria es que el límite esté
         escrito en la pantalla, no solo en un comentario del código."""
-        self.assertIn("no que tu tema esté bien", self.h)
-        self.assertIn("87 % de los discos", self.h)
+        self.assertIn("no si tu tema está bien", self.h)
+        self.assertIn("87 %", self.h)
         self.assertIn("79 % de los temas", self.h)
+        # y el sesgo del corpus, que es lo que le importa a quien sube un
+        # género que no está representado
+        self.assertIn("techno duro, trance ni drum", self.h)
 
     def test_el_veredicto_ignora_lo_que_esta_por_debajo_de_50_hz(self):
         """Ahí el corredor mide entre 21 y 28 dB: cabe casi cualquier cosa, y
@@ -242,8 +255,25 @@ class TestLaReglaEsHonesta(unittest.TestCase):
         self.assertIn("const corr = pond ? null :", cuerpo)
 
     def test_el_texto_al_usuario_dice_con_que_se_compara(self):
-        """'Equilibrado' sin decir respecto a qué no significa nada."""
-        self.assertIn("327 temas ya editados de 26 sellos", self.h)
+        """Decir "dentro del rango" sin decir de qué rango no significa nada.
+        Y tiene que decir QUÉ son: previews de catálogo, no másters, y con el
+        sesgo declarado — es la advertencia que necesita quien sube un género
+        que no está en el corpus."""
+        self.assertIn("327 previews de catálogo de 26 sellos", self.h)
+        self.assertIn("sobre todo progressive y house", self.h)
+
+    def test_el_veredicto_describe_en_vez_de_prescribir(self):
+        """"Sobra en los graves" implica que hay que bajarlos. Lo único medido
+        es que están por encima del 95 % de una colección concreta, y con 8
+        puntos de separación entre discos publicados y temas de usuario eso no
+        autoriza a recetar nada."""
+        self.assertNotIn("'sobra' : 'falta'", self.h)
+        self.assertIn("por encima del 95 %", self.h)
+        self.assertIn("por debajo del 5 %", self.h)
+        # y la insignia no dicta: dice dónde cae
+        i = self.h.index("function V2TabMezcla(")
+        j = self.h.index("function V2TabMaster(", i)
+        self.assertIn("veredicto.dentro ? 'Dentro' : 'Fuera'", self.h[i:j])
 
 
 class TestElDibujoNoSeDeforma(unittest.TestCase):

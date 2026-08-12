@@ -71,7 +71,10 @@ TILT = 1.5          # la misma inclinación de dibujo que usa el frontend
 CUERPO = (200.0, 2000.0)   # la referencia de nivel, igual que en el gráfico
 TOPE_CORREDOR = 12500  # ver §"límites" arriba
 VENTANA_SEG = 10.0
-PCT_LO, PCT_HI = 5, 95
+PCT_LO, PCT_HI = 5, 95     # el rango habitual, y el que juzga el veredicto
+# Además se publica el 25-75: la mitad central de los discos. Solo se dibuja —
+# da profundidad al corredor con datos reales en vez de con un degradado
+# inventado — y no interviene en el veredicto.
 
 
 def sin_ponderar(f):
@@ -136,7 +139,9 @@ def main():
     S = T - np.nanmean(T[:, cuerpo], axis=1, keepdims=True)
 
     lo = np.nanpercentile(S, PCT_LO, axis=0)
+    lo2 = np.nanpercentile(S, 25, axis=0)
     med = np.nanpercentile(S, 50, axis=0)
+    hi2 = np.nanpercentile(S, 75, axis=0)
     hi = np.nanpercentile(S, PCT_HI, axis=0)
 
     dentro = hz <= TOPE_CORREDOR
@@ -146,8 +151,8 @@ def main():
     print("    const V2_CORREDOR = [")
     for i, h in enumerate(hz):
         if dentro[i]:
-            print(f"        {{ hz: {h:g}, lo: {lo[i]:.1f}, med: {med[i]:.1f}, "
-                  f"hi: {hi[i]:.1f} }},")
+            print(f"        {{ hz: {h:g}, lo: {lo[i]:.1f}, lo2: {lo2[i]:.1f}, "
+                  f"med: {med[i]:.1f}, hi2: {hi2[i]:.1f}, hi: {hi[i]:.1f} }},")
     print("    ];")
 
     # Y el reparto que produce la regla, que es lo que hay que vigilar.

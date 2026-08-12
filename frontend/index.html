@@ -216,17 +216,18 @@
            resto de la web. */
         .v2-cuerpo { font-size: 13px; line-height: 1.55; }
         .v2-sec { font-size: 11px; line-height: 1.5; }
-        /* Entrada del espectro: la curva se traza de izquierda a derecha y el
-           corredor entra con un fundido. Una sola vez, al montar. */
-        .v2-curva {
-            stroke-dasharray: 1200; stroke-dashoffset: 1200;
-            animation: v2Trazo 620ms cubic-bezier(.22,.61,.36,1) forwards;
-        }
+        /* Entrada del espectro: fundido, primero el corredor y después la curva.
+           Se intentó trazar la curva de izquierda a derecha con stroke-dasharray
+           y se descartó: combinado con vector-effect="non-scaling-stroke" el
+           guion se mide en píxeles de pantalla, así que en un gráfico ancho la
+           curva se cortaba sobre los 5 kHz, y con pathLength="1" salía a
+           trazos. Un fallo invisible en pantallas estrechas no compensa una
+           animación que además es opcional. */
         .v2-corredor { animation: v2Fundido 520ms ease-out both; }
-        @keyframes v2Trazo   { to { stroke-dashoffset: 0; } }
+        .v2-curva    { animation: v2Fundido 460ms ease-out 140ms both; }
         @keyframes v2Fundido { from { opacity: 0; } to { opacity: 1; } }
         @media (prefers-reduced-motion: reduce) {
-            .v2-curva, .v2-corredor { animation: none; stroke-dashoffset: 0; opacity: 1; }
+            .v2-curva, .v2-corredor { animation: none; opacity: 1; }
         }
 
         /* El widget de calibración se reutiliza tal cual dentro de una tarjeta
@@ -1873,49 +1874,60 @@
     // 0.0). Anclando al cuerpo hay 6.6 dB de margen, y el número se explica
     // solo: "tu grave está X dB por encima del cuerpo del tema".
     //
-    // Se corta en 12.5 kHz a propósito: el corpus son MP3 y por encima de ahí el
-    // corredor describe al compresor, no a los sellos (en 16 kHz se ensancha a
-    // 20.7 dB y en 20 kHz a 64).
+    // Se corta en 12.5 kHz a propósito, pero NO porque el corpus esté cortado
+    // ahí — auditado: cada archivo corta donde le deja su encoder, entre 16 y
+    // 20 kHz (mediana 18.3, p10 16.0, y 27 de 327 por debajo de 16). El motivo
+    // es esa misma heterogeneidad: arriba el corredor mide la variedad de
+    // encoders, no la de la música, y por eso se ensancha a 20.7 dB en 16 kHz
+    // y a 64 en 20 kHz.
+    //
+    // Cinco percentiles y no dos: lo/hi son el 5-95 (el rango habitual, 11.1 dB
+    // de ancho mediano) y lo2/hi2 el 25-75 (donde cae la MITAD de los discos,
+    // 4.4 dB). Se dibujan como dos bandas anidadas, así que la densidad del
+    // corredor codifica lo típico que es cada zona en vez de ser un degradado
+    // decorativo. El veredicto sigue usando solo el 5-95.
     const V2_CORREDOR = [
-        { hz: 20, lo: -33.3, med: -26.3, hi: -12.0 },
-        { hz: 25, lo: -30.7, med: -22.9, hi: -5.9 },
-        { hz: 31.5, lo: -23.3, med: -11.5, hi: 4.7 },
-        { hz: 40, lo: -13.2, med: 2.3, hi: 11.8 },
-        { hz: 50, lo: 1.1, med: 10.2, hi: 16.9 },
-        { hz: 63, lo: 2.6, med: 8.9, hi: 15.0 },
-        { hz: 80, lo: 1.3, med: 6.7, hi: 12.7 },
-        { hz: 100, lo: -1.2, med: 4.8, hi: 10.9 },
-        { hz: 125, lo: -2.6, med: 3.5, hi: 9.4 },
-        { hz: 160, lo: -2.7, med: 2.1, hi: 8.4 },
-        { hz: 200, lo: -2.7, med: 1.4, hi: 7.0 },
-        { hz: 250, lo: -4.4, med: 0.7, hi: 4.7 },
-        { hz: 315, lo: -3.6, med: 0.7, hi: 5.0 },
-        { hz: 400, lo: -3.4, med: 0.4, hi: 4.9 },
-        { hz: 500, lo: -3.5, med: -0.2, hi: 3.2 },
-        { hz: 630, lo: -4.1, med: -0.2, hi: 3.9 },
-        { hz: 800, lo: -4.4, med: -0.2, hi: 3.9 },
-        { hz: 1000, lo: -3.8, med: -0.5, hi: 2.6 },
-        { hz: 1250, lo: -3.9, med: -0.5, hi: 2.7 },
-        { hz: 1600, lo: -4.4, med: -0.8, hi: 2.6 },
-        { hz: 2000, lo: -4.8, med: -1.0, hi: 2.4 },
-        { hz: 2500, lo: -5.9, med: -1.0, hi: 3.0 },
-        { hz: 3150, lo: -5.6, med: -0.7, hi: 3.6 },
-        { hz: 4000, lo: -5.7, med: 0.5, hi: 5.0 },
-        { hz: 5000, lo: -6.0, med: 1.7, hi: 6.6 },
-        { hz: 6300, lo: -5.0, med: 3.2, hi: 8.3 },
-        { hz: 8000, lo: -5.3, med: 3.9, hi: 9.2 },
-        { hz: 10000, lo: -7.4, med: 3.5, hi: 8.8 },
-        { hz: 12500, lo: -10.2, med: 1.7, hi: 7.6 },
+        { hz: 20, lo: -33.3, lo2: -29.3, med: -26.3, hi2: -22.2, hi: -12.0 },
+        { hz: 25, lo: -30.7, lo2: -26.1, med: -22.9, hi2: -18.0, hi: -5.9 },
+        { hz: 31.5, lo: -23.3, lo2: -15.7, med: -11.5, hi2: -4.5, hi: 4.7 },
+        { hz: 40, lo: -13.2, lo2: -2.5, med: 2.3, hi2: 6.8, hi: 11.8 },
+        { hz: 50, lo: 1.1, lo2: 7.6, med: 10.2, hi2: 12.6, hi: 16.9 },
+        { hz: 63, lo: 2.6, lo2: 6.6, med: 8.9, hi2: 11.2, hi: 15.0 },
+        { hz: 80, lo: 1.3, lo2: 4.2, med: 6.7, hi2: 9.2, hi: 12.7 },
+        { hz: 100, lo: -1.2, lo2: 2.5, med: 4.8, hi2: 7.3, hi: 10.9 },
+        { hz: 125, lo: -2.6, lo2: 1.0, med: 3.5, hi2: 6.0, hi: 9.4 },
+        { hz: 160, lo: -2.7, lo2: 0.3, med: 2.1, hi2: 4.3, hi: 8.4 },
+        { hz: 200, lo: -2.7, lo2: -0.6, med: 1.4, hi2: 3.6, hi: 7.0 },
+        { hz: 250, lo: -4.4, lo2: -1.0, med: 0.7, hi2: 2.4, hi: 4.7 },
+        { hz: 315, lo: -3.6, lo2: -1.0, med: 0.7, hi2: 2.2, hi: 5.0 },
+        { hz: 400, lo: -3.4, lo2: -1.1, med: 0.4, hi2: 2.1, hi: 4.9 },
+        { hz: 500, lo: -3.5, lo2: -1.5, med: -0.2, hi2: 1.1, hi: 3.2 },
+        { hz: 630, lo: -4.1, lo2: -1.4, med: -0.2, hi2: 1.5, hi: 3.9 },
+        { hz: 800, lo: -4.4, lo2: -1.7, med: -0.2, hi2: 1.1, hi: 3.9 },
+        { hz: 1000, lo: -3.8, lo2: -1.8, med: -0.5, hi2: 0.8, hi: 2.6 },
+        { hz: 1250, lo: -3.9, lo2: -1.9, med: -0.5, hi2: 0.7, hi: 2.7 },
+        { hz: 1600, lo: -4.4, lo2: -2.0, med: -0.8, hi2: 0.6, hi: 2.6 },
+        { hz: 2000, lo: -4.8, lo2: -2.5, med: -1.0, hi2: 0.2, hi: 2.4 },
+        { hz: 2500, lo: -5.9, lo2: -3.0, med: -1.0, hi2: 0.4, hi: 3.0 },
+        { hz: 3150, lo: -5.6, lo2: -2.8, med: -0.7, hi2: 1.0, hi: 3.6 },
+        { hz: 4000, lo: -5.7, lo2: -2.2, med: 0.5, hi2: 2.3, hi: 5.0 },
+        { hz: 5000, lo: -6.0, lo2: -0.8, med: 1.7, hi2: 3.7, hi: 6.6 },
+        { hz: 6300, lo: -5.0, lo2: 0.6, med: 3.2, hi2: 5.4, hi: 8.3 },
+        { hz: 8000, lo: -5.3, lo2: 1.1, med: 3.9, hi2: 6.4, hi: 9.2 },
+        { hz: 10000, lo: -7.4, lo2: 0.7, med: 3.5, hi2: 5.9, hi: 8.8 },
+        { hz: 12500, lo: -10.2, lo2: -1.7, med: 1.7, hi2: 4.3, hi: 7.6 },
     ];
 
-    /** Zonas con nombre, para poder decir DÓNDE se desvía. */
+    /** Zonas con nombre, para poder decir DÓNDE cae fuera de la referencia.
+     *  `tuyo` y `verbo` existen para construir la frase con la concordancia
+     *  correcta: "Tus graves están" pero "Tu presencia está". */
     const V2_ZONAS = [
-        { f0: 0,    f1: 60,    et: 'el sub' },
-        { f0: 60,   f1: 200,   et: 'los graves' },
-        { f0: 200,  f1: 800,   et: 'los medios bajos' },
-        { f0: 800,  f1: 4000,  et: 'los medios' },
-        { f0: 4000, f1: 8000,  et: 'la presencia' },
-        { f0: 8000, f1: 20000, et: 'el aire' },
+        { f0: 0,    f1: 60,    et: 'el sub',           tuyo: 'Tu sub',        verbo: 'está' },
+        { f0: 60,   f1: 200,   et: 'los graves',       tuyo: 'Tus graves',    verbo: 'están' },
+        { f0: 200,  f1: 800,   et: 'los medios bajos', tuyo: 'Tus medios bajos', verbo: 'están' },
+        { f0: 800,  f1: 4000,  et: 'los medios',       tuyo: 'Tus medios',    verbo: 'están' },
+        { f0: 4000, f1: 8000,  et: 'la presencia',     tuyo: 'Tu presencia',  verbo: 'está' },
+        { f0: 8000, f1: 20000, et: 'el aire',          tuyo: 'Tu aire',       verbo: 'está' },
     ];
 
     /** Compara la curva con el corredor de referencia.
@@ -2005,10 +2017,14 @@
             i = j;
         }
         rachas.sort((a, b) => Math.abs(b.db) - Math.abs(a.db));
-        const zona = f => (V2_ZONAS.find(z => f >= z.f0 && f < z.f1) || V2_ZONAS[0]).et;
+        const zona = f => V2_ZONAS.find(z => f >= z.f0 && f < z.f1) || V2_ZONAS[0];
         return {
-            equilibrado: rachas.length === 0,
-            rachas: rachas.map(r => ({ ...r, zona: zona(r.pico.f) })),
+            // "dentro" describe una posición medida, no un juicio de calidad.
+            // Ver el comentario de arriba: esto separa 8 puntos entre discos
+            // publicados y temas de usuario, así que no puede afirmar que un
+            // balance esté bien o mal — solo dónde cae respecto a la muestra.
+            dentro: rachas.length === 0,
+            rachas: rachas.map(r => ({ ...r, z: zona(r.pico.f), zona: zona(r.pico.f).et })),
             fuera,
         };
     }
@@ -2070,23 +2086,59 @@
         return aire + t * util;
     }
 
-    /** Catmull-Rom con tensión 1/2, que pasa POR los puntos y no los desplaza.
+    /** Cúbica monótona por tramos (Fritsch–Carlson, 1980).
      *
-     *  Deliberadamente conservador: hay 31 medidas reales y ninguna más. Un
-     *  spline decorativo inventaría picos entre bandas y movería los máximos,
-     *  y en un gráfico de diagnóstico eso es fabricar datos.
+     *  Sustituye a la Catmull-Rom con tensión 1/2 que había. Aquella usaba la
+     *  mitad de la distancia de control estándar, y por eso se veía la unión
+     *  entre puntos: parecía una polilínea redondeada más que una curva.
+     *
+     *  Esta usa la distancia completa (h/3) —así que suaviza el doble— pero
+     *  antes limita las tangentes, que es lo que garantiza que NO puede
+     *  overshootear. En concreto:
+     *
+     *    · en un máximo o mínimo local la tangente se pone a 0, así que la
+     *      curva no se pasa de largo ni inventa un pico más alto que el dato;
+     *    · si una tangente es demasiado grande para el tramo, se escala hacia
+     *      dentro del círculo de radio 3 de De Boor–Swartz.
+     *
+     *  Consecuencia: entre dos bandas medidas la curva nunca sale del intervalo
+     *  que forman. En un gráfico de diagnóstico eso no es un detalle estético —
+     *  un spline que se pasa dibujaría un exceso de energía que no existe.
      */
     function v2CurvaSuave(pts) {
-        if (pts.length < 2) return '';
-        let d = `M ${pts[0][0].toFixed(2)},${pts[0][1].toFixed(2)}`;
-        for (let i = 0; i < pts.length - 1; i++) {
-            const p0 = pts[i - 1] || pts[i], p1 = pts[i];
-            const p2 = pts[i + 1], p3 = pts[i + 2] || p2;
-            d += ` C ${(p1[0] + (p2[0] - p0[0]) / 12).toFixed(2)},${(p1[1] + (p2[1] - p0[1]) / 12).toFixed(2)}`
-               + ` ${(p2[0] - (p3[0] - p1[0]) / 12).toFixed(2)},${(p2[1] - (p3[1] - p1[1]) / 12).toFixed(2)}`
-               + ` ${p2[0].toFixed(2)},${p2[1].toFixed(2)}`;
+        const n = pts.length;
+        if (n < 2) return '';
+        const f = v => v.toFixed(2);
+        if (n === 2) return `M ${f(pts[0][0])},${f(pts[0][1])} L ${f(pts[1][0])},${f(pts[1][1])}`;
+
+        const h = [], d = [];
+        for (let i = 0; i < n - 1; i++) {
+            h[i] = pts[i + 1][0] - pts[i][0];
+            d[i] = h[i] ? (pts[i + 1][1] - pts[i][1]) / h[i] : 0;
         }
-        return d;
+        const m = new Array(n);
+        m[0] = d[0];
+        m[n - 1] = d[n - 2];
+        for (let i = 1; i < n - 1; i++) {
+            // Cambio de signo = extremo local: tangente plana, sin pasarse.
+            m[i] = d[i - 1] * d[i] <= 0 ? 0 : (d[i - 1] + d[i]) / 2;
+        }
+        for (let i = 0; i < n - 1; i++) {
+            if (d[i] === 0) { m[i] = 0; m[i + 1] = 0; continue; }
+            const a = m[i] / d[i], b = m[i + 1] / d[i], s = a * a + b * b;
+            if (s > 9) {
+                const t = 3 / Math.sqrt(s);
+                m[i] = t * a * d[i];
+                m[i + 1] = t * b * d[i];
+            }
+        }
+        let out = `M ${f(pts[0][0])},${f(pts[0][1])}`;
+        for (let i = 0; i < n - 1; i++) {
+            out += ` C ${f(pts[i][0] + h[i] / 3)},${f(pts[i][1] + m[i] * h[i] / 3)}`
+                 + ` ${f(pts[i + 1][0] - h[i] / 3)},${f(pts[i + 1][1] - m[i + 1] * h[i] / 3)}`
+                 + ` ${f(pts[i + 1][0])},${f(pts[i + 1][1])}`;
+        }
+        return out;
     }
 
     /** El corredor, como polígono cerrado: borde alto de ida, bajo de vuelta. */
@@ -2149,6 +2201,9 @@
             const arriba = V2_CORREDOR.map(c => [x(c.hz), y(c.hi)]);
             const abajo = V2_CORREDOR.map(c => [x(c.hz), y(c.lo)]);
             const medi = V2_CORREDOR.map(c => [x(c.hz), y(c.med)]);
+            // La mitad central (p25-p75): más densa porque ahí cae más gente.
+            const arriba2 = V2_CORREDOR.map(c => [x(c.hz), y(c.hi2)]);
+            const abajo2 = V2_CORREDOR.map(c => [x(c.hz), y(c.lo2)]);
             // Altura del borde alto en la posición donde irá la cápsula, para
             // que cuelgue de la banda y no del techo de la caja (ahí chocaba con
             // la ficha técnica de la esquina).
@@ -2160,6 +2215,7 @@
             return {
                 altoEn,
                 area: v2PathCorredor(arriba, abajo),
+                nucleo: v2PathCorredor(arriba2, abajo2),
                 borde: v2CurvaSuave(arriba),
                 bordeBajo: v2CurvaSuave(abajo),
                 mediana: v2CurvaSuave(medi),
@@ -2233,7 +2289,7 @@
                 </div>
 
                 <div className="relative rounded-lg overflow-hidden"
-                     style={{ background: '#15171a', border: '1px solid #212429', height: 252 }}>
+                     style={{ background: '#15171a', border: '1px solid #212429', height: 292 }}>
 
                     {/* Canal de niveles. En HTML: el SVG se estira a lo ancho y
                         cualquier texto dentro saldría deformado. */}
@@ -2257,14 +2313,14 @@
                              style={{ width: '100%', height: '100%', display: 'block' }}
                              role="img"
                              aria-label={comp
-                                 ? (comp.equilibrado
-                                     ? 'Espectro dentro del rango habitual'
-                                     : `Espectro con desviación en ${comp.rachas.map(r => r.zona).join(', ')}`)
+                                 ? (comp.dentro
+                                     ? 'Espectro dentro del rango de referencia'
+                                     : `Espectro fuera de la referencia en ${comp.rachas.map(r => r.zona).join(', ')}`)
                                  : 'Espectro del track'}>
                             <defs>
                                 <linearGradient id="v2corrGrad" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor={V2_MORADO} stopOpacity="0.125" />
-                                    <stop offset="100%" stopColor={V2_MORADO} stopOpacity="0.035" />
+                                    <stop offset="0%" stopColor={V2_MORADO} stopOpacity="0.085" />
+                                    <stop offset="100%" stopColor={V2_MORADO} stopOpacity="0.025" />
                                 </linearGradient>
                                 {/* El corredor se desvanece por debajo de 50 Hz, que es
                                     donde deja de juzgarse: ahí mide más de 20 dB de ancho
@@ -2277,6 +2333,9 @@
                                           stopColor="#fff" stopOpacity="1" />
                                     <stop offset="100%" stopColor="#fff" stopOpacity="1" />
                                 </linearGradient>
+                                <filter id="v2corrHalo" x="-5%" y="-15%" width="110%" height="130%">
+                                    <feGaussianBlur stdDeviation="0.25 1.3" />
+                                </filter>
                                 <mask id="v2corrMask" maskUnits="userSpaceOnUse"
                                       x="0" y="0" width="100" height={H}>
                                     <rect x="0" y="0" width="100" height={H} fill="url(#v2corrFade)" />
@@ -2298,20 +2357,27 @@
                                       strokeDasharray={db === 0 ? '' : '1 7'} />
                             ))}
 
+                            {/* Cuatro capas para que se lea como UNA nube y no como
+                                franjas: halo difuminado, banda exterior (5-95), núcleo
+                                (25-75, donde cae la mitad) y mediana. Ninguna tiene
+                                borde marcado salvo un filo tenue arriba, así que no
+                                aparecen escalones entre capas. */}
                             {corr && (
                                 <g className="v2-corredor" mask="url(#v2corrMask)">
+                                    <path d={corr.area} fill={V2_MORADO} fillOpacity="0.09"
+                                          filter="url(#v2corrHalo)" />
                                     <path d={corr.area} fill="url(#v2corrGrad)" />
+                                    <path d={corr.nucleo} fill={V2_MORADO} fillOpacity="0.10"
+                                          filter="url(#v2corrHalo)" />
                                     <path d={corr.borde} fill="none" stroke="#9d86d8"
-                                          strokeOpacity="0.30" strokeWidth="1"
+                                          strokeOpacity="0.22" strokeWidth="1"
                                           vectorEffect="non-scaling-stroke" />
                                     <path d={corr.bordeBajo} fill="none" stroke="#9d86d8"
-                                          strokeOpacity="0.15" strokeWidth="1"
+                                          strokeOpacity="0.10" strokeWidth="1"
                                           vectorEffect="non-scaling-stroke" />
-                                    {/* La mediana del corpus. Discreta a propósito: refuerza el
-                                        concepto de "dónde está el centro" sin competir. */}
-                                    <path d={corr.mediana} fill="none" stroke="#9a8fc7"
-                                          strokeOpacity="0.17" strokeWidth="1"
-                                          strokeDasharray="3 6" vectorEffect="non-scaling-stroke" />
+                                    <path d={corr.mediana} fill="none" stroke="#a596cf"
+                                          strokeOpacity="0.16" strokeWidth="1"
+                                          strokeDasharray="2 7" vectorEffect="non-scaling-stroke" />
                                 </g>
                             )}
 
@@ -2360,7 +2426,7 @@
                                   border: '1px solid rgba(157,134,216,.22)',
                                   borderRadius: 999, padding: '3px 11px',
                               }}>
-                            Rango habitual
+                            Rango de referencia
                         </span>
                     )}
 
@@ -2398,12 +2464,11 @@
                                                pointerEvents: 'none', maxWidth: 175,
                                                textAlign: aLaDerecha ? 'right' : 'left' }}>
                                     <span style={{ color: '#d5d7db', fontWeight: 500 }}>
-                                        {aviso.signo > 0 ? 'Sobra en ' : 'Falta en '}{aviso.zona}
+                                        {aviso.z.tuyo}, {Math.abs(aviso.db).toFixed(0)} dB
                                     </span>
                                     <br />
                                     <span style={{ color: '#75757e' }}>
-                                        {Math.abs(aviso.db).toFixed(0)} dB{' '}
-                                        {aviso.signo > 0 ? 'por encima' : 'por debajo'}
+                                        {aviso.signo > 0 ? 'sobre' : 'bajo'} la referencia
                                     </span>
                                 </span>
                             </React.Fragment>
@@ -2694,7 +2759,7 @@
         // se veía recto, porque venían de sitios distintos.
         const veredicto = v2VeredictoEspectro(fino, disp, dispP);
         const tonoBalance = veredicto
-            ? (veredicto.equilibrado ? 'ok' : 'aviso')
+            ? (veredicto.dentro ? 'ok' : 'aviso')
             : v2TonoEstado('balance_grave', d.balance_grave);
         const tonoMono = v2TonoEstado('mono', m.nivel_compatibilidad);
         const tonoDens = v2TonoEstado('densidad', d.densidad);
@@ -2713,11 +2778,11 @@
                                              background: `${V2_COLOR[tonoBalance]}09` }}>
                                    <div style={{ fontSize: '8.5px', fontWeight: 600,
                                                  letterSpacing: '.16em', textTransform: 'uppercase',
-                                                 color: '#6e6e78', marginBottom: 3 }}>Resultado</div>
+                                                 color: '#6e6e78', marginBottom: 3 }}>Referencia</div>
                                    <div style={{ color: V2_COLOR[tonoBalance], fontWeight: 600,
                                                  fontSize: '18px', lineHeight: 1.1,
                                                  letterSpacing: '.045em', textTransform: 'uppercase' }}>
-                                       {veredicto.equilibrado ? 'Equilibrado' : 'Revisar'}
+                                       {veredicto.dentro ? 'Dentro' : 'Fuera'}
                                    </div>
                                </div>
                            ) : (
@@ -2739,26 +2804,59 @@
                     {veredicto ? (
                         <div className="flex items-start gap-3 mt-4 pt-4"
                              style={{ borderTop: '1px solid #212429' }}>
-                            {veredicto.equilibrado
+                            {veredicto.dentro
                                 ? <V2IconoCheck color={V2_COLOR.ok} />
                                 : <V2IconoAviso color={V2_COLOR.aviso} />}
                             {/* En color solo el diagnóstico; la procedencia del dato
                                 va en gris y en su propia línea, para que el bloque no
                                 se lea como un párrafo denso. */}
                             <div>
+                                {/* Descriptivo, no prescriptivo: se dice DÓNDE cae
+                                    respecto a la muestra, no qué habría que hacer.
+                                    "Sobra grave" implicaría que hay que bajarlo, y lo
+                                    único medido es que está por encima del 95 % de una
+                                    colección concreta. */}
                                 <p style={{ fontSize: '13.5px', lineHeight: 1.5, color: '#b9b9c2' }}>
-                                    Balance general:{' '}
-                                    <span style={{ color: veredicto.equilibrado ? V2_COLOR.ok : V2_COLOR.aviso,
-                                                   fontWeight: 600 }}>
-                                        {veredicto.equilibrado
-                                            ? 'dentro del rango habitual'
-                                            : veredicto.rachas.map(r =>
-                                                `${r.signo > 0 ? 'sobra' : 'falta'} en ${r.zona}`).join(' · ')}
-                                    </span>
+                                    {veredicto.dentro ? (
+                                        <React.Fragment>
+                                            Tu balance cae{' '}
+                                            <span style={{ color: V2_COLOR.ok, fontWeight: 600 }}>
+                                                dentro del rango de referencia
+                                            </span>.
+                                        </React.Fragment>
+                                    ) : (() => {
+                                        // Si todas las zonas se desvían en el mismo
+                                        // sentido, una frase; si no, una por sentido.
+                                        // Repetir "por encima del 95 % de la referencia"
+                                        // dos veces seguidas se leía fatal.
+                                        const partes = [];
+                                        for (const signo of [1, -1]) {
+                                            const zs = veredicto.rachas.filter(r => r.signo === signo);
+                                            if (!zs.length) continue;
+                                            const nombres = zs.map(r => r.z.et);
+                                            const lista = nombres.length > 1
+                                                ? nombres.slice(0, -1).join(', ') + ' y ' + nombres[nombres.length - 1]
+                                                : nombres[0];
+                                            partes.push(
+                                                <React.Fragment key={signo}>
+                                                    {partes.length > 0 && ' '}
+                                                    {nombres.length > 1 ? 'Tienes ' : ''}
+                                                    {nombres.length > 1 ? lista : zs[0].z.tuyo}
+                                                    {nombres.length > 1 ? ' ' : ` ${zs[0].z.verbo} `}
+                                                    <span style={{ color: V2_COLOR.aviso, fontWeight: 600 }}>
+                                                        {signo > 0 ? 'por encima del 95 %' : 'por debajo del 5 %'}
+                                                    </span>
+                                                    {' '}de la referencia.
+                                                </React.Fragment>
+                                            );
+                                        }
+                                        return partes;
+                                    })()}
                                 </p>
                                 <p style={{ fontSize: '11px', lineHeight: 1.6, color: '#61616b',
                                             marginTop: 3 }}>
-                                    Comparado con 327 temas ya editados de 26 sellos.
+                                    Referencia: 327 previews de catálogo de 26 sellos,
+                                    sobre todo progressive y house.
                                 </p>
                             </div>
                         </div>
@@ -2797,15 +2895,20 @@
                         <p className="text-gray-500">Letra pequeña: en Oído se usa la ponderación A, la
                            forma normalizada de la curva de 40 fon — volumen de escucha moderado. A
                            volumen de club el oído es más plano, así que compensa de más.</p>
-                        <p className="text-gray-500">Letra pequeña de la franja: los temas de
-                           referencia son house melódico, progressive y deep — no hay techno ni tech
-                           house. Se corta en 12.5 kHz porque son MP3 y por encima describiría al
-                           compresor. Y por debajo de 50 Hz se dibuja pero no se juzga: ahí mide más
-                           de 20 dB de ancho, así que no distingue nada, y filtrar el subgrave es una
-                           decisión correcta y muy común.</p>
-                        <p className="text-gray-500">Estar dentro de la franja dice que tu balance
-                           tonal es corriente, no que tu tema esté bien: el 87 % de los discos
-                           publicados cae dentro, y también el 79 % de los temas que se suben aquí.</p>
+                        <p className="text-gray-500">Qué es exactamente la referencia: 327 previews
+                           de catálogo de 120 s de 26 sellos, con el género tomado del sello y no del
+                           tema. La mezcla no es neutra — el 40 % es progressive house y no hay
+                           techno duro, trance ni drum &amp; bass. Si produces alguno de esos, la
+                           franja te aplica menos.</p>
+                        <p className="text-gray-500">La franja llega hasta 12.5 kHz. No es que los
+                           archivos se corten ahí —cada uno corta entre 16 y 20 kHz, según su
+                           encoder— sino justamente por eso: más arriba la franja mediría la variedad
+                           de compresores y no la de la música. Y por debajo de 50 Hz se dibuja pero
+                           no se juzga: ahí mide más de 20 dB de ancho, así que no distingue nada, y
+                           filtrar el subgrave es una decisión correcta y muy común.</p>
+                        <p className="text-gray-500">Caer dentro de la franja describe dónde está tu
+                           balance, no si tu tema está bien: dentro cae el 87 % de esos previews y
+                           también el 79 % de los temas que se suben aquí.</p>
                         <p className="text-gray-500">Por encima de 16 kHz no se dibuja: ahí lo que hay
                            es el filtro del formato y el suelo de ruido, no música.</p>
                         <p className="text-gray-500">La lectura se hace en el punto de más energía del
