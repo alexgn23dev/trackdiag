@@ -273,7 +273,7 @@
     // /api/health. Si no coincide, este fichero viene de la caché del
     // navegador y puede estar dejando de enviar campos que el backend ya
     // espera — se recarga una sola vez y, si aun así no cuadra, se avisa.
-    const APP_VERSION = '0.5.86';
+    const APP_VERSION = '0.5.87';
 
     function comprobarVersionFrontend(onDesfase, onEntorno) {
         fetch(`${API_URL}/api/health`, { cache: 'no-store' })
@@ -1809,6 +1809,160 @@
     // Las seis bandas del extractor, con su rango real. El ancho de cada una
     // en la barra va en escala logarítmica, que es como se oye la frecuencia:
     // de 60 a 200 Hz se percibe un salto parecido al de 4 a 8 kHz.
+    // Corredor de referencia: dónde cae el espectro de la música ya editada.
+    // Percentiles 5 y 95 de 327 temas de 26 sellos, medidos con el mismo código
+    // que el track del usuario (mismo tercio de octava, misma ventana del drop,
+    // misma inclinación) y anclados igual que la curva que se dibuja encima.
+    // Se regenera con backend/scripts/calibrar_corredor.py.
+    //
+    // El 0 es el CUERPO del tema (media de 200 Hz a 2 kHz), no su banda más
+    // alta. Anclar al pico parecía natural pero tenía un punto ciego serio: el
+    // 87 % de los temas pica entre 50 y 80 Hz, así que ahí todo el mundo valía 0
+    // por construcción y el corredor NO podía detectar exceso de grave justo
+    // donde más importa (medido: en 50 Hz la mediana y el p95 valían los dos
+    // 0.0). Anclando al cuerpo hay 6.6 dB de margen, y el número se explica
+    // solo: "tu grave está X dB por encima del cuerpo del tema".
+    //
+    // Se corta en 12.5 kHz a propósito: el corpus son MP3 y por encima de ahí el
+    // corredor describe al compresor, no a los sellos (en 16 kHz se ensancha a
+    // 20.7 dB y en 20 kHz a 64).
+    const V2_CORREDOR = [
+        { hz: 20, lo: -33.3, med: -26.3, hi: -12.0 },
+        { hz: 25, lo: -30.7, med: -22.9, hi: -5.9 },
+        { hz: 31.5, lo: -23.3, med: -11.5, hi: 4.7 },
+        { hz: 40, lo: -13.2, med: 2.3, hi: 11.8 },
+        { hz: 50, lo: 1.1, med: 10.2, hi: 16.9 },
+        { hz: 63, lo: 2.6, med: 8.9, hi: 15.0 },
+        { hz: 80, lo: 1.3, med: 6.7, hi: 12.7 },
+        { hz: 100, lo: -1.2, med: 4.8, hi: 10.9 },
+        { hz: 125, lo: -2.6, med: 3.5, hi: 9.4 },
+        { hz: 160, lo: -2.7, med: 2.1, hi: 8.4 },
+        { hz: 200, lo: -2.7, med: 1.4, hi: 7.0 },
+        { hz: 250, lo: -4.4, med: 0.7, hi: 4.7 },
+        { hz: 315, lo: -3.6, med: 0.7, hi: 5.0 },
+        { hz: 400, lo: -3.4, med: 0.4, hi: 4.9 },
+        { hz: 500, lo: -3.5, med: -0.2, hi: 3.2 },
+        { hz: 630, lo: -4.1, med: -0.2, hi: 3.9 },
+        { hz: 800, lo: -4.4, med: -0.2, hi: 3.9 },
+        { hz: 1000, lo: -3.8, med: -0.5, hi: 2.6 },
+        { hz: 1250, lo: -3.9, med: -0.5, hi: 2.7 },
+        { hz: 1600, lo: -4.4, med: -0.8, hi: 2.6 },
+        { hz: 2000, lo: -4.8, med: -1.0, hi: 2.4 },
+        { hz: 2500, lo: -5.9, med: -1.0, hi: 3.0 },
+        { hz: 3150, lo: -5.6, med: -0.7, hi: 3.6 },
+        { hz: 4000, lo: -5.7, med: 0.5, hi: 5.0 },
+        { hz: 5000, lo: -6.0, med: 1.7, hi: 6.6 },
+        { hz: 6300, lo: -5.0, med: 3.2, hi: 8.3 },
+        { hz: 8000, lo: -5.3, med: 3.9, hi: 9.2 },
+        { hz: 10000, lo: -7.4, med: 3.5, hi: 8.8 },
+        { hz: 12500, lo: -10.2, med: 1.7, hi: 7.6 },
+    ];
+
+    /** Zonas con nombre, para poder decir DÓNDE se desvía. */
+    const V2_ZONAS = [
+        { f0: 0,    f1: 60,    et: 'el sub' },
+        { f0: 60,   f1: 200,   et: 'los graves' },
+        { f0: 200,  f1: 800,   et: 'los medios bajos' },
+        { f0: 800,  f1: 4000,  et: 'los medios' },
+        { f0: 4000, f1: 8000,  et: 'la presencia' },
+        { f0: 8000, f1: 20000, et: 'el aire' },
+    ];
+
+    /** Compara la curva con el corredor de referencia.
+     *
+     * La regla no es "no salirse nunca": con 29 bandas y un corredor del 5 al
+     * 95, salirse en alguna es lo normal — medido, solo el 26 % de los discos
+     * publicados se queda dentro en TODAS. Una banda suelta fuera es la textura
+     * del tema. Lo que describe una zona es una RACHA.
+     *
+     * Calibrado sobre los mismos 327 temas, mirando de 50 Hz para arriba: con
+     * rachas de 4 bandas seguidas sale "equilibrado" el 87 % de los discos
+     * publicados y el 79 % de los tracks de usuario.
+     *
+     * Esos 8 puntos de separación son POCOS, y hay que tenerlo presente: esto
+     * no distingue a un aficionado de un profesional, ni pretende hacerlo. Lo
+     * que dice es literalmente lo que dice — si el balance tonal cae donde
+     * suele caer el de la música editada — y resulta que el de casi todo el
+     * mundo cae ahí. Por eso el rótulo habla de "balance" y no de "resultado",
+     * y por eso el corredor se dibuja como contexto y no como aprobado.
+     */
+    const V2_RACHA_MINIMA = 4;
+    // El veredicto solo mira de 50 Hz para arriba. Por debajo el corredor mide
+    // entre 21 y 28 dB de ancho — cabe casi cualquier cosa, así que un aviso ahí
+    // no informa — y además muchísimos temas van filtrados por debajo de 30 Hz a
+    // propósito, que es una decisión correcta y no un defecto. El corredor SÍ se
+    // sigue dibujando ahí: como contexto vale, como juez no.
+    const V2_VEREDICTO_DESDE = 50;
+    const V2_TILT = 1.5;          // ver el comentario largo en V2Espectro2
+    const V2_TOPE_DIBUJO = 16000;
+    const V2_CUERPO = [200, 2000];  // la referencia de 0 dB; ver V2_CORREDOR
+
+    /** Nivel del cuerpo del tema: el 0 de la escala. */
+    function v2Referencia(puntos) {
+        const c = puntos.filter(q => q.f >= V2_CUERPO[0] && q.f <= V2_CUERPO[1]);
+        if (!c.length) return puntos.length ? Math.max(...puntos.map(q => q.v)) : 0;
+        return c.reduce((s, q) => s + q.v, 0) / c.length;
+    }
+
+    /** Los puntos del espectro, ya inclinados y recortados. Una sola función
+     *  para el gráfico y para el veredicto: si divergieran, el rótulo volvería
+     *  a contradecir a la curva, que es justo lo que se venía de arreglar. */
+    function v2PuntosEspectro(fino, display, displayPond, pond) {
+        const detallado = !!(fino && fino.bandas && fino.bandas.length);
+        const datos = pond ? displayPond : display;
+        if (!detallado && (!datos || Object.keys(datos).length === 0)) return [];
+        return (detallado
+            ? fino.bandas.map(b => ({ f: b.hz, v: pond ? b.db_pond : b.db }))
+                         .filter(q => typeof q.v === 'number')
+            : V2_BANDAS.map(b => ({ f: Math.sqrt(Math.max(b.f0, 20) * b.f1), v: datos[b.k] }))
+                       .filter(q => typeof q.v === 'number')
+        ).map(q => ({ f: q.f, v: pond ? q.v : q.v + V2_TILT * Math.log2(q.f / 1000) }))
+         .filter(q => q.f <= V2_TOPE_DIBUJO);
+    }
+
+    /** Veredicto del balance, calculado fuera del componente para que la tarjeta
+     *  lo tenga en el primer render (nada de useEffect: parpadeaba). */
+    function v2VeredictoEspectro(fino, display, displayPond) {
+        const pts = v2PuntosEspectro(fino, display, displayPond, false);
+        if (pts.length < 2) return null;
+        const ref = v2Referencia(pts);
+        return v2CompararCorredor(pts.map(q => ({ f: q.f, v: q.v - ref })));
+    }
+    function v2CompararCorredor(puntos) {
+        const ref = new Map(V2_CORREDOR.map(c => [c.hz, c]));
+        const fuera = puntos.map(p => {
+            const c = p.f >= V2_VEREDICTO_DESDE ? ref.get(p.f) : null;
+            if (!c) return 0;
+            if (p.v > c.hi) return p.v - c.hi;
+            if (p.v < c.lo) return p.v - c.lo;
+            return 0;
+        });
+        // Rachas del mismo signo: sobra en una zona, o falta, pero no las dos.
+        const rachas = [];
+        let i = 0;
+        while (i < fuera.length) {
+            if (!fuera[i] || !ref.has(puntos[i].f)) { i++; continue; }
+            const signo = Math.sign(fuera[i]);
+            let j = i;
+            while (j < fuera.length && Math.sign(fuera[j]) === signo
+                   && ref.has(puntos[j].f) && puntos[j].f >= V2_VEREDICTO_DESDE) j++;
+            if (j - i >= V2_RACHA_MINIMA) {
+                let k = i;
+                for (let m = i; m < j; m++) if (Math.abs(fuera[m]) > Math.abs(fuera[k])) k = m;
+                rachas.push({ desde: puntos[i].f, hasta: puntos[j - 1].f, signo,
+                              pico: puntos[k], db: fuera[k], bandas: j - i });
+            }
+            i = j;
+        }
+        rachas.sort((a, b) => Math.abs(b.db) - Math.abs(a.db));
+        const zona = f => (V2_ZONAS.find(z => f >= z.f0 && f < z.f1) || V2_ZONAS[0]).et;
+        return {
+            equilibrado: rachas.length === 0,
+            rachas: rachas.map(r => ({ ...r, zona: zona(r.pico.f) })),
+            fuera,
+        };
+    }
+
     const V2_BANDAS = [
         { k: 'sub',       f0: 20,   f1: 60,    et: 'Sub' },
         { k: 'graves',    f0: 60,   f1: 200,   et: 'Graves' },
@@ -1836,7 +1990,7 @@
      * pone siempre una banda arriba del todo y otra abajo, por pequeña que sea
      * la diferencia real, y fabrica montañas donde no las hay.
      */
-    function V2Espectro2({ display, displayPond, fino, ventana, marcas }) {
+    function V2Espectro2({ display, displayPond, fino, ventana, marcas, veredicto }) {
         // Arranca en la vista de analizador, no en la ponderada: es la única
         // calibrada para que "plano" signifique "normal", y es la que el
         // usuario puede cotejar con SPAN o Pro-Q en su DAW.
@@ -1865,34 +2019,30 @@
         // sellos, la inclinación que deja plano al tema mediano entre 100 Hz y
         // 8 kHz es +1.68 dB/oct. Se usa 1.5 porque cae dentro de esa medida y
         // además es una convención citable, no un número ajustado a un corpus.
-        const TILT = 1.5;
-        const TOPE_DIBUJO = 16000;   // ver el filtro de abajo
-        // No se aplica a la vista ponderada: la curva A ya inclina por su
-        // cuenta (+1.10 dB/oct medido sobre esos mismos 163 temas), y sumar las
-        // dos correcciones dibujaría el agudo muy por encima del grave.
-        const puntos = (detallado
-            ? fino.bandas
-                  .map(b => ({ f: b.hz, v: pond ? b.db_pond : b.db }))
-                  .filter(p => typeof p.v === 'number')
-            : V2_BANDAS
-                  .map(b => ({ f: Math.sqrt(Math.max(b.f0, 20) * b.f1), v: datos[b.k] }))
-                  .filter(p => typeof p.v === 'number')
-        ).map(p => ({ f: p.f, v: pond ? p.v : p.v + TILT * Math.log2(p.f / 1000) }))
-        // Por encima de 16 kHz no se dibuja. La banda de 20 kHz roza el límite
-        // del formato: lo que hay ahí es el filtro del códec y el suelo de
-        // ruido, no música. Medido: en 31 de 33 tracks cae más de 40 dB por
-        // debajo del resto. Dibujarla mete un desplome en el borde derecho que
-        // no informa de nada y que se lee como "te faltan agudos".
-         .filter(p => p.f <= TOPE_DIBUJO);
+        const TILT = V2_TILT, TOPE_DIBUJO = V2_TOPE_DIBUJO;
+        const puntos = v2PuntosEspectro(fino, display, displayPond, pond);
         if (puntos.length < 2) return null;
 
-        const techo = Math.max(...puntos.map(p => p.v));
+        // El 0 de la escala es el cuerpo del tema (media de 200 Hz a 2 kHz), y
+        // el corredor se construyó igual: por eso son comparables sin ajustes.
+        // En la vista ponderada no hay corredor, así que ahí se ancla al pico,
+        // que es lo que dice su rótulo.
+        const techo = pond ? Math.max(...puntos.map(p => p.v)) : v2Referencia(puntos);
+        // El corredor solo tiene sentido sobre la medida sin ponderar: se
+        // construyó así. En la vista Oído no se dibuja.
+        const comp = pond ? null : veredicto;
         // Rango fijo: hace comparables dos análisis, y 36 dB cubre lo que se
         // oye como diferencia de balance. Medido sobre material real, deja
         // dentro casi todas las bandas y manda al suelo justo las que no
         // tienen contenido — que es lo que hay que leer.
-        const RANGO = 36, PASO = 6;
-        const suelo = techo - RANGO;
+        // Escala fija respecto a esa referencia. Sin ponderar va de +18 a −24:
+        // medido sobre 327 temas editados y 33 de usuario, en la zona que se lee
+        // (50 Hz–10 kHz) los valores caen entre −15 y +19. Lo que se sale por
+        // abajo son las bandas de 20–40 Hz y las de 12.5 kHz para arriba, donde
+        // no hay contenido musical y el suelo es la respuesta correcta.
+        const ARRIBA = pond ? 0 : 18;
+        const RANGO = pond ? 36 : 42, PASO = 6;
+        const suelo = techo + ARRIBA - RANGO;
 
         const F0 = 20, F1 = 20000;
         const lg = f => Math.log10(f);
@@ -1920,15 +2070,31 @@
         const curva = suave(pts);
         const relleno = `${curva} L ${pts[pts.length - 1][0]},${H} L ${pts[0][0]},${H} Z`;
 
+        // Escalones en valor absoluto: de +18 a −24 sin ponderar, y de 0 a −36
+        // en la vista ponderada, que sigue anclada al pico.
         const escalones = [];
-        for (let dB = 0; dB <= RANGO; dB += PASO) escalones.push(dB);
+        for (let dB = ARRIBA; dB >= ARRIBA - RANGO; dB -= PASO) escalones.push(dB);
+        const yEsc = dB => AIRE + ((ARRIBA - dB) / RANGO) * util;
 
         // Rejilla de frecuencia con el patrón 1-2-3-5 por década, como cualquier
         // analizador. Las finas dan sensación de escala; solo unas pocas se rotulan.
         const finas = [30, 40, 60, 80, 150, 300, 400, 600, 800, 1500, 3000, 4000,
                        6000, 8000, 15000];
-        const rotuladas = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
+        const rotuladas = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 16000];
         const etiquetaHz = f => (f >= 1000 ? `${f / 1000}k` : `${f}`);
+
+        // El corredor de referencia, como polígono cerrado: borde de arriba de
+        // izquierda a derecha, y el de abajo de vuelta.
+        const corredor = (() => {
+            if (pond) return null;
+            const arriba = V2_CORREDOR.map(c => [x(c.hz), y(techo + c.hi)]);
+            const abajo = V2_CORREDOR.map(c => [x(c.hz), y(techo + c.lo)]).reverse();
+            if (arriba.length < 2) return null;
+            return { poli: [...arriba, ...abajo].map(q => `${q[0].toFixed(2)},${q[1].toFixed(2)}`).join(' '),
+                     borde: suave(arriba), hasta: V2_CORREDOR[V2_CORREDOR.length - 1].hz };
+        })();
+        // La desviación que más pesa, para señalarla en el gráfico.
+        const aviso = comp && comp.rachas.length ? comp.rachas[0] : null;
 
         // Techo real del archivo. Un MP3 a 128 kbps se corta sobre los 16 kHz y
         // ahí no hay nada que medir: se marca en vez de dibujar una caída falsa.
@@ -1975,11 +2141,11 @@
                         {escalones.map(dB => (
                             <span key={dB} className="absolute cifra-v2"
                                   style={{
-                                      right: 5, top: `${AIRE + (dB / RANGO) * util}%`,
+                                      right: 5, top: `${yEsc(dB)}%`,
                                       transform: 'translateY(-50%)',
                                       fontSize: '9px', color: dB === 0 ? '#8a8a8a' : '#565656',
                                   }}>
-                                {dB === 0 ? '0' : `−${dB}`}
+                                {dB === 0 ? '0' : (dB > 0 ? `+${dB}` : `−${-dB}`)}
                             </span>
                         ))}
                     </div>
@@ -2004,7 +2170,7 @@
                             ))}
                             {escalones.map(dB => (
                                 <line key={dB} x1="0" x2="100"
-                                      y1={AIRE + (dB / RANGO) * util} y2={AIRE + (dB / RANGO) * util}
+                                      y1={yEsc(dB)} y2={yEsc(dB)}
                                       stroke={dB === 0 ? '#3d3d3d' : '#242424'} strokeWidth="1"
                                       vectorEffect="non-scaling-stroke"
                                       strokeDasharray={dB === 0 ? '' : '2 5'} />
@@ -2013,7 +2179,15 @@
                                 <rect x={x(corte)} y="0" width={100 - x(corte)} height={H}
                                       fill="#0d0d0d" fillOpacity="0.72" />
                             )}
-                            <path d={relleno} fill={`url(#${gid})`} />
+                            {corredor && (
+                                <g>
+                                    <polygon points={corredor.poli} fill="#8B93C4" fillOpacity="0.17" />
+                                    <path d={corredor.borde} fill="none" stroke="#8B93C4"
+                                          strokeOpacity="0.42" strokeWidth="1"
+                                          vectorEffect="non-scaling-stroke" />
+                                </g>
+                            )}
+                            {!corredor && <path d={relleno} fill={`url(#${gid})`} />}
                             <path d={curva} fill="none" stroke="#25F464" strokeWidth="1.75"
                                   vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
                             {corte && (
@@ -2033,7 +2207,7 @@
                         cruzaba con la línea de corte de los 16 kHz. */}
                     <span className="absolute cifra-v2"
                           style={{ left: CANAL + 6, top: 5, fontSize: '9px', color: '#5a5a5a' }}>
-                        dB bajo el pico
+                        {pond ? 'dB bajo el pico' : 'dB sobre el cuerpo del tema'}
                         {detallado && (
                             <span style={{ color: '#454545' }}>
                                 {pond ? '  ·  1/3 de octava'
@@ -2041,6 +2215,51 @@
                             </span>
                         )}
                     </span>
+                    {corredor && (
+                        <span className="absolute rotulo-v2"
+                              style={{ right: 8, top: 6,
+                                       fontSize: '9px', color: '#b9bee0',
+                                       background: 'rgba(139,147,196,.16)',
+                                       border: '1px solid rgba(139,147,196,.28)',
+                                       borderRadius: 999, padding: '2px 9px', whiteSpace: 'nowrap' }}>
+                            Rango habitual
+                        </span>
+                    )}
+                    {aviso && (() => {
+                        // Todo el señalador va en HTML: dentro del SVG se
+                        // deformaría, porque el SVG se estira a lo ancho.
+                        const izq = `calc(${CANAL}px + ${x(aviso.pico.f)}% * (100% - ${CANAL}px) / 100%)`;
+                        // Sujeto dentro de la caja: si la desviación cae por
+                        // debajo del suelo de la escala, el punto se quedaba
+                        // pegado al borde y su texto se cortaba.
+                        const arr = `${Math.min(88, Math.max(6, y(techo + aviso.pico.v)))}%`;
+                        const aLaDerecha = x(aviso.pico.f) > 58;
+                        return (
+                            <React.Fragment>
+                                <span className="absolute"
+                                      style={{ left: izq, top: arr, width: 9, height: 9,
+                                               marginLeft: -4.5, marginTop: -4.5, borderRadius: '50%',
+                                               background: '#151515',
+                                               border: `1.6px solid ${V2_COLOR.aviso}`,
+                                               pointerEvents: 'none' }} />
+                                <span className="absolute"
+                                      style={{ left: izq, top: `calc(${arr} + 9px)`,
+                                               transform: aLaDerecha ? 'translateX(-100%)' : 'none',
+                                               marginLeft: aLaDerecha ? -6 : 6,
+                                               fontSize: '9.5px', lineHeight: 1.4,
+                                               pointerEvents: 'none', maxWidth: 170,
+                                               textAlign: aLaDerecha ? 'right' : 'left' }}>
+                                    <span style={{ color: V2_COLOR.aviso, fontWeight: 700 }}>
+                                        {aviso.signo > 0 ? 'Sobra en ' : 'Falta en '}{aviso.zona}
+                                    </span>
+                                    <br />
+                                    <span style={{ color: '#8a8a8a' }}>
+                                        {Math.abs(aviso.db).toFixed(0)} dB {aviso.signo > 0 ? 'por encima' : 'por debajo'}
+                                    </span>
+                                </span>
+                            </React.Fragment>
+                        );
+                    })()}
                     {archivoLimitado && x(corte) < 78 && (
                         <span className="absolute cifra-v2"
                               style={{ left: `calc(${CANAL}px + ${x(corte)}% * (100% - ${CANAL}px) / 100% + 4px)`,
@@ -2324,7 +2543,14 @@
         const dispP = d.espectro_display_pond || {};
         const vent = d.espectro_ventana || {};
         const fino = d.espectro_fino || {};
-        const tonoBalance = v2TonoEstado('balance_grave', d.balance_grave);
+        // El veredicto lo produce el propio gráfico, comparando con el corredor
+        // de referencia. Así la palabra y la curva salen de la MISMA medida: era
+        // el fallo de antes, que el rótulo decía "elevado" mientras el gráfico
+        // se veía recto, porque venían de sitios distintos.
+        const veredicto = v2VeredictoEspectro(fino, disp, dispP);
+        const tonoBalance = veredicto
+            ? (veredicto.equilibrado ? 'ok' : 'aviso')
+            : v2TonoEstado('balance_grave', d.balance_grave);
         const tonoMono = v2TonoEstado('mono', m.nivel_compatibilidad);
         const tonoDens = v2TonoEstado('densidad', d.densidad);
         const tonoContr = v2TonoEstado('contraste', d.contraste);
@@ -2334,15 +2560,53 @@
                 {/* Balance espectral: la barra sustituye a las tres columnas de
                     antes. Mismo dato, pero con eje de frecuencia real y en
                     escala logarítmica, que es como se oye. */}
-                <V2Tarjeta titulo="Balance espectral" tono={tonoBalance}
-                           datos={<V2Dato etiqueta="Graves" valor={d.balance_grave || '—'} tono={tonoBalance} />}>
+                <V2Tarjeta ancho="lg:col-span-2 xl:col-span-3"
+                           titulo="Balance espectral" tono={tonoBalance}
+                           datos={<V2Dato etiqueta={veredicto ? 'Balance' : 'Graves'}
+                                          valor={veredicto
+                                              ? (veredicto.equilibrado ? 'equilibrado' : 'revisar')
+                                              : (d.balance_grave || '—')}
+                                          tono={tonoBalance} />}>
                     {(Object.keys(disp).length > 0 || (fino.bandas || []).length > 0)
-                        ? <V2Espectro2 display={disp} displayPond={dispP} fino={fino} ventana={vent} />
+                        ? <V2Espectro2 display={disp} displayPond={dispP} fino={fino} ventana={vent}
+                                       veredicto={veredicto} />
                         : <V2Espectro grave={sg.db_grave} media={sg.db_media} aguda={sg.db_aguda} />}
-                    <p className="text-gray-400 v2-sec mt-3">
-                        Diferencia graves–medios: <span className="text-white cifra-v2">{fmt(sg.diff_grave_media)} dB</span>
-                    </p>
+                    {veredicto ? (
+                        <div className="flex items-start gap-2 mt-3 pt-3"
+                             style={{ borderTop: '1px solid #242424' }}>
+                            <span style={{ color: veredicto.equilibrado ? V2_COLOR.ok : V2_COLOR.aviso,
+                                           fontSize: '13px', lineHeight: 1.5 }}>
+                                {veredicto.equilibrado ? '\u25CF' : '\u25CB'}
+                            </span>
+                            <p className="v2-cuerpo text-gray-300">
+                                Balance general:{' '}
+                                <span style={{ color: veredicto.equilibrado ? V2_COLOR.ok : V2_COLOR.aviso,
+                                               fontWeight: 600 }}>
+                                    {veredicto.equilibrado
+                                        ? 'dentro del rango habitual'
+                                        : veredicto.rachas.map(r =>
+                                            `${r.signo > 0 ? 'sobra' : 'falta'} en ${r.zona}`).join(' · ')}
+                                </span>
+                                {!veredicto.equilibrado && (
+                                    <span className="text-gray-500"> — comparado con 327 temas ya editados de 26 sellos.</span>
+                                )}
+                            </p>
+                        </div>
+                    ) : (
+                        <p className="text-gray-400 v2-sec mt-3">
+                            Diferencia graves–medios: <span className="text-white cifra-v2">{fmt(sg.diff_grave_media)} dB</span>
+                        </p>
+                    )}
                     <V2Desplegable etiqueta="Cómo se lee este gráfico">
+                        <p><span className="text-gray-300">La franja gris es la referencia.</span> Es
+                           donde cae el espectro de <span className="text-gray-300">327 temas ya
+                           editados de 26 sellos</span>, medidos exactamente igual que el tuyo. Si tu
+                           curva va por dentro, tu balance se parece al de un disco publicado. Lo que
+                           interesa no es rozarla en un punto, sino salirse de ella en toda una zona.</p>
+                        <p><span className="text-gray-300">El 0 es el cuerpo de tu tema</span> — el
+                           nivel medio entre 200 Hz y 2 kHz. Así el número se lee solo: si el grave
+                           está en +12, está 12 dB por encima del cuerpo, y en los discos publicados
+                           esa cifra va de +1 a +17.</p>
                         <p><span className="text-gray-300">Plano es lo normal.</span> Toda la música
                            tiene más energía en el grave que en el agudo — esté bien o mal mezclada.
                            Es la estadística del material, no un defecto. Por eso los analizadores
@@ -2363,6 +2627,15 @@
                         <p className="text-gray-500">Letra pequeña: en Oído se usa la ponderación A, la
                            forma normalizada de la curva de 40 fon — volumen de escucha moderado. A
                            volumen de club el oído es más plano, así que compensa de más.</p>
+                        <p className="text-gray-500">Letra pequeña de la franja: los temas de
+                           referencia son house melódico, progressive y deep — no hay techno ni tech
+                           house. Se corta en 12.5 kHz porque son MP3 y por encima describiría al
+                           compresor. Y por debajo de 50 Hz se dibuja pero no se juzga: ahí mide más
+                           de 20 dB de ancho, así que no distingue nada, y filtrar el subgrave es una
+                           decisión correcta y muy común.</p>
+                        <p className="text-gray-500">Estar dentro de la franja dice que tu balance
+                           tonal es corriente, no que tu tema esté bien: el 87 % de los discos
+                           publicados cae dentro, y también el 79 % de los temas que se suben aquí.</p>
                         <p className="text-gray-500">Por encima de 16 kHz no se dibuja: ahí lo que hay
                            es el filtro del formato y el suelo de ruido, no música.</p>
                         <p className="text-gray-500">La lectura se hace en el punto de más energía del
