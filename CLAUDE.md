@@ -209,6 +209,22 @@ Auditoría V-01 a V-10 cerrada (ver `MENTOTRACK.md §7.3`). Reglas vivas:
 
 ---
 
+## El corredor de referencia del balance espectral
+
+El gráfico de balance espectral compara el track contra una franja de referencia
+(`V2_CORREDOR` en `frontend/index.html`). Esos percentiles **no salen de este
+repo**: se calibran con audio de `../label-match/data/audio_samples`, que son
+previews de Beatport, no másters.
+
+Antes de tocar el corredor, el veredicto de balance o el copy que lo acompaña,
+leer **`docs/corredor-referencia.md`**. Documenta la procedencia, la
+deduplicación (328 → 322), el sesgo del corpus, por qué no hay referencias por
+género, qué rango se dibuja frente a cuál se juzga, y por qué la interfaz dice
+DENTRO/FUERA y no EQUILIBRADO/REVISAR.
+
+Regla que no se negocia en ese componente: **la interfaz no puede sugerir un
+problema que el análisis no haya detectado.**
+
 ## Punto ciego conocido del motor
 
 El motor de diagnóstico **no detecta problemas armónicos/melódicos** (disonancias, tonalidad incorrecta). Asumido como limitación del análisis de señal básico — no proponer "fix" para esto sin un cambio de stack (ML/embeddings).
