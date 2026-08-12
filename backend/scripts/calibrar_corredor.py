@@ -54,6 +54,7 @@ El ancho mediano del corredor es de 11.1 dB.
 
 import argparse
 import glob
+import hashlib
 import json
 import os
 import sys
@@ -79,6 +80,23 @@ PCT_LO, PCT_HI = 5, 95     # el rango habitual, y el que juzga el veredicto
 
 def sin_ponderar(f):
     return np.zeros_like(np.asarray(f, dtype=float))
+
+
+def huella_audio(ruta):
+    """Huella de los primeros 20 s decodificados.
+
+    El corpus trae el mismo tema subido con varios track_id (auditoría de
+    agosto de 2026: 5 casos, todos en roche-musique). Con el nombre no se
+    detectan —los ID son distintos— y contarlos varias veces les da un peso
+    que no les corresponde en los percentiles.
+    """
+    import soundfile as sf
+    try:
+        x, _ = sf.read(ruta, start=0, stop=44100 * 20, always_2d=True, dtype="float32")
+    except Exception:
+        return None
+    return hashlib.sha1(
+        np.ascontiguousarray(x.mean(axis=1)).round(4).tobytes()).hexdigest()[:16]
 
 
 def espectro_del_drop(ruta):
@@ -116,8 +134,14 @@ def main():
         raise SystemExit(f"No hay audio en {args.corpus}")
 
     print(f"Midiendo {len(rutas)} temas…", file=sys.stderr)
-    filas, sellos = [], []
+    filas, sellos, vistas, dup = [], [], set(), []
     for i, r in enumerate(rutas, 1):
+        hh = huella_audio(r)
+        if hh and hh in vistas:
+            dup.append(os.path.relpath(r, args.corpus))
+            continue
+        if hh:
+            vistas.add(hh)
         try:
             v = espectro_del_drop(r)
         except Exception:
@@ -128,6 +152,9 @@ def main():
         if i % 40 == 0:
             print(f"  {i}/{len(rutas)} · {len(filas)} válidos", file=sys.stderr)
 
+    if dup:
+        print(f"  {len(dup)} duplicados de audio descartados: "
+              f"{', '.join(dup[:6])}{'…' if len(dup) > 6 else ''}", file=sys.stderr)
     if len(filas) < 30:
         raise SystemExit(f"Solo {len(filas)} temas válidos: muy pocos para calibrar.")
 
@@ -145,7 +172,7 @@ def main():
     hi = np.nanpercentile(S, PCT_HI, axis=0)
 
     dentro = hz <= TOPE_CORREDOR
-    print(f"\n    // {len(filas)} temas de {len(set(sellos))} sellos · "
+    print(f"\n    // {len(filas)} previews independientes de {len(set(sellos))} sellos · "
           f"percentiles {PCT_LO}-{PCT_HI} · generado por "
           f"backend/scripts/calibrar_corredor.py")
     print("    const V2_CORREDOR = [")

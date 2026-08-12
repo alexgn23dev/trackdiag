@@ -1861,7 +1861,7 @@
     // en la barra va en escala logarítmica, que es como se oye la frecuencia:
     // de 60 a 200 Hz se percibe un salto parecido al de 4 a 8 kHz.
     // Corredor de referencia: dónde cae el espectro de la música ya editada.
-    // Percentiles 5 y 95 de 327 temas de 26 sellos, medidos con el mismo código
+    // Percentiles de 322 previews independientes de 26 sellos, medidos con el mismo código
     // que el track del usuario (mismo tercio de octava, misma ventana del drop,
     // misma inclinación) y anclados igual que la curva que se dibuja encima.
     // Se regenera con backend/scripts/calibrar_corredor.py.
@@ -1887,35 +1887,35 @@
     // corredor codifica lo típico que es cada zona en vez de ser un degradado
     // decorativo. El veredicto sigue usando solo el 5-95.
     const V2_CORREDOR = [
-        { hz: 20, lo: -33.3, lo2: -29.3, med: -26.3, hi2: -22.2, hi: -12.0 },
-        { hz: 25, lo: -30.7, lo2: -26.1, med: -22.9, hi2: -18.0, hi: -5.9 },
-        { hz: 31.5, lo: -23.3, lo2: -15.7, med: -11.5, hi2: -4.5, hi: 4.7 },
-        { hz: 40, lo: -13.2, lo2: -2.5, med: 2.3, hi2: 6.8, hi: 11.8 },
-        { hz: 50, lo: 1.1, lo2: 7.6, med: 10.2, hi2: 12.6, hi: 16.9 },
+        { hz: 20, lo: -33.3, lo2: -29.4, med: -26.4, hi2: -22.2, hi: -12.2 },
+        { hz: 25, lo: -30.7, lo2: -26.2, med: -22.9, hi2: -17.9, hi: -5.8 },
+        { hz: 31.5, lo: -23.4, lo2: -15.7, med: -11.5, hi2: -4.4, hi: 4.8 },
+        { hz: 40, lo: -13.2, lo2: -2.6, med: 2.4, hi2: 6.9, hi: 11.9 },
+        { hz: 50, lo: 0.9, lo2: 7.6, med: 10.2, hi2: 12.6, hi: 16.9 },
         { hz: 63, lo: 2.6, lo2: 6.6, med: 8.9, hi2: 11.2, hi: 15.0 },
-        { hz: 80, lo: 1.3, lo2: 4.2, med: 6.7, hi2: 9.2, hi: 12.7 },
-        { hz: 100, lo: -1.2, lo2: 2.5, med: 4.8, hi2: 7.3, hi: 10.9 },
-        { hz: 125, lo: -2.6, lo2: 1.0, med: 3.5, hi2: 6.0, hi: 9.4 },
-        { hz: 160, lo: -2.7, lo2: 0.3, med: 2.1, hi2: 4.3, hi: 8.4 },
-        { hz: 200, lo: -2.7, lo2: -0.6, med: 1.4, hi2: 3.6, hi: 7.0 },
-        { hz: 250, lo: -4.4, lo2: -1.0, med: 0.7, hi2: 2.4, hi: 4.7 },
-        { hz: 315, lo: -3.6, lo2: -1.0, med: 0.7, hi2: 2.2, hi: 5.0 },
-        { hz: 400, lo: -3.4, lo2: -1.1, med: 0.4, hi2: 2.1, hi: 4.9 },
-        { hz: 500, lo: -3.5, lo2: -1.5, med: -0.2, hi2: 1.1, hi: 3.2 },
-        { hz: 630, lo: -4.1, lo2: -1.4, med: -0.2, hi2: 1.5, hi: 3.9 },
+        { hz: 80, lo: 1.3, lo2: 4.2, med: 6.6, hi2: 9.2, hi: 12.7 },
+        { hz: 100, lo: -1.2, lo2: 2.5, med: 4.8, hi2: 7.3, hi: 11.0 },
+        { hz: 125, lo: -2.6, lo2: 1.1, med: 3.5, hi2: 6.0, hi: 9.4 },
+        { hz: 160, lo: -2.8, lo2: 0.4, med: 2.1, hi2: 4.3, hi: 8.4 },
+        { hz: 200, lo: -2.7, lo2: -0.7, med: 1.4, hi2: 3.6, hi: 7.0 },
+        { hz: 250, lo: -4.4, lo2: -1.1, med: 0.6, hi2: 2.4, hi: 4.7 },
+        { hz: 315, lo: -3.6, lo2: -1.0, med: 0.6, hi2: 2.1, hi: 4.8 },
+        { hz: 400, lo: -3.4, lo2: -1.2, med: 0.4, hi2: 2.0, hi: 4.8 },
+        { hz: 500, lo: -3.5, lo2: -1.5, med: -0.2, hi2: 1.2, hi: 3.2 },
+        { hz: 630, lo: -4.2, lo2: -1.4, med: -0.2, hi2: 1.5, hi: 3.9 },
         { hz: 800, lo: -4.4, lo2: -1.7, med: -0.2, hi2: 1.1, hi: 3.9 },
         { hz: 1000, lo: -3.8, lo2: -1.8, med: -0.5, hi2: 0.8, hi: 2.6 },
-        { hz: 1250, lo: -3.9, lo2: -1.9, med: -0.5, hi2: 0.7, hi: 2.7 },
+        { hz: 1250, lo: -3.9, lo2: -1.8, med: -0.5, hi2: 0.8, hi: 2.7 },
         { hz: 1600, lo: -4.4, lo2: -2.0, med: -0.8, hi2: 0.6, hi: 2.6 },
         { hz: 2000, lo: -4.8, lo2: -2.5, med: -1.0, hi2: 0.2, hi: 2.4 },
-        { hz: 2500, lo: -5.9, lo2: -3.0, med: -1.0, hi2: 0.4, hi: 3.0 },
-        { hz: 3150, lo: -5.6, lo2: -2.8, med: -0.7, hi2: 1.0, hi: 3.6 },
+        { hz: 2500, lo: -5.7, lo2: -2.9, med: -1.0, hi2: 0.6, hi: 3.0 },
+        { hz: 3150, lo: -5.4, lo2: -2.7, med: -0.7, hi2: 1.0, hi: 3.6 },
         { hz: 4000, lo: -5.7, lo2: -2.2, med: 0.5, hi2: 2.3, hi: 5.0 },
-        { hz: 5000, lo: -6.0, lo2: -0.8, med: 1.7, hi2: 3.7, hi: 6.6 },
-        { hz: 6300, lo: -5.0, lo2: 0.6, med: 3.2, hi2: 5.4, hi: 8.3 },
-        { hz: 8000, lo: -5.3, lo2: 1.1, med: 3.9, hi2: 6.4, hi: 9.2 },
-        { hz: 10000, lo: -7.4, lo2: 0.7, med: 3.5, hi2: 5.9, hi: 8.8 },
-        { hz: 12500, lo: -10.2, lo2: -1.7, med: 1.7, hi2: 4.3, hi: 7.6 },
+        { hz: 5000, lo: -6.0, lo2: -0.7, med: 1.7, hi2: 3.7, hi: 6.6 },
+        { hz: 6300, lo: -5.0, lo2: 0.8, med: 3.3, hi2: 5.4, hi: 8.4 },
+        { hz: 8000, lo: -5.5, lo2: 1.2, med: 3.9, hi2: 6.4, hi: 9.2 },
+        { hz: 10000, lo: -7.1, lo2: 0.7, med: 3.6, hi2: 6.0, hi: 8.8 },
+        { hz: 12500, lo: -10.0, lo2: -1.7, med: 1.8, hi2: 4.3, hi: 7.7 },
     ];
 
     /** Zonas con nombre, para poder decir DÓNDE cae fuera de la referencia.
@@ -1937,7 +1937,7 @@
      * publicados se queda dentro en TODAS. Una banda suelta fuera es la textura
      * del tema. Lo que describe una zona es una RACHA.
      *
-     * Calibrado sobre los mismos 327 temas, mirando de 50 Hz para arriba: con
+     * Calibrado sobre los mismos 322 previews, mirando de 50 Hz para arriba: con
      * rachas de 4 bandas seguidas sale "equilibrado" el 87 % de los discos
      * publicados y el 79 % de los tracks de usuario.
      *
@@ -2264,7 +2264,8 @@
 
         return (
             <div>
-                <div className="flex items-center justify-between gap-4 mb-4">
+                <div className="flex flex-col items-start gap-2 mb-4
+                                sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                     <span className="rotulo-v2"
                           style={{ fontSize: '10px', letterSpacing: '.14em', color: '#8e8e97' }}>
                         {pond ? 'Compensado al oído' : 'Espectro, como tu analizador'}
@@ -2437,9 +2438,13 @@
                     <span className="absolute cifra-v2"
                           style={{ right: 12, top: 10, fontSize: '8.5px',
                                    letterSpacing: '.03em', color: '#4a4a53' }}>
-                        {pond ? 'bajo el pico' : 'sobre el cuerpo del tema'}
-                        {' · '}{detallado ? '1/3 de octava' : '6 bandas'}
-                        {!pond && ' · +4.5 dB/oct'}
+                        {/* En estrecho solo la parte imprescindible: la completa
+                            no cabe en 390 px y se montaba sobre la anotación. */}
+                        <span className="hidden sm:inline">
+                            {pond ? 'bajo el pico' : 'sobre el cuerpo del tema'}{' · '}
+                        </span>
+                        {detallado ? '1/3 de octava' : '6 bandas'}
+                        {!pond && <span className="hidden sm:inline"> · +4.5 dB/oct</span>}
                     </span>
 
                     {/* El señalador del aviso, en HTML: dentro del SVG el círculo
@@ -2560,8 +2565,11 @@
                         <button className="v2-nav-link" onClick={onPerfil}>
                             {sesionIniciada ? 'Mi perfil' : 'Entrar'}
                         </button>
+                        {/* En móvil solo "Nuevo": con el texto completo el botón
+                            se salía de la pantalla y había que arrastrar la barra
+                            para alcanzar la acción principal. */}
                         <button className="v2-nav-cta" onClick={onNuevo} style={{ marginLeft: '0.5rem' }}>
-                            Nuevo análisis
+                            Nuevo<span className="hidden sm:inline"> análisis</span>
                         </button>
                     </div>
                 </div>
@@ -2855,7 +2863,7 @@
                                 </p>
                                 <p style={{ fontSize: '11px', lineHeight: 1.6, color: '#61616b',
                                             marginTop: 3 }}>
-                                    Referencia: 327 previews de catálogo de 26 sellos,
+                                    Referencia: 322 previews de catálogo de 26 sellos,
                                     sobre todo progressive y house.
                                 </p>
                             </div>
@@ -2867,8 +2875,8 @@
                     )}
                     <V2Desplegable etiqueta="Cómo leer este gráfico">
                         <p><span className="text-gray-300">La franja gris es la referencia.</span> Es
-                           donde cae el espectro de <span className="text-gray-300">327 temas ya
-                           editados de 26 sellos</span>, medidos exactamente igual que el tuyo. Si tu
+                           donde cae el espectro de <span className="text-gray-300">322 previews de
+                           catálogo de 26 sellos</span>, medidos exactamente igual que el tuyo. Si tu
                            curva va por dentro, tu balance se parece al de un disco publicado. Lo que
                            interesa no es rozarla en un punto, sino salirse de ella en toda una zona.</p>
                         <p><span className="text-gray-300">El 0 es el cuerpo de tu tema</span> — el
@@ -2895,7 +2903,7 @@
                         <p className="text-gray-500">Letra pequeña: en Oído se usa la ponderación A, la
                            forma normalizada de la curva de 40 fon — volumen de escucha moderado. A
                            volumen de club el oído es más plano, así que compensa de más.</p>
-                        <p className="text-gray-500">Qué es exactamente la referencia: 327 previews
+                        <p className="text-gray-500">Qué es exactamente la referencia: 322 previews
                            de catálogo de 120 s de 26 sellos, con el género tomado del sello y no del
                            tema. La mezcla no es neutra — el 40 % es progressive house y no hay
                            techno duro, trance ni drum &amp; bass. Si produces alguno de esos, la

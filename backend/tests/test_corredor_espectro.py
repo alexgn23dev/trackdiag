@@ -8,13 +8,15 @@ Precisamente por eso es la pieza más fácil de estropear sin enterarse. Estos
 tests vigilan tres cosas:
 
   1. Que el dato esté bien formado y sea reproducible desde el corpus
-     (`backend/scripts/calibrar_corredor.py`).
+     (`backend/scripts/calibrar_corredor.py`), sin duplicados: el corpus trae
+     5 temas repetidos con distinto track_id y contarlos varias veces les daría
+     un peso que no les corresponde.
   2. Que el gráfico y el veredicto salgan de la MISMA función. El fallo que se
      venía de arreglar era exactamente ese: el rótulo decía "graves elevado"
      mientras la curva se veía recta, porque cada uno leía una medida distinta.
   3. Que no se le dé al corredor más autoridad de la que tiene. Separa poco —
-     87 % de discos editados contra 79 % de tracks de usuario — y el código
-     tiene que seguir tratándolo como contexto, no como aprobado/suspenso.
+     87 % de previews de catálogo contra 79 % de tracks de usuario — y el
+     código tiene que seguir tratándolo como contexto, no como aprobado.
 
 Son comprobaciones sobre el código fuente: la lógica vive en JavaScript. Lo que
 sí se ejecuta de verdad es el script de calibración, y la prueba manual con
@@ -117,7 +119,7 @@ class TestElDatoEstaBienFormado(unittest.TestCase):
         sabrá si se puede tocar."""
         h = fuente()
         cabecera = h[h.index("// Corredor de referencia"):h.index("const V2_CORREDOR")]
-        self.assertIn("327", cabecera)
+        self.assertIn("322", cabecera)
         self.assertIn("26 sellos", cabecera)
         self.assertTrue(os.path.exists(
             os.path.join(RAIZ, "scripts", "calibrar_corredor.py")),
@@ -259,7 +261,7 @@ class TestLaReglaEsHonesta(unittest.TestCase):
         Y tiene que decir QUÉ son: previews de catálogo, no másters, y con el
         sesgo declarado — es la advertencia que necesita quien sube un género
         que no está en el corpus."""
-        self.assertIn("327 previews de catálogo de 26 sellos", self.h)
+        self.assertIn("322 previews de catálogo de 26 sellos", self.h)
         self.assertIn("sobre todo progressive y house", self.h)
 
     def test_el_veredicto_describe_en_vez_de_prescribir(self):
