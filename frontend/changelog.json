@@ -1,6 +1,18 @@
 {
   "entries": [
     {
+      "version": "0.5.87",
+      "date": "2026-08-12",
+      "title": "El espectro ahora se compara con música ya editada",
+      "changes": [
+        "El gráfico del balance espectral lleva detrás una franja gris: el rango donde cae el espectro de 327 temas ya editados de 26 sellos, medidos exactamente igual que el tuyo. Si tu curva va por dentro, tu balance se parece al de un disco publicado.",
+        "El 0 de la escala pasa a ser el cuerpo de tu tema (el nivel medio entre 200 Hz y 2 kHz), así que el número se lee solo: si el grave está en +12, está 12 dB por encima del cuerpo. En los discos publicados esa cifra va de +1 a +17.",
+        "El veredicto de balance ya sale de la misma medida que la curva. Antes el rótulo y el gráfico venían de sitios distintos y podían contradecirse.",
+        "Lo que se marca no es rozar la franja en un punto, sino salirse de ella en toda una zona: con 29 bandas, salirse en alguna es lo normal — solo el 26 % de los discos publicados se queda dentro en todas.",
+        "Importante y está escrito en la propia pantalla: estar dentro de la franja dice que tu balance tonal es corriente, no que tu tema esté bien. El 87 % de los discos publicados cae dentro, y también el 79 % de los temas que se suben aquí."
+      ]
+    },
+    {
       "version": "0.5.86",
       "date": "2026-08-11",
       "title": "El espectro deja de exagerar el desbalance",
