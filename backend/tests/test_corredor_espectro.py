@@ -149,12 +149,16 @@ class TestElGraficoYElVeredictoNoPuedenDivergir(unittest.TestCase):
 
     def test_la_inclinacion_es_una_constante_compartida(self):
         """Si el gráfico y el veredicto inclinaran distinto, volverían a
-        contradecirse."""
+        contradecirse. La inclinación vive en v2PuntosEspectro, que usan los
+        dos, y no puede haber una segunda copia suelta por ahí."""
         self.assertIn("const V2_TILT = 1.5;", self.h)
         self.assertEqual(self.h.count("const V2_TILT ="), 1)
+        i = self.h.index("function v2PuntosEspectro(")
+        self.assertIn("V2_TILT", self.h[i:i + 900])
+        # y el componente NO puede tener su propia inclinación
         i = self.h.index("function V2Espectro2(")
-        j = self.h.index("function V2Escalones(", i)
-        self.assertIn("const TILT = V2_TILT", self.h[i:j])
+        j = self.h.index("/** Medidor de un estado", i)
+        self.assertNotIn("const TILT =", self.h[i:j])
 
     def test_el_veredicto_no_pasa_por_un_efecto(self):
         """Con useEffect la tarjeta se pintaba una vez sin veredicto y otra con
@@ -198,12 +202,15 @@ class TestLaReglaEsHonesta(unittest.TestCase):
         self.assertIn("contexto", contexto.lower())
         self.assertIn("POCOS", contexto)
 
-    def test_el_rotulo_no_promete_un_juicio_de_calidad(self):
-        """Con 8 puntos de separación, una insignia que ponga "RESULTADO" se
-        leería como "tu tema está bien", que no es lo que se ha medido."""
-        i = self.h.index("function V2TabMezcla(")
-        j = self.h.index("function V2TabMaster(", i)
-        self.assertIn("veredicto ? 'Balance' : 'Graves'", self.h[i:j])
+    def test_el_limite_esta_escrito_donde_el_usuario_lo_ve(self):
+        """La insignia dice RESULTADO / EQUILIBRADO, que es lo que Alex ha
+        especificado. Con solo 8 puntos de separación entre discos editados y
+        temas de usuario, eso puede leerse como "tu tema está bien" — que no es
+        lo que se ha medido. La contrapartida obligatoria es que el límite esté
+        escrito en la pantalla, no solo en un comentario del código."""
+        self.assertIn("no que tu tema esté bien", self.h)
+        self.assertIn("87 % de los discos", self.h)
+        self.assertIn("79 % de los temas", self.h)
 
     def test_el_veredicto_ignora_lo_que_esta_por_debajo_de_50_hz(self):
         """Ahí el corredor mide entre 21 y 28 dB: cabe casi cualquier cosa, y
@@ -215,8 +222,8 @@ class TestLaReglaEsHonesta(unittest.TestCase):
         cuerpo = self.h[i:i + 2200]
         self.assertIn("V2_VEREDICTO_DESDE", cuerpo)
         # pero el corredor SÍ se sigue dibujando ahí abajo
-        i = self.h.index("const corredor = (() =>")
-        self.assertNotIn("V2_VEREDICTO_DESDE", self.h[i:i + 700])
+        i = self.h.index("const corr = pond ? null :")
+        self.assertNotIn("V2_VEREDICTO_DESDE", self.h[i:i + 900])
 
     def test_una_racha_necesita_el_mismo_signo(self):
         """Cuatro bandas fuera, dos por arriba y dos por abajo, no describen una
@@ -232,7 +239,7 @@ class TestLaReglaEsHonesta(unittest.TestCase):
         j = self.h.index("function V2Escalones(", i)
         cuerpo = self.h[i:j]
         self.assertIn("const comp = pond ? null : veredicto;", cuerpo)
-        self.assertIn("if (pond) return null;", cuerpo)
+        self.assertIn("const corr = pond ? null :", cuerpo)
 
     def test_el_texto_al_usuario_dice_con_que_se_compara(self):
         """'Equilibrado' sin decir respecto a qué no significa nada."""

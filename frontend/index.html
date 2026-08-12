@@ -216,6 +216,18 @@
            resto de la web. */
         .v2-cuerpo { font-size: 13px; line-height: 1.55; }
         .v2-sec { font-size: 11px; line-height: 1.5; }
+        /* Entrada del espectro: la curva se traza de izquierda a derecha y el
+           corredor entra con un fundido. Una sola vez, al montar. */
+        .v2-curva {
+            stroke-dasharray: 1200; stroke-dashoffset: 1200;
+            animation: v2Trazo 620ms cubic-bezier(.22,.61,.36,1) forwards;
+        }
+        .v2-corredor { animation: v2Fundido 520ms ease-out both; }
+        @keyframes v2Trazo   { to { stroke-dashoffset: 0; } }
+        @keyframes v2Fundido { from { opacity: 0; } to { opacity: 1; } }
+        @media (prefers-reduced-motion: reduce) {
+            .v2-curva, .v2-corredor { animation: none; stroke-dashoffset: 0; opacity: 1; }
+        }
 
         /* El widget de calibración se reutiliza tal cual dentro de una tarjeta
            estrecha. Sus botones usan `sm:flex-row`, que depende del ANCHO DE
@@ -1617,6 +1629,37 @@
     //   * la orientación: cinco pestañas en vez de ~25 secciones apiladas.
     // El prototipo con el que se validó está en docs/rediseno/.
 
+    const V2_MORADO = '#6D10FF';
+
+    /** Onda abstracta, para la línea de "medido en el drop". */
+    const V2IconoOnda = () => (
+        <svg width="26" height="14" viewBox="0 0 26 14" fill="none" aria-hidden="true"
+             style={{ flexShrink: 0, marginTop: 1 }}>
+            <path d="M1 7h2.2l1.6-4.6L7 11.4l2-8.2 2 6.6 1.8-3.4 1.7 5.2 2-7 1.9 4.4L20.4 7H25"
+                  stroke={V2_MORADO} strokeWidth="1.3" strokeLinecap="round"
+                  strokeLinejoin="round" opacity="0.85" />
+        </svg>
+    );
+
+    /** Check en círculo, para el veredicto favorable. */
+    const V2IconoCheck = ({ color }) => (
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"
+             style={{ flexShrink: 0, marginTop: 2 }}>
+            <circle cx="8" cy="8" r="6.6" stroke={color} strokeWidth="1.3" />
+            <path d="M5.2 8.2l2 2 3.6-4" stroke={color} strokeWidth="1.5"
+                  strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+    );
+
+    /** Aviso: mismo peso visual que el check, sin alarmismo. */
+    const V2IconoAviso = ({ color }) => (
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"
+             style={{ flexShrink: 0, marginTop: 2 }}>
+            <circle cx="8" cy="8" r="6.6" stroke={color} strokeWidth="1.3" />
+            <path d="M8 4.6v4.2" stroke={color} strokeWidth="1.5" strokeLinecap="round" />
+            <circle cx="8" cy="11.2" r="0.85" fill={color} />
+        </svg>
+    );
     const V2_COLOR = { neutro: '#3a3a3a', ok: '#25F464', aviso: '#facc15',
                        alerta: '#f87171', info: '#60a5fa' };
 
@@ -1682,7 +1725,10 @@
                 {abierto && <div className="mt-2.5 text-gray-400 v2-cuerpo space-y-2 fade-in">{children}</div>}
                 {hayResto && (
                     <button onClick={() => setAbierto(!abierto)}
-                            className="mt-2 text-xs text-gray-500 hover:text-white transition">
+                            className="mt-2 text-xs transition"
+                            style={{ color: abierto ? '#8a8a93' : '#9a6bff' }}
+                            onMouseEnter={e => (e.currentTarget.style.color = '#b393ff')}
+                            onMouseLeave={e => (e.currentTarget.style.color = abierto ? '#8a8a93' : '#9a6bff')}>
                         {abierto ? '− Ocultar' : '+ ' + (etiqueta || 'Saber más')}
                     </button>
                 )}
@@ -1990,140 +2036,179 @@
      * pone siempre una banda arriba del todo y otra abajo, por pequeña que sea
      * la diferencia real, y fabrica montañas donde no las hay.
      */
+    /* ==================================================================
+       BALANCE ESPECTRAL
+       ==================================================================
+       Regla que manda sobre todas las demás: la interfaz NUNCA puede sugerir
+       un problema que el análisis no haya detectado. De ahí salen casi todas
+       las decisiones de abajo — que el corredor sea morado apagado y no rojo,
+       que la curva sea blanca y solo se tiña donde el motor ha marcado algo, y
+       que no haya relleno hasta el fondo (una montaña alta no es un defecto:
+       toda la música tiene el grave alto).
+
+       Geometría, en helpers separados para que se lean solos:
+         v2EspectroX()        frecuencia → % horizontal (log)
+         v2EspectroY()        dB → % vertical
+         v2CurvaSuave()       los 31 puntos → path, sin overshoot
+         v2PathCorredor()     los percentiles → polígono cerrado
+    */
+
+    /** Frecuencia a porcentaje horizontal. Log, que es como se oye. */
+    function v2EspectroX(f, f0, f1) {
+        const lg = Math.log10;
+        const v = Math.min(Math.max(f, f0), f1);
+        return ((lg(v) - lg(f0)) / (lg(f1) - lg(f0))) * 100;
+    }
+
+    /** dB a porcentaje vertical, con aire arriba y un margen abajo. */
+    function v2EspectroY(db, arriba, rango, aire, util) {
+        const t = Math.max(0, Math.min(1, (arriba - db) / rango));
+        return aire + t * util;
+    }
+
+    /** Catmull-Rom con tensión 1/2, que pasa POR los puntos y no los desplaza.
+     *
+     *  Deliberadamente conservador: hay 31 medidas reales y ninguna más. Un
+     *  spline decorativo inventaría picos entre bandas y movería los máximos,
+     *  y en un gráfico de diagnóstico eso es fabricar datos.
+     */
+    function v2CurvaSuave(pts) {
+        if (pts.length < 2) return '';
+        let d = `M ${pts[0][0].toFixed(2)},${pts[0][1].toFixed(2)}`;
+        for (let i = 0; i < pts.length - 1; i++) {
+            const p0 = pts[i - 1] || pts[i], p1 = pts[i];
+            const p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+            d += ` C ${(p1[0] + (p2[0] - p0[0]) / 12).toFixed(2)},${(p1[1] + (p2[1] - p0[1]) / 12).toFixed(2)}`
+               + ` ${(p2[0] - (p3[0] - p1[0]) / 12).toFixed(2)},${(p2[1] - (p3[1] - p1[1]) / 12).toFixed(2)}`
+               + ` ${p2[0].toFixed(2)},${p2[1].toFixed(2)}`;
+        }
+        return d;
+    }
+
+    /** El corredor, como polígono cerrado: borde alto de ida, bajo de vuelta. */
+    function v2PathCorredor(arriba, abajo) {
+        if (arriba.length < 2) return '';
+        const ida = arriba.map(p => `${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(' L ');
+        const vuelta = abajo.slice().reverse()
+            .map(p => `${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(' L ');
+        return `M ${ida} L ${vuelta} Z`;
+    }
+
     function V2Espectro2({ display, displayPond, fino, ventana, marcas, veredicto }) {
         // Arranca en la vista de analizador, no en la ponderada: es la única
         // calibrada para que "plano" signifique "normal", y es la que el
         // usuario puede cotejar con SPAN o Pro-Q en su DAW.
         const [pond, setPond] = useState(false);
 
-        // Fuente preferente: el espectro en tercios de octava (31 bandas,
-        // medido a la frecuencia real del archivo). Si el análisis es viejo o
-        // el archivo no se pudo posicionar, se cae a las 6 bandas de siempre.
         const detallado = !!(fino && fino.bandas && fino.bandas.length);
         const datos = pond ? displayPond : display;
-        if (!detallado && (!datos || Object.keys(datos).length === 0)) return null;
-
-        // Inclinación de dibujo. TODA la música tiene más energía en el grave
-        // que en el agudo, esté bien o mal mezclada: es la estadística del
-        // material, no un defecto del track. Un espectro sin inclinar dibuja
-        // esa caída universal como si fuera culpa tuya, y entonces ningún track
-        // puede salir plano — el gráfico deja de poder decir nada.
-        //
-        // Los analizadores lo compensan desde siempre. Sumar energía por tercio
-        // de octava ya lleva +3 dB/oct implícitos (cada banda es 2^(1/3) más
-        // ancha que la anterior); SPAN y Pro-Q dibujan +4.5. La diferencia son
-        // estos 1.5, así que la curva queda en la MISMA convención que el
-        // analizador que el usuario tiene abierto en su DAW.
-        //
-        // Comprobado además contra el material: sobre 163 temas editados de 26
-        // sellos, la inclinación que deja plano al tema mediano entre 100 Hz y
-        // 8 kHz es +1.68 dB/oct. Se usa 1.5 porque cae dentro de esa medida y
-        // además es una convención citable, no un número ajustado a un corpus.
-        const TILT = V2_TILT, TOPE_DIBUJO = V2_TOPE_DIBUJO;
         const puntos = v2PuntosEspectro(fino, display, displayPond, pond);
-        if (puntos.length < 2) return null;
 
-        // El 0 de la escala es el cuerpo del tema (media de 200 Hz a 2 kHz), y
-        // el corredor se construyó igual: por eso son comparables sin ajustes.
-        // En la vista ponderada no hay corredor, así que ahí se ancla al pico,
-        // que es lo que dice su rótulo.
-        const techo = pond ? Math.max(...puntos.map(p => p.v)) : v2Referencia(puntos);
-        // El corredor solo tiene sentido sobre la medida sin ponderar: se
-        // construyó así. En la vista Oído no se dibuja.
-        const comp = pond ? null : veredicto;
-        // Rango fijo: hace comparables dos análisis, y 36 dB cubre lo que se
-        // oye como diferencia de balance. Medido sobre material real, deja
-        // dentro casi todas las bandas y manda al suelo justo las que no
-        // tienen contenido — que es lo que hay que leer.
-        // Escala fija respecto a esa referencia. Sin ponderar va de +18 a −24:
-        // medido sobre 327 temas editados y 33 de usuario, en la zona que se lee
-        // (50 Hz–10 kHz) los valores caen entre −15 y +19. Lo que se sale por
-        // abajo son las bandas de 20–40 Hz y las de 12.5 kHz para arriba, donde
-        // no hay contenido musical y el suelo es la respuesta correcta.
+        // Sin datos no se dibuja una curva falsa: se dice que no los hay.
+        if (puntos.length < 2) {
+            return (
+                <div className="rounded-lg border border-[#2a2a2a] flex items-center justify-center"
+                     style={{ background: '#15171a', height: 150 }}>
+                    <span className="v2-sec text-gray-600">Esperando análisis espectral</span>
+                </div>
+            );
+        }
+
+        // --- Escala ---------------------------------------------------------
+        // El 0 es el cuerpo del tema (200 Hz–2 kHz), no su banda más alta. Ver
+        // el comentario largo de V2_CORREDOR: anclar al pico dejaba el corredor
+        // ciego al exceso de grave. En la vista ponderada no hay corredor, así
+        // que ahí se ancla al pico y el rótulo lo dice.
+        const ref = pond ? Math.max(...puntos.map(p => p.v)) : v2Referencia(puntos);
         const ARRIBA = pond ? 0 : 18;
-        const RANGO = pond ? 36 : 42, PASO = 6;
-        const suelo = techo + ARRIBA - RANGO;
+        const RANGO = pond ? 36 : 42;
+        const PASO = 6;
+        const F0 = 20, F1 = 16000;
+        // AIRE deja sitio arriba al rótulo del eje y a la cápsula del corredor.
+        const H = 100, AIRE = 17, PIE = 5;
+        const util = H - AIRE - PIE;
+        const CANAL = 40;   // px del canal de etiquetas de nivel
 
-        const F0 = 20, F1 = 20000;
-        const lg = f => Math.log10(f);
-        const span = lg(F1) - lg(F0);
-        const x = f => ((lg(Math.min(Math.max(f, F0), F1)) - lg(F0)) / span) * 100;
+        const x = f => v2EspectroX(f, F0, F1);
+        const y = db => v2EspectroY(db, ARRIBA, RANGO, AIRE, util);
 
-        // Aire arriba para que la curva no toque el borde.
-        const H = 100, AIRE = 12, MARGEN_INF = 3;
-        const util = H - AIRE - MARGEN_INF;
-        const y = v => AIRE + (1 - Math.max(0, Math.min(1, (v - suelo) / RANGO))) * util;
+        // --- La curva del track ---------------------------------------------
+        const rel = puntos.map(p => ({ f: p.f, v: p.v - ref }));
+        const pts = rel.map(p => [x(p.f), y(p.v)]);
+        const curva = v2CurvaSuave(pts);
 
-        const pts = puntos.map(p => [x(p.f), y(p.v)]);
-        const suave = (p) => {
-            if (p.length < 2) return '';
-            let d = `M ${p[0][0]},${p[0][1]}`;
-            for (let i = 0; i < p.length - 1; i++) {
-                const p0 = p[i - 1] || p[i], p1 = p[i], p2 = p[i + 1], p3 = p[i + 2] || p2;
-                const t = 0.5;
-                d += ` C ${p1[0] + (p2[0] - p0[0]) / 6 * t},${p1[1] + (p2[1] - p0[1]) / 6 * t}`
-                   + ` ${p2[0] - (p3[0] - p1[0]) / 6 * t},${p2[1] - (p3[1] - p1[1]) / 6 * t}`
-                   + ` ${p2[0]},${p2[1]}`;
-            }
-            return d;
-        };
-        const curva = suave(pts);
-        const relleno = `${curva} L ${pts[pts.length - 1][0]},${H} L ${pts[0][0]},${H} Z`;
+        // --- El corredor de referencia --------------------------------------
+        // Percentiles reales del corpus (ver V2_CORREDOR). Solo sobre la medida
+        // sin ponderar: se construyó así, y superponerlo a la curva ponderada
+        // compararía dos cosas distintas.
+        const corr = pond ? null : (() => {
+            const arriba = V2_CORREDOR.map(c => [x(c.hz), y(c.hi)]);
+            const abajo = V2_CORREDOR.map(c => [x(c.hz), y(c.lo)]);
+            const medi = V2_CORREDOR.map(c => [x(c.hz), y(c.med)]);
+            return {
+                area: v2PathCorredor(arriba, abajo),
+                borde: v2CurvaSuave(arriba),
+                bordeBajo: v2CurvaSuave(abajo),
+                mediana: v2CurvaSuave(medi),
+                centroX: (x(V2_CORREDOR[0].hz) + x(V2_CORREDOR[V2_CORREDOR.length - 1].hz)) / 2,
+                topeY: Math.min(...arriba.map(p => p[1])),
+            };
+        })();
 
-        // Escalones en valor absoluto: de +18 a −24 sin ponderar, y de 0 a −36
-        // en la vista ponderada, que sigue anclada al pico.
+        // --- Tramos con desviación real -------------------------------------
+        // Solo se tiñen los tramos que el motor ya ha marcado. Sin rachas, la
+        // curva entera se queda blanca: la estética no fabrica problemas.
+        const comp = pond ? null : veredicto;
+        const rachas = (comp && comp.rachas) || [];
+        const tramos = rachas.map(r => {
+            const dentro = rel.filter(p => p.f >= r.desde && p.f <= r.hasta);
+            if (dentro.length < 2) return null;
+            // Se alarga medio punto a cada lado para que empalme con la blanca.
+            const i0 = rel.findIndex(p => p.f === dentro[0].f);
+            const i1 = rel.findIndex(p => p.f === dentro[dentro.length - 1].f);
+            const trozo = rel.slice(Math.max(0, i0 - 1), Math.min(rel.length, i1 + 2));
+            return {
+                d: v2CurvaSuave(trozo.map(p => [x(p.f), y(p.v)])),
+                color: Math.abs(r.db) >= 6 ? V2_COLOR.alerta : V2_COLOR.aviso,
+                clave: `${r.desde}-${r.hasta}`,
+            };
+        }).filter(Boolean);
+        const aviso = rachas.length ? rachas[0] : null;
+
+        // --- Marcas del motor (frecuencia áspera) ---------------------------
+        const marcasReales = (marcas || []).filter(m => m && m.f > 20 && m.f <= F1);
+
+        // --- Rejillas --------------------------------------------------------
         const escalones = [];
-        for (let dB = ARRIBA; dB >= ARRIBA - RANGO; dB -= PASO) escalones.push(dB);
-        const yEsc = dB => AIRE + ((ARRIBA - dB) / RANGO) * util;
-
-        // Rejilla de frecuencia con el patrón 1-2-3-5 por década, como cualquier
-        // analizador. Las finas dan sensación de escala; solo unas pocas se rotulan.
-        const finas = [30, 40, 60, 80, 150, 300, 400, 600, 800, 1500, 3000, 4000,
-                       6000, 8000, 15000];
+        for (let db = ARRIBA; db >= ARRIBA - RANGO; db -= PASO) escalones.push(db);
+        const finas = [30, 40, 60, 80, 150, 300, 400, 600, 800, 1500, 3000, 4000, 6000, 8000];
         const rotuladas = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 16000];
+        // En móvil sobran la mitad: se marcan las que aguantan una columna estrecha.
+        const esenciales = new Set([20, 100, 500, 1000, 5000, 16000]);
         const etiquetaHz = f => (f >= 1000 ? `${f / 1000}k` : `${f}`);
 
-        // El corredor de referencia, como polígono cerrado: borde de arriba de
-        // izquierda a derecha, y el de abajo de vuelta.
-        const corredor = (() => {
-            if (pond) return null;
-            const arriba = V2_CORREDOR.map(c => [x(c.hz), y(techo + c.hi)]);
-            const abajo = V2_CORREDOR.map(c => [x(c.hz), y(techo + c.lo)]).reverse();
-            if (arriba.length < 2) return null;
-            return { poli: [...arriba, ...abajo].map(q => `${q[0].toFixed(2)},${q[1].toFixed(2)}`).join(' '),
-                     borde: suave(arriba), hasta: V2_CORREDOR[V2_CORREDOR.length - 1].hz };
-        })();
-        // La desviación que más pesa, para señalarla en el gráfico.
-        const aviso = comp && comp.rachas.length ? comp.rachas[0] : null;
-
-        // Techo real del archivo. Un MP3 a 128 kbps se corta sobre los 16 kHz y
-        // ahí no hay nada que medir: se marca en vez de dibujar una caída falsa.
-        // Dónde deja de haber medida dibujada: o el techo real del archivo (un
-        // MP3 comprimido se corta antes), o nuestro tope de dibujo. Manda el
-        // menor de los dos.
+        // Techo real del archivo: un MP3 comprimido se corta antes de 16 kHz.
         const techoArchivo = detallado && fino.techo_hz ? fino.techo_hz : F1;
-        const corte = Math.min(techoArchivo, TOPE_DIBUJO);
-        // Y si el límite lo pone el ARCHIVO y no nuestro tope, eso sí es un
-        // dato sobre su track y hay que contárselo.
-        const archivoLimitado = techoArchivo < TOPE_DIBUJO;
-        const gid = pond ? 'v2espPond' : 'v2espRaw';
-        const CANAL = 34;
+        const archivoLimitado = techoArchivo < F1;
 
         return (
             <div>
-                <div className="flex items-center justify-between mb-2 gap-2">
-                    <span className="rotulo-v2">
+                <div className="flex items-center justify-between gap-3 mb-2.5">
+                    <span className="rotulo-v2" style={{ fontSize: '10.5px' }}>
                         {pond ? 'Compensado al oído' : 'Espectro, como tu analizador'}
                     </span>
-                    <div className="flex rounded-md overflow-hidden border border-[#333]">
+                    <div className="flex rounded-md overflow-hidden shrink-0"
+                         style={{ border: '1px solid #2f2f2f' }}>
                         {[[true, 'Oído'], [false, 'Espectro']].map(([v, et]) => (
                             <button key={et} onClick={() => setPond(v)}
-                                    className="px-2 py-0.5 transition"
+                                    aria-pressed={pond === v}
+                                    className="px-2.5 py-1 transition"
                                     style={{
-                                        fontSize: '10px', letterSpacing: '.06em',
+                                        fontSize: '10px', letterSpacing: '.07em',
                                         textTransform: 'uppercase', fontWeight: 700,
-                                        background: pond === v ? '#2f2f2f' : 'transparent',
-                                        color: pond === v ? '#fff' : '#6f6f6f',
+                                        background: pond === v ? '#15171a' : 'transparent',
+                                        color: pond === v ? '#f2f2f2' : '#686870',
+                                        boxShadow: pond === v ? `inset 0 0 0 1px ${V2_MORADO}` : 'none',
                                     }}>
                                 {et}
                             </button>
@@ -2131,164 +2216,185 @@
                     </div>
                 </div>
 
-                <div className="relative rounded-lg border border-[#2f2f2f] overflow-hidden"
-                     style={{ background: 'linear-gradient(180deg,#1d1d1d,#151515)', height: 168 }}>
-                    {/* Las etiquetas de nivel van en HTML, no dentro del SVG:
-                        el SVG se estira con preserveAspectRatio="none" y el
-                        texto saldría deformado. */}
-                    <div className="absolute left-0 top-0 bottom-0 z-10"
-                         style={{ width: CANAL, borderRight: '1px solid #262626' }}>
-                        {escalones.map(dB => (
-                            <span key={dB} className="absolute cifra-v2"
-                                  style={{
-                                      right: 5, top: `${yEsc(dB)}%`,
-                                      transform: 'translateY(-50%)',
-                                      fontSize: '9px', color: dB === 0 ? '#8a8a8a' : '#565656',
-                                  }}>
-                                {dB === 0 ? '0' : (dB > 0 ? `+${dB}` : `−${-dB}`)}
+                <div className="relative rounded-lg overflow-hidden"
+                     style={{ background: '#15171a', border: '1px solid #26282c', height: 230 }}>
+
+                    {/* Canal de niveles. En HTML: el SVG se estira a lo ancho y
+                        cualquier texto dentro saldría deformado. */}
+                    <div className="absolute left-0 top-0 bottom-0 z-10" style={{ width: CANAL }}>
+                        <span className="absolute cifra-v2"
+                              style={{ left: 8, top: 8, fontSize: '9px', color: '#686870' }}>
+                            dB
+                        </span>
+                        {escalones.map(db => (
+                            <span key={db} className="absolute cifra-v2"
+                                  style={{ right: 6, top: `${y(db)}%`,
+                                           transform: 'translateY(-50%)', fontSize: '9px',
+                                           color: db === 0 ? '#a5a5ad' : '#565660' }}>
+                                {db === 0 ? '0' : (db > 0 ? `+${db}` : `−${-db}`)}
                             </span>
                         ))}
                     </div>
 
                     <div className="absolute top-0 bottom-0" style={{ left: CANAL, right: 0 }}>
                         <svg viewBox={`0 0 100 ${H}`} preserveAspectRatio="none"
-                             style={{ width: '100%', height: '100%', display: 'block' }}>
+                             style={{ width: '100%', height: '100%', display: 'block' }}
+                             role="img"
+                             aria-label={comp
+                                 ? (comp.equilibrado
+                                     ? 'Espectro dentro del rango habitual'
+                                     : `Espectro con desviación en ${comp.rachas.map(r => r.zona).join(', ')}`)
+                                 : 'Espectro del track'}>
                             <defs>
-                                <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor="#8B5CFF" stopOpacity="0.5" />
-                                    <stop offset="60%" stopColor="#6D10FF" stopOpacity="0.18" />
-                                    <stop offset="100%" stopColor="#6D10FF" stopOpacity="0.02" />
+                                <linearGradient id="v2corrGrad" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor={V2_MORADO} stopOpacity="0.20" />
+                                    <stop offset="100%" stopColor={V2_MORADO} stopOpacity="0.07" />
                                 </linearGradient>
                             </defs>
+
                             {finas.map(f => (
                                 <line key={f} x1={x(f)} x2={x(f)} y1="0" y2={H}
-                                      stroke="#202020" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+                                      stroke="#1f2126" strokeWidth="1" vectorEffect="non-scaling-stroke" />
                             ))}
                             {rotuladas.map(f => (
                                 <line key={f} x1={x(f)} x2={x(f)} y1="0" y2={H}
-                                      stroke="#282828" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+                                      stroke="#25272c" strokeWidth="1" vectorEffect="non-scaling-stroke" />
                             ))}
-                            {escalones.map(dB => (
-                                <line key={dB} x1="0" x2="100"
-                                      y1={yEsc(dB)} y2={yEsc(dB)}
-                                      stroke={dB === 0 ? '#3d3d3d' : '#242424'} strokeWidth="1"
+                            {escalones.map(db => (
+                                <line key={db} x1="0" x2="100" y1={y(db)} y2={y(db)}
+                                      stroke={db === 0 ? '#33363c' : '#232529'} strokeWidth="1"
                                       vectorEffect="non-scaling-stroke"
-                                      strokeDasharray={dB === 0 ? '' : '2 5'} />
+                                      strokeDasharray={db === 0 ? '' : '2 6'} />
                             ))}
-                            {corte && (
-                                <rect x={x(corte)} y="0" width={100 - x(corte)} height={H}
-                                      fill="#0d0d0d" fillOpacity="0.72" />
-                            )}
-                            {corredor && (
-                                <g>
-                                    <polygon points={corredor.poli} fill="#8B93C4" fillOpacity="0.17" />
-                                    <path d={corredor.borde} fill="none" stroke="#8B93C4"
-                                          strokeOpacity="0.42" strokeWidth="1"
+
+                            {corr && (
+                                <g className="v2-corredor">
+                                    <path d={corr.area} fill="url(#v2corrGrad)" />
+                                    <path d={corr.borde} fill="none" stroke={V2_MORADO}
+                                          strokeOpacity="0.40" strokeWidth="1"
                                           vectorEffect="non-scaling-stroke" />
+                                    <path d={corr.bordeBajo} fill="none" stroke={V2_MORADO}
+                                          strokeOpacity="0.22" strokeWidth="1"
+                                          vectorEffect="non-scaling-stroke" />
+                                    {/* La mediana del corpus. Discreta a propósito: refuerza el
+                                        concepto de "dónde está el centro" sin competir. */}
+                                    <path d={corr.mediana} fill="none" stroke="#9a8fc7"
+                                          strokeOpacity="0.34" strokeWidth="1"
+                                          strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
                                 </g>
                             )}
-                            {!corredor && <path d={relleno} fill={`url(#${gid})`} />}
-                            <path d={curva} fill="none" stroke="#25F464" strokeWidth="1.75"
-                                  vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
-                            {corte && (
-                                <line x1={x(corte)} x2={x(corte)} y1="0" y2={H}
-                                      stroke="#4a4a4a" strokeWidth="1"
-                                      vectorEffect="non-scaling-stroke" strokeDasharray="3 3" />
-                            )}
-                            {marcas && marcas.filter(m => m && m.f > 20).map((m, k) => (
-                                <line key={k} x1={x(m.f)} x2={x(m.f)} y1="0" y2={H}
-                                      stroke={m.color || V2_COLOR.aviso} strokeWidth="1.5"
-                                      vectorEffect="non-scaling-stroke" strokeDasharray="4 3" />
+
+                            {/* La curva. Blanca por defecto; los tramos marcados por el
+                                motor se repintan encima con su color de severidad. */}
+                            <path className="v2-curva" d={curva} fill="none" stroke="#f2f2f2"
+                                  strokeWidth="2" vectorEffect="non-scaling-stroke"
+                                  strokeLinejoin="round" strokeLinecap="round" />
+                            {tramos.map(t => (
+                                <path key={t.clave} d={t.d} fill="none" stroke={t.color}
+                                      strokeWidth="2.2" vectorEffect="non-scaling-stroke"
+                                      strokeLinejoin="round" strokeLinecap="round" />
                             ))}
+
+                            {marcasReales.map((m, k) => (
+                                <line key={k} x1={x(m.f)} x2={x(m.f)} y1="0" y2={H}
+                                      stroke={m.color || V2_COLOR.aviso} strokeWidth="1"
+                                      strokeOpacity="0.55" vectorEffect="non-scaling-stroke"
+                                      strokeDasharray="4 4" />
+                            ))}
+                            {aviso && (
+                                <line x1={x(aviso.pico.f)} x2={x(aviso.pico.f)}
+                                      y1="0" y2={y(aviso.pico.v)}
+                                      stroke={V2_COLOR.aviso} strokeOpacity="0.45" strokeWidth="1"
+                                      vectorEffect="non-scaling-stroke" strokeDasharray="3 4" />
+                            )}
                         </svg>
                     </div>
 
-                    {/* Todo en una línea y a la izquierda: a la derecha se
-                        cruzaba con la línea de corte de los 16 kHz. */}
-                    <span className="absolute cifra-v2"
-                          style={{ left: CANAL + 6, top: 5, fontSize: '9px', color: '#5a5a5a' }}>
-                        {pond ? 'dB bajo el pico' : 'dB sobre el cuerpo del tema'}
-                        {detallado && (
-                            <span style={{ color: '#454545' }}>
-                                {pond ? '  ·  1/3 de octava'
-                                      : '  ·  1/3 de octava  ·  +4.5 dB/oct'}
-                            </span>
-                        )}
-                    </span>
-                    {corredor && (
+                    {/* Cápsula del corredor, centrada sobre su borde alto. */}
+                    {corr && (
                         <span className="absolute rotulo-v2"
-                              style={{ right: 8, top: 6,
-                                       fontSize: '9px', color: '#b9bee0',
-                                       background: 'rgba(139,147,196,.16)',
-                                       border: '1px solid rgba(139,147,196,.28)',
-                                       borderRadius: 999, padding: '2px 9px', whiteSpace: 'nowrap' }}>
+                              style={{
+                                  left: `calc(${CANAL}px + ${corr.centroX}% * (100% - ${CANAL}px) / 100%)`,
+                                  top: `calc(${corr.topeY}% - 22px)`,
+                                  transform: 'translateX(-50%)', whiteSpace: 'nowrap',
+                                  fontSize: '9px', color: '#c3bede',
+                                  background: 'rgba(109,16,255,.16)',
+                                  border: '1px solid rgba(109,16,255,.32)',
+                                  borderRadius: 999, padding: '3px 10px',
+                              }}>
                             Rango habitual
                         </span>
                     )}
+
+                    {/* Ficha técnica: visible para quien la entiende, secundaria para el resto. */}
+                    {/* Ficha técnica: legible para quien la entiende, secundaria
+                        para el resto. Dice de qué son los dB del eje, que con el
+                        0 en el cuerpo del tema no es evidente. */}
+                    <span className="absolute cifra-v2"
+                          style={{ right: 10, top: 8, fontSize: '9px', color: '#4e4e57' }}>
+                        {pond ? 'bajo el pico' : 'sobre el cuerpo del tema'}
+                        {' · '}{detallado ? '1/3 de octava' : '6 bandas'}
+                        {!pond && ' · +4.5 dB/oct'}
+                    </span>
+
+                    {/* El señalador del aviso, en HTML: dentro del SVG el círculo
+                        saldría ovalado y el texto deformado. */}
                     {aviso && (() => {
-                        // Todo el señalador va en HTML: dentro del SVG se
-                        // deformaría, porque el SVG se estira a lo ancho.
                         const izq = `calc(${CANAL}px + ${x(aviso.pico.f)}% * (100% - ${CANAL}px) / 100%)`;
-                        // Sujeto dentro de la caja: si la desviación cae por
-                        // debajo del suelo de la escala, el punto se quedaba
-                        // pegado al borde y su texto se cortaba.
-                        const arr = `${Math.min(88, Math.max(6, y(techo + aviso.pico.v)))}%`;
-                        const aLaDerecha = x(aviso.pico.f) > 58;
+                        const arr = `${Math.min(84, Math.max(14, y(aviso.pico.v)))}%`;
+                        const aLaDerecha = x(aviso.pico.f) > 56;
                         return (
                             <React.Fragment>
                                 <span className="absolute"
                                       style={{ left: izq, top: arr, width: 9, height: 9,
-                                               marginLeft: -4.5, marginTop: -4.5, borderRadius: '50%',
-                                               background: '#151515',
+                                               marginLeft: -4.5, marginTop: -4.5,
+                                               borderRadius: '50%', background: '#15171a',
                                                border: `1.6px solid ${V2_COLOR.aviso}`,
                                                pointerEvents: 'none' }} />
                                 <span className="absolute"
-                                      style={{ left: izq, top: `calc(${arr} + 9px)`,
+                                      style={{ left: izq, top: `calc(${arr} - 34px)`,
                                                transform: aLaDerecha ? 'translateX(-100%)' : 'none',
-                                               marginLeft: aLaDerecha ? -6 : 6,
-                                               fontSize: '9.5px', lineHeight: 1.4,
-                                               pointerEvents: 'none', maxWidth: 170,
+                                               marginLeft: aLaDerecha ? -7 : 7,
+                                               fontSize: '9.5px', lineHeight: 1.45,
+                                               pointerEvents: 'none', maxWidth: 180,
                                                textAlign: aLaDerecha ? 'right' : 'left' }}>
-                                    <span style={{ color: V2_COLOR.aviso, fontWeight: 700 }}>
+                                    <span style={{ color: '#e6e6ea' }}>
                                         {aviso.signo > 0 ? 'Sobra en ' : 'Falta en '}{aviso.zona}
                                     </span>
                                     <br />
-                                    <span style={{ color: '#8a8a8a' }}>
-                                        {Math.abs(aviso.db).toFixed(0)} dB {aviso.signo > 0 ? 'por encima' : 'por debajo'}
+                                    <span style={{ color: '#8a8a93' }}>
+                                        {Math.abs(aviso.db).toFixed(0)} dB{' '}
+                                        {aviso.signo > 0 ? 'por encima' : 'por debajo'} del rango
                                     </span>
                                 </span>
                             </React.Fragment>
                         );
                     })()}
-                    {archivoLimitado && x(corte) < 78 && (
-                        <span className="absolute cifra-v2"
-                              style={{ left: `calc(${CANAL}px + ${x(corte)}% * (100% - ${CANAL}px) / 100% + 4px)`,
-                                       bottom: 5, fontSize: '8px', color: '#6a6a6a' }}>
-                            sin datos
-                        </span>
-                    )}
                 </div>
 
-                <div className="relative h-3.5 mt-1" style={{ marginLeft: CANAL }}>
+                <div className="relative h-4 mt-1.5" style={{ marginLeft: CANAL }}>
                     {rotuladas.map((f, i) => (
-                        <span key={f} className="absolute cifra-v2"
+                        <span key={f}
+                              className={'absolute cifra-v2 ' + (esenciales.has(f) ? '' : 'hidden sm:inline')}
                               style={{ left: `${x(f)}%`,
                                        transform: i === 0 ? 'translateX(0)'
                                                  : i === rotuladas.length - 1 ? 'translateX(-100%)'
                                                  : 'translateX(-50%)',
-                                       fontSize: '9px', color: '#6a6a6a' }}>
+                                       fontSize: '9px', color: '#686870' }}>
                             {etiquetaHz(f)}
                         </span>
                     ))}
+                    <span className="absolute cifra-v2"
+                          style={{ right: 2, top: 13, fontSize: '8px', color: '#4e4e57' }}>Hz</span>
                 </div>
 
-                {marcas && marcas.filter(m => m && m.f > 20).map((m, k) => (
-                    <p key={k} className="v2-sec text-gray-500 mt-1.5">{m.texto}</p>
+                {marcasReales.map((m, k) => (
+                    <p key={k} className="v2-sec text-gray-500 mt-2">{m.texto}</p>
                 ))}
-                {ventana && !ventana.track_completo && (
-                    <p className="v2-sec text-gray-600 mt-1.5">
-                        Medido entre {ventana.inicio_seg}s y {ventana.fin_seg}s, la parte con más
-                        energía del track{archivoLimitado ? `. Tu archivo no lleva nada por encima de ${(corte / 1000).toFixed(corte % 1000 ? 1 : 0)} kHz` : ''}.
+                {archivoLimitado && (
+                    <p className="v2-sec text-gray-600 mt-2">
+                        Tu archivo no lleva nada por encima de{' '}
+                        {(techoArchivo / 1000).toFixed(techoArchivo % 1000 ? 1 : 0)} kHz.
                     </p>
                 )}
             </div>
@@ -2562,22 +2668,39 @@
                     escala logarítmica, que es como se oye. */}
                 <V2Tarjeta ancho="lg:col-span-2 xl:col-span-3"
                            titulo="Balance espectral" tono={tonoBalance}
-                           datos={<V2Dato etiqueta={veredicto ? 'Balance' : 'Graves'}
-                                          valor={veredicto
-                                              ? (veredicto.equilibrado ? 'equilibrado' : 'revisar')
-                                              : (d.balance_grave || '—')}
-                                          tono={tonoBalance} />}>
+                           datos={veredicto ? (
+                               <div className="rounded-lg px-4 py-2.5 text-right"
+                                    style={{ border: `1px solid ${V2_COLOR[tonoBalance]}55`,
+                                             background: `${V2_COLOR[tonoBalance]}0d` }}>
+                                   <div className="rotulo-v2" style={{ fontSize: '9.5px' }}>Resultado</div>
+                                   <div style={{ color: V2_COLOR[tonoBalance], fontWeight: 700,
+                                                 fontSize: '20px', lineHeight: 1.2,
+                                                 letterSpacing: '.01em', textTransform: 'uppercase' }}>
+                                       {veredicto.equilibrado ? 'Equilibrado' : 'Revisar'}
+                                   </div>
+                               </div>
+                           ) : (
+                               <V2Dato etiqueta="Graves" valor={d.balance_grave || '—'}
+                                       tono={tonoBalance} />
+                           )}>
                     {(Object.keys(disp).length > 0 || (fino.bandas || []).length > 0)
                         ? <V2Espectro2 display={disp} displayPond={dispP} fino={fino} ventana={vent}
                                        veredicto={veredicto} />
                         : <V2Espectro grave={sg.db_grave} media={sg.db_media} aguda={sg.db_aguda} />}
+                    <div className="flex items-start gap-2.5 mt-3">
+                        <V2IconoOnda />
+                        <p className="v2-sec text-gray-500" style={{ lineHeight: 1.6 }}>
+                            {vent && !vent.track_completo
+                                ? `Medido en el drop: la ventana de 10 s con más energía del tema, entre ${vent.inicio_seg}s y ${vent.fin_seg}s.`
+                                : 'Medido en el drop: la ventana de 10 s con más energía del tema.'}
+                        </p>
+                    </div>
                     {veredicto ? (
-                        <div className="flex items-start gap-2 mt-3 pt-3"
-                             style={{ borderTop: '1px solid #242424' }}>
-                            <span style={{ color: veredicto.equilibrado ? V2_COLOR.ok : V2_COLOR.aviso,
-                                           fontSize: '13px', lineHeight: 1.5 }}>
-                                {veredicto.equilibrado ? '\u25CF' : '\u25CB'}
-                            </span>
+                        <div className="flex items-start gap-2.5 mt-3 pt-3"
+                             style={{ borderTop: '1px solid #26282c' }}>
+                            {veredicto.equilibrado
+                                ? <V2IconoCheck color={V2_COLOR.ok} />
+                                : <V2IconoAviso color={V2_COLOR.aviso} />}
                             <p className="v2-cuerpo text-gray-300">
                                 Balance general:{' '}
                                 <span style={{ color: veredicto.equilibrado ? V2_COLOR.ok : V2_COLOR.aviso,
@@ -2597,7 +2720,7 @@
                             Diferencia graves–medios: <span className="text-white cifra-v2">{fmt(sg.diff_grave_media)} dB</span>
                         </p>
                     )}
-                    <V2Desplegable etiqueta="Cómo se lee este gráfico">
+                    <V2Desplegable etiqueta="Cómo leer este gráfico">
                         <p><span className="text-gray-300">La franja gris es la referencia.</span> Es
                            donde cae el espectro de <span className="text-gray-300">327 temas ya
                            editados de 26 sellos</span>, medidos exactamente igual que el tuyo. Si tu
@@ -3316,10 +3439,14 @@
 
                         {tarjetaRelesit}
 
-                        <div className="flex gap-1 mb-4 border-b border-[#2e2e2e] overflow-x-auto">
+                        {/* min-w-0 y shrink-0: sin ellos la fila crece hasta caber
+                            en vez de desplazarse, y en móvil la página entera se
+                            iba a 489 px de ancho por culpa de la última pestaña. */}
+                        <div className="flex gap-1 mb-4 border-b border-[#2e2e2e] overflow-x-auto min-w-0"
+                             style={{ scrollbarWidth: 'none' }}>
                             {V2_TABS.map(t => (
                                 <button key={t.id} onClick={() => setV2Tab(t.id)}
-                                        className={`tab-v2 px-4 py-2.5 text-sm text-gray-400 flex items-center gap-2 ${v2Tab === t.id ? 'on' : ''}`}>
+                                        className={`tab-v2 shrink-0 px-4 py-2.5 text-sm text-gray-400 flex items-center gap-2 ${v2Tab === t.id ? 'on' : ''}`}>
                                     {t.label}
                                     {avisosV2[t.id] && <span className="punto-v2" style={{ background: V2_COLOR.aviso }}
                                                              title="Hay algo que mirar aquí" />}
