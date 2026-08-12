@@ -2221,12 +2221,21 @@
     }
 
     function v2NubeCorredor(x, y) {
+        // La opacidad de cada capa va en rampa cuadrática: las de fuera casi
+        // no pintan (el 5-95 entero queda en un velo) y las de dentro cargan
+        // el peso. Con opacidad uniforme la nube era una neblina pareja que
+        // invadía medio gráfico; así el perfil es halo tenue → cuerpo (25-75)
+        // → centro, sin que se distinga ninguna capa suelta.
         const capas = [];
         for (let k = 0; k < V2_CAPAS_NUBE; k++) {
             const d = (k / V2_CAPAS_NUBE) * 45;
-            capas.push(v2PathCorredor(
-                V2_CORREDOR.map(c => [x(c.hz), y(v2PctCorredor(c, 95 - d))]),
-                V2_CORREDOR.map(c => [x(c.hz), y(v2PctCorredor(c, 5 + d))])));
+            const t = k / (V2_CAPAS_NUBE - 1);
+            capas.push({
+                path: v2PathCorredor(
+                    V2_CORREDOR.map(c => [x(c.hz), y(v2PctCorredor(c, 95 - d))]),
+                    V2_CORREDOR.map(c => [x(c.hz), y(v2PctCorredor(c, 5 + d))])),
+                op: 0.026 + 0.055 * t * t,
+            });
         }
         return capas;
     }
@@ -2249,8 +2258,15 @@
         // El 0 es el cuerpo del tema (200 Hz–2 kHz), no su banda más alta. Ver
         // el comentario largo de V2_CORREDOR: anclar al pico dejaba el corredor
         // ciego al exceso de grave justo donde más importa.
+        //
+        // La ventana es +24…−30 (54 dB). Con la de antes (+18…−24) cada valle
+        // de la curva parecía un precipicio y había tracks reales que se
+        // recortaban planos contra el techo (medido: +18.5 en 50 Hz). El
+        // margen extra comprime la curva un 22 % — mismo dato, menos drama —
+        // y deja sitio de sobra por arriba. Es dibujo: el veredicto no mira
+        // esta ventana.
         const ref = v2Referencia(puntos);
-        const ARRIBA = 18, RANGO = 42;
+        const ARRIBA = 24, RANGO = 54;
         const PASO = 6;
         const F0 = 20, F1 = 16000;
         // AIRE es el margen de arriba y PIE el de abajo, en % de la caja. El de
@@ -2278,12 +2294,17 @@
         const corr = (() => {
             const arriba = V2_CORREDOR.map(c => [x(c.hz), y(c.hi)]);
             const abajo = V2_CORREDOR.map(c => [x(c.hz), y(c.lo)]);
-            const medi = V2_CORREDOR.map(c => [x(c.hz), y(c.med)]);
             return {
                 capas: v2NubeCorredor(x, y),
+                // El centro estadístico, como banda p40-p60 difuminada y no
+                // como línea: una mediana a trazos se leía como un dato más
+                // que consultar, y solo es el "por aquí pasa el medio de la
+                // distribución". Una lomita de densidad lo dice sin hablar.
+                nucleo: v2PathCorredor(
+                    V2_CORREDOR.map(c => [x(c.hz), y(v2PctCorredor(c, 60))]),
+                    V2_CORREDOR.map(c => [x(c.hz), y(v2PctCorredor(c, 40))])),
                 borde: v2CurvaSuave(arriba),
                 bordeBajo: v2CurvaSuave(abajo),
-                mediana: v2CurvaSuave(medi),
             };
         })();
 
@@ -2386,7 +2407,16 @@
                                     corredor deja de opinar sigue siendo 12.5 kHz. */}
                                 <linearGradient id="v2corrFade" x1="0" y1="0" x2="1" y2="0"
                                                 gradientUnits="objectBoundingBox">
+                                    {/* La rampa del subgrave es cóncava a propósito: entre
+                                        20 y 40 Hz apenas levanta y solo llega a plena
+                                        opacidad en 50, donde empieza a juzgarse. Lineal, el
+                                        corredor —que ahí es anchísimo— pesaba en pantalla
+                                        más que la zona que sí opina. */}
                                     <stop offset="0%" stopColor="#fff" stopOpacity="0" />
+                                    <stop offset={`${x(31.5) / 100}`}
+                                          stopColor="#fff" stopOpacity="0.14" />
+                                    <stop offset={`${x(40) / 100}`}
+                                          stopColor="#fff" stopOpacity="0.4" />
                                     <stop offset={`${x(V2_VEREDICTO_DESDE) / 100}`}
                                           stopColor="#fff" stopOpacity="1" />
                                     <stop offset={`${x(11000) / 100}`}
@@ -2401,7 +2431,7 @@
                                     con el mismo número el borde de arriba saldría nítido
                                     y los laterales borrosos. */}
                                 <filter id="v2corrHalo" x="-6%" y="-18%" width="112%" height="136%">
-                                    <feGaussianBlur stdDeviation="0.10 0.42" />
+                                    <feGaussianBlur stdDeviation="0.075 0.32" />
                                 </filter>
                                 <mask id="v2corrMask" maskUnits="userSpaceOnUse"
                                       x="0" y="0" width="100" height={H}>
@@ -2414,15 +2444,15 @@
                                 frecuencia no queden tachadas. */}
                             {finas.map(f => (
                                 <line key={f} x1={x(f)} x2={x(f)} y1="0" y2={H - PIE}
-                                      stroke="#1c1e23" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+                                      stroke="#1a1c20" strokeWidth="1" vectorEffect="non-scaling-stroke" />
                             ))}
                             {rotuladas.map(f => (
                                 <line key={f} x1={x(f)} x2={x(f)} y1="0" y2={H - PIE}
-                                      stroke="#212429" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+                                      stroke="#1e2126" strokeWidth="1" vectorEffect="non-scaling-stroke" />
                             ))}
                             {escalones.map(db => (
                                 <line key={db} x1="0" x2="100" y1={y(db)} y2={y(db)}
-                                      stroke={db === 0 ? '#33363e' : '#232529'} strokeWidth="1"
+                                      stroke={db === 0 ? '#30333b' : '#202227'} strokeWidth="1"
                                       vectorEffect="non-scaling-stroke"
                                       strokeDasharray={db === 0 ? '' : '1 9'} />
                             ))}
@@ -2437,9 +2467,11 @@
                             {corr && (
                                 <g className="v2-corredor" mask="url(#v2corrMask)">
                                     <g filter="url(#v2corrHalo)">
-                                        {corr.capas.map((d, k) => (
-                                            <path key={k} d={d} fill={V2_NUBE} fillOpacity="0.048" />
+                                        {corr.capas.map((c, k) => (
+                                            <path key={k} d={c.path} fill={V2_NUBE}
+                                                  fillOpacity={c.op.toFixed(3)} />
                                         ))}
+                                        <path d={corr.nucleo} fill={V2_NUBE} fillOpacity="0.07" />
                                         <path d={corr.borde} fill="none" stroke="#a191d0"
                                               strokeOpacity="0.12" strokeWidth="1"
                                               vectorEffect="non-scaling-stroke" />
@@ -2447,9 +2479,6 @@
                                               strokeOpacity="0.07" strokeWidth="1"
                                               vectorEffect="non-scaling-stroke" />
                                     </g>
-                                    <path d={corr.mediana} fill="none" stroke="#b6abd8"
-                                          strokeOpacity="0.12" strokeWidth="1"
-                                          strokeDasharray="1.5 8" vectorEffect="non-scaling-stroke" />
                                 </g>
                             )}
 
@@ -2460,11 +2489,11 @@
                                 así que no se deforma con la caja como sí le pasaría a un
                                 feGaussianBlur dentro de un viewBox estirado. La cercana
                                 pega la línea al fondo, la lejana la posa sobre la nube. */}
-                            <path className="v2-curva" d={curva} fill="none" stroke="#f0f2f4"
+                            <path className="v2-curva" d={curva} fill="none" stroke="#e9ecef"
                                   strokeWidth="1.55" vectorEffect="non-scaling-stroke"
                                   strokeLinejoin="round" strokeLinecap="round"
-                                  style={{ filter: 'drop-shadow(0 0 1.2px rgba(240,242,244,.16)) '
-                                                 + 'drop-shadow(0 0 4px rgba(206,218,236,.05))' }} />
+                                  style={{ filter: 'drop-shadow(0 0 1px rgba(233,236,239,.13)) '
+                                                 + 'drop-shadow(0 0 3px rgba(206,218,236,.03))' }} />
                             {/* Mismo grosor que la curva base, no más: teñir un
                                 tramo ya lo destaca, engordarlo lo convierte en el
                                 protagonista del gráfico. */}
