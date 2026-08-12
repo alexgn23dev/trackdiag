@@ -1887,35 +1887,35 @@
     // corredor codifica lo típico que es cada zona en vez de ser un degradado
     // decorativo. El veredicto sigue usando solo el 5-95.
     const V2_CORREDOR = [
-        { hz: 20, lo: -33.3, lo2: -29.4, med: -26.4, hi2: -22.2, hi: -12.2 },
-        { hz: 25, lo: -30.7, lo2: -26.2, med: -22.9, hi2: -17.9, hi: -5.8 },
-        { hz: 31.5, lo: -23.4, lo2: -15.7, med: -11.5, hi2: -4.4, hi: 4.8 },
-        { hz: 40, lo: -13.2, lo2: -2.6, med: 2.4, hi2: 6.9, hi: 11.9 },
+        { hz: 20, lo: -33.4, lo2: -29.3, med: -26.4, hi2: -22.3, hi: -12.2 },
+        { hz: 25, lo: -30.9, lo2: -26.1, med: -22.7, hi2: -17.8, hi: -6.2 },
+        { hz: 31.5, lo: -23.4, lo2: -15.6, med: -11.5, hi2: -4.4, hi: 4.9 },
+        { hz: 40, lo: -13.2, lo2: -2.6, med: 2.4, hi2: 6.9, hi: 11.8 },
         { hz: 50, lo: 0.9, lo2: 7.6, med: 10.2, hi2: 12.6, hi: 16.9 },
-        { hz: 63, lo: 2.6, lo2: 6.6, med: 8.9, hi2: 11.2, hi: 15.0 },
-        { hz: 80, lo: 1.3, lo2: 4.2, med: 6.6, hi2: 9.2, hi: 12.7 },
-        { hz: 100, lo: -1.2, lo2: 2.5, med: 4.8, hi2: 7.3, hi: 11.0 },
-        { hz: 125, lo: -2.6, lo2: 1.1, med: 3.5, hi2: 6.0, hi: 9.4 },
-        { hz: 160, lo: -2.8, lo2: 0.4, med: 2.1, hi2: 4.3, hi: 8.4 },
-        { hz: 200, lo: -2.7, lo2: -0.7, med: 1.4, hi2: 3.6, hi: 7.0 },
-        { hz: 250, lo: -4.4, lo2: -1.1, med: 0.6, hi2: 2.4, hi: 4.7 },
-        { hz: 315, lo: -3.6, lo2: -1.0, med: 0.6, hi2: 2.1, hi: 4.8 },
-        { hz: 400, lo: -3.4, lo2: -1.2, med: 0.4, hi2: 2.0, hi: 4.8 },
+        { hz: 63, lo: 2.5, lo2: 6.6, med: 8.9, hi2: 11.2, hi: 15.0 },
+        { hz: 80, lo: 1.3, lo2: 4.3, med: 6.6, hi2: 9.1, hi: 12.5 },
+        { hz: 100, lo: -1.2, lo2: 2.5, med: 4.8, hi2: 7.2, hi: 11.0 },
+        { hz: 125, lo: -2.6, lo2: 1.1, med: 3.4, hi2: 6.0, hi: 9.4 },
+        { hz: 160, lo: -2.7, lo2: 0.4, med: 2.1, hi2: 4.3, hi: 8.4 },
+        { hz: 200, lo: -2.7, lo2: -0.6, med: 1.4, hi2: 3.6, hi: 7.1 },
+        { hz: 250, lo: -4.4, lo2: -1.1, med: 0.7, hi2: 2.4, hi: 4.6 },
+        { hz: 315, lo: -3.5, lo2: -1.0, med: 0.7, hi2: 2.1, hi: 4.8 },
+        { hz: 400, lo: -3.3, lo2: -1.2, med: 0.3, hi2: 2.1, hi: 4.8 },
         { hz: 500, lo: -3.5, lo2: -1.5, med: -0.2, hi2: 1.2, hi: 3.2 },
-        { hz: 630, lo: -4.2, lo2: -1.4, med: -0.2, hi2: 1.5, hi: 3.9 },
-        { hz: 800, lo: -4.4, lo2: -1.7, med: -0.2, hi2: 1.1, hi: 3.9 },
-        { hz: 1000, lo: -3.8, lo2: -1.8, med: -0.5, hi2: 0.8, hi: 2.6 },
-        { hz: 1250, lo: -3.9, lo2: -1.8, med: -0.5, hi2: 0.8, hi: 2.7 },
+        { hz: 630, lo: -4.2, lo2: -1.5, med: -0.2, hi2: 1.5, hi: 3.8 },
+        { hz: 800, lo: -4.3, lo2: -1.7, med: -0.2, hi2: 1.1, hi: 3.9 },
+        { hz: 1000, lo: -3.7, lo2: -1.7, med: -0.5, hi2: 0.8, hi: 2.6 },
+        { hz: 1250, lo: -3.9, lo2: -1.8, med: -0.4, hi2: 0.8, hi: 2.6 },
         { hz: 1600, lo: -4.4, lo2: -2.0, med: -0.8, hi2: 0.6, hi: 2.6 },
-        { hz: 2000, lo: -4.8, lo2: -2.5, med: -1.0, hi2: 0.2, hi: 2.4 },
-        { hz: 2500, lo: -5.7, lo2: -2.9, med: -1.0, hi2: 0.6, hi: 3.0 },
-        { hz: 3150, lo: -5.4, lo2: -2.7, med: -0.7, hi2: 1.0, hi: 3.6 },
-        { hz: 4000, lo: -5.7, lo2: -2.2, med: 0.5, hi2: 2.3, hi: 5.0 },
-        { hz: 5000, lo: -6.0, lo2: -0.7, med: 1.7, hi2: 3.7, hi: 6.6 },
-        { hz: 6300, lo: -5.0, lo2: 0.8, med: 3.3, hi2: 5.4, hi: 8.4 },
+        { hz: 2000, lo: -4.7, lo2: -2.4, med: -1.0, hi2: 0.3, hi: 2.4 },
+        { hz: 2500, lo: -5.8, lo2: -2.9, med: -1.0, hi2: 0.5, hi: 3.0 },
+        { hz: 3150, lo: -5.4, lo2: -2.7, med: -0.7, hi2: 1.0, hi: 3.7 },
+        { hz: 4000, lo: -5.9, lo2: -2.1, med: 0.5, hi2: 2.3, hi: 5.0 },
+        { hz: 5000, lo: -6.0, lo2: -0.6, med: 1.8, hi2: 3.7, hi: 6.6 },
+        { hz: 6300, lo: -5.0, lo2: 0.8, med: 3.3, hi2: 5.5, hi: 8.4 },
         { hz: 8000, lo: -5.5, lo2: 1.2, med: 3.9, hi2: 6.4, hi: 9.2 },
-        { hz: 10000, lo: -7.1, lo2: 0.7, med: 3.6, hi2: 6.0, hi: 8.8 },
-        { hz: 12500, lo: -10.0, lo2: -1.7, med: 1.8, hi2: 4.3, hi: 7.7 },
+        { hz: 10000, lo: -7.3, lo2: 0.7, med: 3.6, hi2: 5.9, hi: 8.9 },
+        { hz: 12500, lo: -10.1, lo2: -1.7, med: 1.8, hi2: 4.3, hi: 7.7 },
     ];
 
     /** Zonas con nombre, para poder decir DÓNDE cae fuera de la referencia.
@@ -2017,14 +2017,27 @@
             i = j;
         }
         rachas.sort((a, b) => Math.abs(b.db) - Math.abs(a.db));
-        const zona = f => V2_ZONAS.find(z => f >= z.f0 && f < z.f1) || V2_ZONAS[0];
+        // La zona se decide por MAYORÍA de bandas de la racha, no por la banda
+        // con más desviación: una racha de 50 a 200 Hz cuyo pico cayera justo
+        // en 200 se etiquetaba "medios bajos" siendo casi toda graves.
+        const zona = r => {
+            const cuenta = new Map();
+            for (const p of puntos) {
+                if (p.f < r.desde || p.f > r.hasta) continue;
+                const z = V2_ZONAS.find(q => p.f >= q.f0 && p.f < q.f1) || V2_ZONAS[0];
+                cuenta.set(z, (cuenta.get(z) || 0) + 1);
+            }
+            let mejor = V2_ZONAS[0], max = -1;
+            for (const [z, n] of cuenta) if (n > max) { mejor = z; max = n; }
+            return mejor;
+        };
         return {
             // "dentro" describe una posición medida, no un juicio de calidad.
             // Ver el comentario de arriba: esto separa 8 puntos entre discos
             // publicados y temas de usuario, así que no puede afirmar que un
             // balance esté bien o mal — solo dónde cae respecto a la muestra.
             dentro: rachas.length === 0,
-            rachas: rachas.map(r => ({ ...r, z: zona(r.pico.f), zona: zona(r.pico.f).et })),
+            rachas: rachas.map(r => { const z = zona(r); return { ...r, z, zona: z.et }; }),
             fuera,
         };
     }

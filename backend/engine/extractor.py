@@ -310,20 +310,8 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None,
     #
     # Se busca la ventana continua de ~10 s con más energía media. Si el track
     # es más corto que eso, se usa entero y se marca como tal.
-    _VENTANA_DROP_SEG = 10.0
-    frames_ventana = max(1, int(_VENTANA_DROP_SEG * sr / hop_length))
-    if len(rms) > frames_ventana:
-        # Media móvil por suma acumulada: O(n) y exacta.
-        acum = np.concatenate([[0.0], np.cumsum(rms)])
-        sumas = acum[frames_ventana:] - acum[:-frames_ventana]
-        i_drop = int(np.argmax(sumas))
-        drop_ini, drop_fin = i_drop, i_drop + frames_ventana
-        drop_completo = False
-    else:
-        drop_ini, drop_fin = 0, len(rms)
-        drop_completo = True
-    drop_ini_seg = round(drop_ini * hop_length / sr, 1)
-    drop_fin_seg = round(min(drop_fin, len(rms)) * hop_length / sr, 1)
+    drop_ini_seg, drop_fin_seg, drop_completo, drop_ini, drop_fin = ventana_drop(
+        rms, sr, hop_length)
 
     # El mel recortado a esa ventana. Se protege por si el número de frames
     # del mel y del rms no coincide exactamente.
@@ -736,6 +724,38 @@ def _analizar_formato(audio_path: str) -> dict:
 # Centros ISO 266 de tercio de octava, 20 Hz – 20 kHz (31 bandas). Son los
 # nominales de catálogo, no los exactos: los exactos se calculan abajo con
 # 1000·10^(n/10) y solo se usan los nominales para rotular.
+VENTANA_DROP_SEG = 10.0
+
+
+def ventana_drop(rms, sr: int, hop_length: int):
+    """La ventana continua de ~10 s con más energía media: el drop.
+
+    Promediar el espectro del track entero mezcla intro, break y drop, y el
+    resultado no describe ningún momento real. Se lee donde el arreglo está
+    completo.
+
+    Vive aquí y no en `extraer_senales` porque el corredor de referencia del
+    gráfico se calibra con `scripts/calibrar_corredor.py`, que TIENE que elegir
+    la ventana exactamente igual. Cuando eran dos copias, un redondeo distinto
+    movía la ventana 50 ms y las bandas hasta 1.5 dB — un 13 % del ancho del
+    corredor, comparando peras con manzanas.
+
+    Devuelve (inicio_seg, fin_seg, es_el_track_entero), ya redondeados, que es
+    lo que se le pasa al medidor.
+    """
+    frames = max(1, int(VENTANA_DROP_SEG * sr / hop_length))
+    if len(rms) > frames:
+        # Media móvil por suma acumulada: O(n) y exacta.
+        acum = np.concatenate([[0.0], np.cumsum(rms)])
+        i = int(np.argmax(acum[frames:] - acum[:-frames]))
+        ini, fin, completo = i, i + frames, False
+    else:
+        ini, fin, completo = 0, len(rms), True
+    return (round(ini * hop_length / sr, 1),
+            round(min(fin, len(rms)) * hop_length / sr, 1),
+            completo, ini, fin)
+
+
 _CENTROS_TERCIO = [20, 25, 31.5, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315,
                    400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150,
                    4000, 5000, 6300, 8000, 10000, 12500, 16000, 20000]

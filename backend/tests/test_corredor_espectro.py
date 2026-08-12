@@ -227,6 +227,25 @@ class TestLaReglaEsHonesta(unittest.TestCase):
         # género que no está representado
         self.assertIn("techno duro, trance ni drum", self.h)
 
+    def test_el_veredicto_ignora_lo_que_esta_por_encima_de_12_5_khz(self):
+        """La curva se dibuja hasta 16 kHz, pero el corredor solo llega a 12.5.
+        Arriba el corpus está condicionado por el códec —cada archivo corta
+        entre 16 y 20 kHz según su encoder— así que un diagnóstico apoyado ahí
+        mediría al compresor.
+
+        La garantía es estructural: `ref` se construye desde V2_CORREDOR, que
+        no tiene esas bandas, y una banda sin entrada devuelve 0 desviación.
+        Este test vigila las dos mitades de esa garantía."""
+        b = bandas()
+        self.assertEqual(max(x[0] for x in b), 12500,
+                         "el corredor llega más arriba de lo que debería")
+        i = self.h.index("function v2CompararCorredor(")
+        cuerpo = self.h[i:i + 1200]
+        # sin entrada en el corredor → 0, es decir, no cuenta como desviación
+        self.assertIn("if (!c) return 0;", cuerpo)
+        # y la curva sí llega a 16 kHz: son cosas distintas a propósito
+        self.assertIn("const V2_TOPE_DIBUJO = 16000;", self.h)
+
     def test_el_veredicto_ignora_lo_que_esta_por_debajo_de_50_hz(self):
         """Ahí el corredor mide entre 21 y 28 dB: cabe casi cualquier cosa, y
         además filtrar por debajo de 30 Hz es una decisión correcta y muy común.
