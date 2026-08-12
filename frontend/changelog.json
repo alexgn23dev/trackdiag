@@ -6,7 +6,8 @@
       "title": "Portada nueva",
       "changes": [
         "La portada se rediseña de arriba abajo: titular claro, los tres pasos del proceso y la zona de subida como protagonista.",
-        "La prueba social es real: se enseñan avatares de usuarios registrados (su foto de perfil si la subieron, su inicial si no) y el contador sale del número real de cuentas."
+        "La prueba social es real: se enseñan avatares de usuarios registrados (su foto de perfil si la subieron, su inicial si no) y el contador sale del número real de cuentas.",
+        "La cabecera del informe pasa a dos columnas: a la izquierda el veredicto con sus cifras (duración, BPM, LUFS, true peak, mono) y a la derecha la acción — el CTA de Relesit si tu track está para buscar sello, o el tutorial de Producción Online que mejor encaja con tu diagnóstico, reproducible ahí mismo."
       ]
     },
     {
