@@ -366,6 +366,15 @@ def servir(tracks, datos, puerto):
                 except ValueError:
                     ancho = 390
                 return self._enviar(marco_movil("/home", ancho))
+            if ruta == "/api/portada/avatares":
+                # Muestra representativa para poder ver la portada real: dos
+                # "fotos" que no existen (el onError del frontend enseña la
+                # inicial) y dos iniciales. El total imita al de producción.
+                cuerpo = json.dumps({
+                    "avatares": [{"foto": None, "inicial": l} for l in "AMRD"],
+                    "total": 967,
+                }).encode("utf-8")
+                return self._enviar(cuerpo, "application/json")
             if ruta.startswith("/api/"):
                 return self._enviar(b"{}", "application/json")
             return super().do_GET()    # el resto de frontend/: logo, fuentes, css

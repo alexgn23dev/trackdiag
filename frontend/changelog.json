@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "version": "0.5.90",
+      "date": "2026-08-13",
+      "title": "Portada nueva",
+      "changes": [
+        "La portada se rediseña de arriba abajo: titular claro, los tres pasos del proceso y la zona de subida como protagonista.",
+        "La prueba social es real: se enseñan avatares de usuarios registrados (su foto de perfil si la subieron, su inicial si no) y el contador sale del número real de cuentas."
+      ]
+    },
+    {
       "version": "0.5.89",
       "date": "2026-08-12",
       "title": "El balance espectral, más alto y con una sola lectura",
