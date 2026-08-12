@@ -129,7 +129,8 @@ def analizar(ruta: Path, contexto: dict, forzar: bool) -> dict:
 # --------------------------------------------------------------------------
 # La página: el index.html real con el arranque cambiado
 # --------------------------------------------------------------------------
-def pagina(indice: int, tracks: list, datos: list, v2: bool) -> bytes:
+def pagina(indice: int, tracks: list, datos: list, v2: bool,
+           pestana: str = "") -> bytes:
     """Sirve `frontend/index.html` tal cual, cambiando UNA línea.
 
     La línea es la que monta la app entera; en su lugar se monta directamente la
@@ -171,6 +172,15 @@ def pagina(indice: int, tracks: list, datos: list, v2: bool) -> bytes:
         }})();
     """
     html = html.replace(arranque, montaje)
+
+    # Abrir directamente en una pestaña concreta. Sin esto hay que hacer clic
+    # cada vez que se refresca, que es justo el rato que esta herramienta ahorra.
+    if pestana:
+        viejo = "const [v2Tab, setV2Tab] = useState('resumen');"
+        if viejo in html:
+            html = html.replace(
+                viejo,
+                f"const [v2Tab, setV2Tab] = useState('{pestana}');", 1)
 
     # La vista v2 se resuelve una vez al montar, leyendo la URL. Se deja fijada
     # aquí para que el selector de abajo pueda cambiarla sin depender de eso.
@@ -281,7 +291,11 @@ def servir(tracks, datos, puerto):
                 except (ValueError, IndexError):
                     i = 0
                 q = urllib.parse.parse_qs(partes.query)
-                return self._enviar(pagina(i, tracks, datos, q.get("v2", ["1"])[0] != "0"))
+                pes = (q.get("tab", [""])[0] or "").strip().lower()
+                if pes not in ("", "resumen", "plan", "mezcla", "master", "detalle"):
+                    pes = ""
+                return self._enviar(pagina(i, tracks, datos,
+                                           q.get("v2", ["1"])[0] != "0", pes))
             if ruta.startswith("/api/"):
                 return self._enviar(b"{}", "application/json")
             return super().do_GET()    # el resto de frontend/: logo, fuentes, css
@@ -293,7 +307,8 @@ def servir(tracks, datos, puerto):
     with socketserver.TCPServer(("127.0.0.1", puerto), Handler) as srv:
         url = f"http://127.0.0.1:{puerto}/"
         print(f"\n  Listo → {url}")
-        print("  Edita frontend/index.html y refresca. Ctrl-C para salir.\n")
+        print("  Edita frontend/index.html y refresca. Ctrl-C para salir.")
+        print("  Truco: añade ?tab=mezcla a la URL para abrir esa pestaña.\n")
         threading.Timer(0.7, lambda: webbrowser.open(url + "ver/0?v2=1")).start()
         try:
             srv.serve_forever()
