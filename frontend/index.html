@@ -286,7 +286,7 @@
     // /api/health. Si no coincide, este fichero viene de la caché del
     // navegador y puede estar dejando de enviar campos que el backend ya
     // espera — se recarga una sola vez y, si aun así no cuadra, se avisa.
-    const APP_VERSION = '0.5.88';
+    const APP_VERSION = '0.5.89';
 
     function comprobarVersionFrontend(onDesfase, onEntorno) {
         fetch(`${API_URL}/api/health`, { cache: 'no-store' })
@@ -1969,23 +1969,22 @@
     /** Los puntos del espectro, ya inclinados y recortados. Una sola función
      *  para el gráfico y para el veredicto: si divergieran, el rótulo volvería
      *  a contradecir a la curva, que es justo lo que se venía de arreglar. */
-    function v2PuntosEspectro(fino, display, displayPond, pond) {
+    function v2PuntosEspectro(fino, display) {
         const detallado = !!(fino && fino.bandas && fino.bandas.length);
-        const datos = pond ? displayPond : display;
-        if (!detallado && (!datos || Object.keys(datos).length === 0)) return [];
+        if (!detallado && (!display || Object.keys(display).length === 0)) return [];
         return (detallado
-            ? fino.bandas.map(b => ({ f: b.hz, v: pond ? b.db_pond : b.db }))
+            ? fino.bandas.map(b => ({ f: b.hz, v: b.db }))
                          .filter(q => typeof q.v === 'number')
-            : V2_BANDAS.map(b => ({ f: Math.sqrt(Math.max(b.f0, 20) * b.f1), v: datos[b.k] }))
+            : V2_BANDAS.map(b => ({ f: Math.sqrt(Math.max(b.f0, 20) * b.f1), v: display[b.k] }))
                        .filter(q => typeof q.v === 'number')
-        ).map(q => ({ f: q.f, v: pond ? q.v : q.v + V2_TILT * Math.log2(q.f / 1000) }))
+        ).map(q => ({ f: q.f, v: q.v + V2_TILT * Math.log2(q.f / 1000) }))
          .filter(q => q.f <= V2_TOPE_DIBUJO);
     }
 
     /** Veredicto del balance, calculado fuera del componente para que la tarjeta
      *  lo tenga en el primer render (nada de useEffect: parpadeaba). */
-    function v2VeredictoEspectro(fino, display, displayPond) {
-        const pts = v2PuntosEspectro(fino, display, displayPond, false);
+    function v2VeredictoEspectro(fino, display) {
+        const pts = v2PuntosEspectro(fino, display);
         if (pts.length < 2) return null;
         const ref = v2Referencia(pts);
         return v2CompararCorredor(pts.map(q => ({ f: q.f, v: q.v - ref })));
@@ -2055,15 +2054,28 @@
      *  energía tiene cada zona. Permite ver de un vistazo dónde está cargado
      *  el track. Acepta marcas (`marcas`) para señalar una frecuencia
      *  concreta, como el pico de aspereza. */
-    /** Espectro del track en el drop, con dos lecturas.
+    /** Espectro del track en el drop. Una sola lectura.
      *
-     * COMPENSADA (por defecto): pasa cada banda por la curva del oído. El
-     * oído no es plano — a igual nivel físico, un grave se percibe mucho más
-     * flojo que un medio —, así que un espectro crudo SIEMPRE enseña una
-     * montaña de graves aunque el balance sea correcto. Compensando, un track
-     * equilibrado se ve equilibrado.
+     * Hubo dos: la física (lo que enseña un analizador) y una compensada con la
+     * ponderación A, conmutables con una pestaña "Oído". Se retiró la segunda
+     * (ago-2026) y conviene saber por qué, porque la idea vuelve sola:
      *
-     * SIN COMPENSAR: el nivel físico, tal cual. Es lo que enseña un analizador.
+     *   · No decía nada nuevo. La ponderación A es un desplazamiento fijo por
+     *     banda, así que corre la curva y el corredor por igual. Medido sobre
+     *     los 322 previews y 19 temas de usuario: la desviación respecto al
+     *     corredor correlaciona 0.9994 entre las dos vistas, con 0.03 dB de
+     *     diferencia media. Era la misma medida dibujada en otro eje.
+     *   · Y podía contradecir a la insignia. Aquella vista se anclaba al pico
+     *     del tema en vez de al cuerpo, y con ese anclaje sí es una estadística
+     *     distinta: 27 de 322 previews (8 %) habrían visto REFERENCIA/DENTRO
+     *     en la cabecera con la curva saliéndose del corredor en pantalla.
+     *   · Además la ponderación A es la curva de 40 fon —escucha a volumen
+     *     bajo—. Esta música se oye a 85-100 dB SPL, donde las isofónicas son
+     *     mucho más planas, así que compensaba de más. Como ilustración valía;
+     *     como juez, le habría dado autoridad que no tiene.
+     *
+     * El motor sigue calculando `db_pond` y `espectro_display_pond`: ya no los
+     * lee nadie, pero son el dato crudo si la vista vuelve.
      *
      * Se dibuja sobre una escala de dB FIJA, no normalizada 0-100: normalizar
      * pone siempre una banda arriba del todo y otra abajo, por pequeña que sea
@@ -2219,15 +2231,9 @@
         return capas;
     }
 
-    function V2Espectro2({ display, displayPond, fino, ventana, marcas, veredicto }) {
-        // Arranca en la vista de analizador, no en la ponderada: es la única
-        // calibrada para que "plano" signifique "normal", y es la que el
-        // usuario puede cotejar con SPAN o Pro-Q en su DAW.
-        const [pond, setPond] = useState(false);
-
+    function V2Espectro2({ display, fino, ventana, marcas, veredicto }) {
         const detallado = !!(fino && fino.bandas && fino.bandas.length);
-        const datos = pond ? displayPond : display;
-        const puntos = v2PuntosEspectro(fino, display, displayPond, pond);
+        const puntos = v2PuntosEspectro(fino, display);
 
         // Sin datos no se dibuja una curva falsa: se dice que no los hay.
         if (puntos.length < 2) {
@@ -2242,11 +2248,9 @@
         // --- Escala ---------------------------------------------------------
         // El 0 es el cuerpo del tema (200 Hz–2 kHz), no su banda más alta. Ver
         // el comentario largo de V2_CORREDOR: anclar al pico dejaba el corredor
-        // ciego al exceso de grave. En la vista ponderada no hay corredor, así
-        // que ahí se ancla al pico y el rótulo lo dice.
-        const ref = pond ? Math.max(...puntos.map(p => p.v)) : v2Referencia(puntos);
-        const ARRIBA = pond ? 0 : 18;
-        const RANGO = pond ? 36 : 42;
+        // ciego al exceso de grave justo donde más importa.
+        const ref = v2Referencia(puntos);
+        const ARRIBA = 18, RANGO = 42;
         const PASO = 6;
         const F0 = 20, F1 = 16000;
         // AIRE es el margen de arriba y PIE el de abajo, en % de la caja. El de
@@ -2268,10 +2272,10 @@
         const curva = v2CurvaSuave(pts);
 
         // --- El corredor de referencia --------------------------------------
-        // Percentiles reales del corpus (ver V2_CORREDOR). Solo sobre la medida
-        // sin ponderar: se construyó así, y superponerlo a la curva ponderada
-        // compararía dos cosas distintas.
-        const corr = pond ? null : (() => {
+        // Percentiles reales del corpus (ver V2_CORREDOR), medidos por este
+        // mismo camino. Es la única medida que hay: no queda ninguna otra
+        // lectura del espectro con la que se pueda confundir.
+        const corr = (() => {
             const arriba = V2_CORREDOR.map(c => [x(c.hz), y(c.hi)]);
             const abajo = V2_CORREDOR.map(c => [x(c.hz), y(c.lo)]);
             const medi = V2_CORREDOR.map(c => [x(c.hz), y(c.med)]);
@@ -2286,7 +2290,7 @@
         // --- Tramos con desviación real -------------------------------------
         // Solo se tiñen los tramos que el motor ya ha marcado. Sin rachas, la
         // curva entera se queda blanca: la estética no fabrica problemas.
-        const comp = pond ? null : veredicto;
+        const comp = veredicto;
         const rachas = (comp && comp.rachas) || [];
         const tramos = rachas.map(r => {
             const dentro = rel.filter(p => p.f >= r.desde && p.f <= r.hasta);
@@ -2321,30 +2325,13 @@
 
         return (
             <div>
-                <div className="flex flex-col items-start gap-2 mb-2.5
-                                sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-                    <span className="rotulo-v2"
-                          style={{ fontSize: '10px', letterSpacing: '.14em', color: '#8e8e97' }}>
-                        {pond ? 'Compensado al oído' : 'Espectro, como tu analizador'}
-                    </span>
-                    <div className="flex rounded-md overflow-hidden shrink-0"
-                         style={{ border: '1px solid #2f2f2f' }}>
-                        {[[true, 'Oído'], [false, 'Espectro']].map(([v, et]) => (
-                            <button key={et} onClick={() => setPond(v)}
-                                    aria-pressed={pond === v}
-                                    className="px-2.5 py-1 transition"
-                                    style={{
-                                        fontSize: '10px', letterSpacing: '.07em',
-                                        textTransform: 'uppercase', fontWeight: 700,
-                                        background: pond === v ? '#15171a' : 'transparent',
-                                        color: pond === v ? '#f2f2f2' : '#686870',
-                                        boxShadow: pond === v ? `inset 0 0 0 1px ${V2_MORADO}` : 'none',
-                                    }}>
-                                {et}
-                            </button>
-                        ))}
-                    </div>
-                </div>
+                {/* Aquí vivía la fila "Espectro, como tu analizador" con el
+                    conmutador Oído/Espectro. Retirado el conmutador, la fila se
+                    quedaba con un rótulo solo a la izquierda y medio ancho
+                    vacío a la derecha, y costaba 30 px de la cabecera que
+                    justamente había que apretar. Lo que decía sigue dicho: la
+                    ficha de la esquina lleva el "+4.5 dB/oct" —la convención de
+                    SPAN y Pro-Q— y "Cómo leer este gráfico" lo desarrolla. */}
 
                 {/* Alto por proporción y no fijo. Con 292 px clavados, en una
                     tarjeta a todo lo ancho el gráfico salía a 4:1 —un panorama
@@ -2527,20 +2514,19 @@
                         </span>
                     )}
 
-                    {/* Ficha técnica: visible para quien la entiende, secundaria para el resto. */}
                     {/* Ficha técnica: legible para quien la entiende, secundaria
                         para el resto. Dice de qué son los dB del eje, que con el
-                        0 en el cuerpo del tema no es evidente. */}
+                        0 en el cuerpo del tema no es evidente, y con qué
+                        inclinación se dibuja, que es la que permite cotejar el
+                        gráfico con el analizador del DAW. */}
                     <span className="absolute cifra-v2"
                           style={{ right: 12, top: 10, fontSize: '8.5px',
                                    letterSpacing: '.03em', color: '#474750' }}>
                         {/* En estrecho solo la parte imprescindible: la completa
                             no cabe en 390 px y se montaba sobre la anotación. */}
-                        <span className="hidden sm:inline">
-                            {pond ? 'bajo el pico' : 'sobre el cuerpo del tema'}{' · '}
-                        </span>
+                        <span className="hidden sm:inline">sobre el cuerpo del tema · </span>
                         {detallado ? '1/3 de octava' : '6 bandas'}
-                        {!pond && <span className="hidden sm:inline"> · +4.5 dB/oct</span>}
+                        <span className="hidden sm:inline"> · +4.5 dB/oct</span>
                     </span>
 
                     {/* El señalador del aviso, en HTML: dentro del SVG el círculo
@@ -2864,14 +2850,13 @@
         const m = d.mono_compat || {};
         const h = d.harshness || {};
         const disp = d.espectro_display || {};
-        const dispP = d.espectro_display_pond || {};
         const vent = d.espectro_ventana || {};
         const fino = d.espectro_fino || {};
         // El veredicto lo produce el propio gráfico, comparando con el corredor
         // de referencia. Así la palabra y la curva salen de la MISMA medida: era
         // el fallo de antes, que el rótulo decía "elevado" mientras el gráfico
         // se veía recto, porque venían de sitios distintos.
-        const veredicto = v2VeredictoEspectro(fino, disp, dispP);
+        const veredicto = v2VeredictoEspectro(fino, disp);
         const tonoBalance = veredicto
             ? (veredicto.dentro ? 'ok' : 'aviso')
             : v2TonoEstado('balance_grave', d.balance_grave);
@@ -2904,7 +2889,7 @@
                                        tono={tonoBalance} />
                            )}>
                     {(Object.keys(disp).length > 0 || (fino.bandas || []).length > 0)
-                        ? <V2Espectro2 display={disp} displayPond={dispP} fino={fino} ventana={vent}
+                        ? <V2Espectro2 display={disp} fino={fino} ventana={vent}
                                        veredicto={veredicto} />
                         : <V2Espectro grave={sg.db_grave} media={sg.db_media} aguda={sg.db_aguda} />}
                     <div className="flex items-start gap-3 mt-4">
@@ -3002,13 +2987,12 @@
                         <p>La montaña de 50–60 Hz sigue ahí y está bien que siga: es el bombo, y es el
                            género. Lo que hay que mirar no es que exista, sino
                            <span className="text-gray-300"> cuánto sobresale</span> sobre el resto.</p>
-                        <p>La vista <span className="text-gray-300">Oído</span> es otra cosa: aplica
-                           las curvas isofónicas de Fletcher y Munson, que describen cuánta energía
-                           hace falta en cada zona para que se perciba igual de fuerte. Se parece más
-                           a lo que oyes; se parece menos a lo que mide un analizador.</p>
-                        <p className="text-gray-500">Letra pequeña: en Oído se usa la ponderación A, la
-                           forma normalizada de la curva de 40 fon — volumen de escucha moderado. A
-                           volumen de club el oído es más plano, así que compensa de más.</p>
+                        <p className="text-gray-500">Antes había una segunda vista, «Oído», que
+                           compensaba el gráfico con la curva de sensibilidad del oído. Se ha
+                           quitado: comprobado sobre los 322 temas de la referencia, acababa
+                           diciendo lo mismo que esta. Y la curva que usaba está calibrada para
+                           escuchar bajito — a volumen de club el oído es bastante más plano, así
+                           que corregía de más.</p>
                         <p className="text-gray-500">Qué es exactamente la referencia: 322 previews
                            de catálogo de 120 s de 26 sellos, con el género tomado del sello y no del
                            tema. La mezcla no es neutra — el 40 % es progressive house y no hay
@@ -3090,7 +3074,7 @@
                     {/* La barra solo cuando hay pico que señalar: sin aspereza
                         repetiría la de arriba sin añadir nada. */}
                     {h.tiene_harshness && h.peak_freq_hz > 0 && Object.keys(disp).length > 0 && (
-                        <V2Espectro2 display={disp} displayPond={dispP} fino={fino} ventana={vent}
+                        <V2Espectro2 display={disp} fino={fino} ventana={vent}
                             marcas={[{ f: h.peak_freq_hz, color: V2_COLOR.aviso,
                                        texto: `Pico áspero en ${h.peak_freq_hz} Hz${h.zona_problema ? ` · ${h.zona_problema}` : ''}` }]} />
                     )}

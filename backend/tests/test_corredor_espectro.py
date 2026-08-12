@@ -256,7 +256,7 @@ class TestLaReglaEsHonesta(unittest.TestCase):
         cuerpo = self.h[i:i + 2200]
         self.assertIn("V2_VEREDICTO_DESDE", cuerpo)
         # pero el corredor SÍ se sigue dibujando ahí abajo
-        i = self.h.index("const corr = pond ? null :")
+        i = self.h.index("const corr = (() => {")
         self.assertNotIn("V2_VEREDICTO_DESDE", self.h[i:i + 900])
 
     def test_una_racha_necesita_el_mismo_signo(self):
@@ -266,14 +266,27 @@ class TestLaReglaEsHonesta(unittest.TestCase):
         cuerpo = self.h[i:i + 2000]
         self.assertIn("Math.sign", cuerpo)
 
-    def test_el_corredor_no_se_dibuja_en_la_vista_ponderada(self):
-        """Se construyó sobre la medida sin ponderar. Superponerlo a la curva
-        con ponderación A compararía dos cosas distintas."""
+    def test_no_queda_una_segunda_lectura_del_espectro(self):
+        """Hubo una vista "Oído" con ponderación A, conmutable. Se retiró en
+        agosto de 2026 por dos motivos medidos: decía lo mismo —la desviación
+        respecto al corredor correlacionaba 0.9994 con la vista física— y,
+        como se anclaba al pico del tema en vez de al cuerpo, 27 de los 322
+        previews habrían enseñado la curva fuera del corredor con la insignia
+        diciendo DENTRO.
+
+        Lo que este test protege no es la ausencia del botón, sino que el
+        corredor no se superponga a una medida para la que no se calibró. Si
+        alguien vuelve a añadir una lectura ponderada tendrá que recalibrarlo,
+        así que el motivo tiene que seguir escrito al lado del componente."""
         i = self.h.index("function V2Espectro2(")
         j = self.h.index("function V2Escalones(", i)
         cuerpo = self.h[i:j]
-        self.assertIn("const comp = pond ? null : veredicto;", cuerpo)
-        self.assertIn("const corr = pond ? null :", cuerpo)
+        self.assertNotIn("db_pond", cuerpo)
+        self.assertNotIn("displayPond", cuerpo)
+        self.assertNotIn("setPond", self.h, "ha vuelto el conmutador de vistas")
+        k = self.h.index("function v2PuntosEspectro(")
+        self.assertNotIn("db_pond", self.h[k:k + 800])
+        self.assertIn("0.9994", self.h, "el porqué del cambio, donde se lea")
 
     def test_el_texto_al_usuario_dice_con_que_se_compara(self):
         """Decir "dentro del rango" sin decir de qué rango no significa nada.

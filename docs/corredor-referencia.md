@@ -134,6 +134,38 @@ house / progressive / tech, los que más se parecen entre sí. Sobre techno duro
 trance o DnB **no hay dato y no se puede afirmar nada**. Si algún día se amplía
 el corpus, el valor está ahí y no en más progressive.
 
+## 5 bis. Por qué hay una sola lectura del espectro (y no dos)
+
+Hubo una vista **"Oído"** conmutable, que pasaba cada banda por la ponderación A
+(la forma normalizada de la curva de 40 fon). Se retiró en agosto de 2026.
+Se documenta porque la idea vuelve sola.
+
+**No decía nada nuevo.** La ponderación A es un desplazamiento fijo por banda:
+corre la curva del usuario y la del corpus por igual. Medido sobre los 322
+previews y 19 temas de usuario, la desviación respecto al corredor correlaciona
+**0.9994** entre las dos vistas, con **0.03 dB** de diferencia media. Era la
+misma medida dibujada en otro eje.
+
+**Y podía contradecir a la insignia.** Aquella vista se anclaba al pico del tema
+en vez de al cuerpo, y con ese anclaje sí es una estadística distinta: **27 de
+322 previews (8 %)** habrían visto `REFERENCIA / DENTRO` en la cabecera con la
+curva saliéndose del corredor en pantalla. La insignia la calcula `V2TabMezcla`
+una sola vez y no se entera de qué pestaña miras.
+
+**Y la ponderación A no es la curva de esta música.** 40 fon es escucha a
+volumen bajo. Esto se oye a 85-100 dB SPL, donde las isofónicas son mucho más
+planas, así que compensaba de más. Como ilustración valía; con un corredor
+encima habría pasado a juzgar con una autoridad que no tiene.
+
+**Si vuelve**, la condición es anclarla al cuerpo del tema, no al pico — con eso
+su corredor es el actual desplazado en bloque y no puede contradecir nada. El
+precio es la escala: con ponderación A el espectro dibujado ocupa **79 dB** (93
+contando curvas de usuario) contra los 42 de ahora, así que o se recorta el
+grave o el detalle en medios se queda en un temblor.
+
+El motor sigue publicando `db_pond` y `espectro_display_pond`. Ya no los lee
+nadie: son el dato crudo por si la vista vuelve.
+
 ## 6. El mismo pipeline para la referencia y para el usuario
 
 Es una condición, no una coincidencia. Cada referencia pasa por lo mismo que el

@@ -1,6 +1,17 @@
 {
   "entries": [
     {
+      "version": "0.5.89",
+      "date": "2026-08-12",
+      "title": "El balance espectral, más alto y con una sola lectura",
+      "changes": [
+        "El gráfico crece: ahora su alto va atado al ancho en vez de estar clavado en 292 px. En pantalla grande pasa de 4:1 a 2.5:1, así que una diferencia de 10 dB se ve como lo que es y no como una ondulación.",
+        "La franja de referencia se dibuja como una nube: más densa donde se concentran los discos y desvanecida hacia los bordes. Esa densidad es la de la muestra de verdad, no un degradado decorativo — el sub sale difuso porque ahí es donde más se diferencian unos temas de otros.",
+        "El rótulo «Rango de referencia» pasa a ser una leyenda con muestra en la esquina. Colgado del corredor se leía como el nombre de la frecuencia que tenía debajo.",
+        "Se retira la vista «Oído». Comprobado sobre los 322 temas de la referencia, acababa diciendo lo mismo que la vista física, y la curva que usaba está calibrada para escuchar a volumen bajo: a volumen de club corregía de más. Con una sola lectura, la insignia de la cabecera y el gráfico no pueden discrepar."
+      ]
+    },
+    {
       "version": "0.5.88",
       "date": "2026-08-12",
       "title": "El balance espectral, rediseñado y con referencia",
