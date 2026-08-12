@@ -159,8 +159,6 @@
             font-size: 11px; font-weight: 700;
             display: inline-flex; align-items: center; justify-content: center;
         }
-        .avatar-v3 { width: 38px; height: 38px; border-radius: 50%; border: 2px solid #12121a; flex: none; }
-        .avatar-v3 + .avatar-v3 { margin-left: -11px; }
         .pill-fmt {
             font-size: 12px; letter-spacing: .02em; color: var(--po-green);
             border: 1px solid rgba(37,244,100,0.3); border-radius: 999px;
@@ -576,28 +574,22 @@
                          <path d="M17.5 6.5h3.2M17.5 6.5V3.3" />
                      </svg> },
         ];
-        // Prueba social con usuarios REALES: foto de perfil si la subieron,
-        // su inicial si no, y el total registrado — del endpoint público
-        // /api/portada/avatares. Mientras llega (o si la API no contesta) se
-        // enseñan discos de color neutros y NINGUNA cifra: un número que no
+        // Prueba social: el número REAL de cuentas, del endpoint público
+        // /api/portada/avatares (devuelve también avatares; aquí solo se usa
+        // el total — Alex prefirió la frase sola, sin fotos). Mientras llega
+        // o si la API no contesta, la frase va SIN cifra: un número que no
         // podemos respaldar es peor que no poner número.
-        const [social, setSocial] = useState(null);
+        const [totalUsuarios, setTotalUsuarios] = useState(null);
         useEffect(() => {
             let vivo = true;
             fetch(`${API_URL}/api/portada/avatares`)
                 .then(r => (r.ok ? r.json() : null))
                 .then(d => {
-                    if (vivo && d && Array.isArray(d.avatares) && d.avatares.length) setSocial(d);
+                    if (vivo && d && typeof d.total === 'number' && d.total > 0) setTotalUsuarios(d.total);
                 })
                 .catch(() => {});
             return () => { vivo = false; };
         }, []);
-        const avataresFallback = [
-            'linear-gradient(135deg, #7c3aed 0%, #312e81 90%)',
-            'linear-gradient(135deg, #10b981 0%, #064e3b 90%)',
-            'linear-gradient(135deg, #f59e0b 0%, #7c2d12 90%)',
-            'linear-gradient(135deg, #38bdf8 0%, #1e3a8a 90%)',
-        ];
 
         return (
             <div className="min-h-screen home-v3 relative fade-in">
@@ -656,39 +648,17 @@
                                 ))}
                             </div>
 
-                            <div className="mt-8 flex items-center gap-4">
-                                <div className="flex items-center">
-                                    {social ? social.avatares.map((a, k) => (
-                                        // La inicial se pinta siempre y la foto encima:
-                                        // si la imagen falla (archivo borrado, red), el
-                                        // hueco lo cubre la inicial y no un icono roto.
-                                        <span key={k}
-                                              className="avatar-v3 relative inline-flex items-center justify-center"
-                                              style={{ background: 'rgba(109,16,255,0.3)', color: '#fff',
-                                                       fontWeight: 700, fontSize: '15px', overflow: 'hidden' }}>
-                                            {a.inicial || '?'}
-                                            {a.foto && (
-                                                <img src={`${API_URL}/api/comunidad/foto/${a.foto}`} alt=""
-                                                     className="absolute inset-0 w-full h-full"
-                                                     style={{ objectFit: 'cover' }}
-                                                     onError={(e) => { e.target.style.display = 'none'; }} />
-                                            )}
-                                        </span>
-                                    )) : avataresFallback.map((g, k) => (
-                                        <span key={k} className="avatar-v3" style={{ background: g }} />
-                                    ))}
-                                    {social && social.total > social.avatares.length && (
-                                        <span className="avatar-v3 inline-flex items-center justify-center"
-                                              style={{ background: '#1c1c26', color: 'var(--po-white)',
-                                                       fontSize: '10px', fontWeight: 700 }}>
-                                            +{social.total - social.avatares.length}
-                                        </span>
-                                    )}
-                                </div>
-                                <p style={{ color: '#9a9aa5', fontSize: '13px', lineHeight: 1.5 }}>
-                                    Productores y artistas ya están<br />usando Mentotrack.
-                                </p>
-                            </div>
+                            {/* Una sola línea, sin saltos forzados: la cifra en
+                                blanco y el resto en gris. Sin número confirmado, la
+                                frase sale sola. */}
+                            <p className="mt-8" style={{ color: '#9a9aa5', fontSize: '14px', lineHeight: 1.5 }}>
+                                {totalUsuarios && (
+                                    <span style={{ color: 'var(--po-white)', fontWeight: 700 }}>
+                                        +{totalUsuarios}{' '}
+                                    </span>
+                                )}
+                                {totalUsuarios ? 'productores' : 'Productores'} y artistas ya han usado Mentotrack.
+                            </p>
                         </div>
 
                         {/* ===== Derecha: la tarjeta de subida ===== */}

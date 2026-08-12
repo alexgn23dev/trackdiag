@@ -28,7 +28,7 @@ Documento de referencia para trabajar en este repo. Para la visión completa del
 - **PWA admin:** dashboard instalable en móvil (`manifest-admin.json`, `sw-admin.js`).
 - **Páginas legales:** `/aviso-legal`, `/privacidad`, `/cookies`, `/terminos`, `/changelog`.
 - **Seguridad extra:** bloqueo de `.git` y `dashboard.html` en el catch-all, límite de upload 150 MB por archivo validado en cliente y servidor.
-- **Portada rediseñada (v0.5.90, en `dev`):** `LandingScreen` según el prototipo de Alex (titular + 3 pasos + tarjeta de subida). La prueba social usa avatares reales vía el endpoint público `GET /api/portada/avatares` (foto de perfil o inicial + total de usuarios; caché de proceso 5 min). `previsualizar.py` sirve la portada en `/home` y `/homemovil?w=390`.
+- **Portada rediseñada (v0.5.90, en `dev`):** `LandingScreen` según el prototipo de Alex (titular + 3 pasos + tarjeta de subida). La prueba social es una frase con el total real de cuentas, vía el endpoint público `GET /api/portada/avatares` (caché de proceso 5 min; devuelve también avatares foto/inicial, hoy sin uso en la UI). `previsualizar.py` sirve la portada en `/home` y `/homemovil?w=390`.
 - **Reporte mensual automático (v0.5.29):** tarea cron que se ejecuta el día 1 de cada mes a las 09:00 UTC. Calcula métricas del mes anterior (análisis totales, usuarios nuevos, análisis por persona, embudo CTA) y envía email vía Resend a `ADMIN_EMAIL` (default: alexgn23@gmail.com). Endpoint manual `/api/admin/reporte-mensual?year=2026&month=5` para generar reportes bajo demanda (requiere cookie admin).
 
 ### Tamaños actuales
