@@ -2154,13 +2154,69 @@
         return out;
     }
 
-    /** El corredor, como polígono cerrado: borde alto de ida, bajo de vuelta. */
+    /** El corredor, como polígono cerrado: borde alto de ida, bajo de vuelta.
+     *
+     *  Los dos bordes van con la MISMA cúbica monótona que la curva del track.
+     *  Antes se unían con rectas y a 29 bandas eso se veía: el corredor salía
+     *  facetado mientras la curva de encima iba suave, y esa diferencia de
+     *  acabado era justo lo que hacía leer la franja como una pegatina en vez
+     *  de como el fondo del gráfico.
+     *
+     *  La cúbica monótona es simétrica al invertir el eje X, así que el borde
+     *  de vuelta es esa misma curva recorrida al revés: basta con encadenarla
+     *  cambiando su `M` inicial por un `L`.
+     */
     function v2PathCorredor(arriba, abajo) {
-        if (arriba.length < 2) return '';
-        const ida = arriba.map(p => `${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(' L ');
-        const vuelta = abajo.slice().reverse()
-            .map(p => `${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(' L ');
-        return `M ${ida} L ${vuelta} Z`;
+        if (arriba.length < 2 || abajo.length < 2) return '';
+        const vuelta = v2CurvaSuave(abajo.slice().reverse());
+        return `${v2CurvaSuave(arriba)} L ${vuelta.slice(2)} Z`;
+    }
+
+    /** La nube del corredor: capas anidadas entre percentiles simétricos.
+     *
+     *  Con dos bandas (5-95 y 25-75) el corredor se leía como dos franjas con
+     *  un escalón entre ellas. Aquí se dibujan catorce parejas —(5,95), luego
+     *  (8.2, 91.8)… hasta rozar la mediana— todas con la misma opacidad baja.
+     *  Con ocho todavía se distinguían las capas donde la nube es ancha; con
+     *  catorce el salto entre una y otra cae por debajo de lo que se ve.
+     *  Donde el corpus se concentra las capas se apilan y la nube se espesa;
+     *  donde se dispersa quedan separadas y se desvanece sola. La densidad que
+     *  se ve ES la de la muestra, no un degradado decorativo: el sub, que es la
+     *  zona donde más se diferencian los discos, sale difuso porque de verdad
+     *  lo es.
+     *
+     *  Los cinco percentiles medidos siguen fijando la forma; entre ellos se
+     *  interpola lineal y eso solo reparte sombreado. El borde exterior sigue
+     *  siendo exactamente el 5-95, que es el que juzga.
+     */
+    const V2_CAPAS_NUBE = 14;
+    const V2_ANCLAS_PCT = [[5, 'lo'], [25, 'lo2'], [50, 'med'], [75, 'hi2'], [95, 'hi']];
+    // El morado de marca (#6D10FF) apilado capa sobre capa sale eléctrico: en los
+    // medios, donde el 25-75 mide 4 dB, las capas se juntan y el corredor
+    // parecía un tubo de neón. Este es el mismo tono aclarado y desaturado, que
+    // a igual densidad se lee como tela y no como luz. Solo para la nube: el
+    // resto de la interfaz sigue con el morado de marca.
+    const V2_NUBE = '#8b7ccc';
+
+    function v2PctCorredor(c, p) {
+        for (let i = 1; i < V2_ANCLAS_PCT.length; i++) {
+            if (p <= V2_ANCLAS_PCT[i][0]) {
+                const a = V2_ANCLAS_PCT[i - 1], b = V2_ANCLAS_PCT[i];
+                return c[a[1]] + (c[b[1]] - c[a[1]]) * ((p - a[0]) / (b[0] - a[0]));
+            }
+        }
+        return c.hi;
+    }
+
+    function v2NubeCorredor(x, y) {
+        const capas = [];
+        for (let k = 0; k < V2_CAPAS_NUBE; k++) {
+            const d = (k / V2_CAPAS_NUBE) * 45;
+            capas.push(v2PathCorredor(
+                V2_CORREDOR.map(c => [x(c.hz), y(v2PctCorredor(c, 95 - d))]),
+                V2_CORREDOR.map(c => [x(c.hz), y(v2PctCorredor(c, 5 + d))])));
+        }
+        return capas;
     }
 
     function V2Espectro2({ display, displayPond, fino, ventana, marcas, veredicto }) {
@@ -2193,8 +2249,13 @@
         const RANGO = pond ? 36 : 42;
         const PASO = 6;
         const F0 = 20, F1 = 16000;
-        // AIRE deja sitio arriba al rótulo del eje y a la cápsula del corredor.
-        const H = 100, AIRE = 19, PIE = 6;
+        // AIRE es el margen de arriba y PIE el de abajo, en % de la caja. El de
+        // arriba baja de 19 a 11: con la leyenda del corredor movida a la
+        // esquina ya no hay nada que alojar ahí, y esos 8 puntos eran hueco
+        // vacío entre el techo y el punto más alto del corredor (que cae en
+        // 13 %). El de abajo sube a 9 porque las etiquetas de frecuencia se han
+        // metido dentro de la caja.
+        const H = 100, AIRE = 11, PIE = 9;
         const util = H - AIRE - PIE;
         const CANAL = 40;   // px del canal de etiquetas de nivel
 
@@ -2214,26 +2275,11 @@
             const arriba = V2_CORREDOR.map(c => [x(c.hz), y(c.hi)]);
             const abajo = V2_CORREDOR.map(c => [x(c.hz), y(c.lo)]);
             const medi = V2_CORREDOR.map(c => [x(c.hz), y(c.med)]);
-            // La mitad central (p25-p75): más densa porque ahí cae más gente.
-            const arriba2 = V2_CORREDOR.map(c => [x(c.hz), y(c.hi2)]);
-            const abajo2 = V2_CORREDOR.map(c => [x(c.hz), y(c.lo2)]);
-            // Altura del borde alto en la posición donde irá la cápsula, para
-            // que cuelgue de la banda y no del techo de la caja (ahí chocaba con
-            // la ficha técnica de la esquina).
-            const altoEn = px => {
-                const c = V2_CORREDOR.reduce((mejor, cur) =>
-                    Math.abs(x(cur.hz) - px) < Math.abs(x(mejor.hz) - px) ? cur : mejor);
-                return y(c.hi);
-            };
             return {
-                altoEn,
-                area: v2PathCorredor(arriba, abajo),
-                nucleo: v2PathCorredor(arriba2, abajo2),
+                capas: v2NubeCorredor(x, y),
                 borde: v2CurvaSuave(arriba),
                 bordeBajo: v2CurvaSuave(abajo),
                 mediana: v2CurvaSuave(medi),
-                centroX: (x(V2_CORREDOR[0].hz) + x(V2_CORREDOR[V2_CORREDOR.length - 1].hz)) / 2,
-                topeY: Math.min(...arriba.map(p => p[1])),
             };
         })();
 
@@ -2256,8 +2302,6 @@
             };
         }).filter(Boolean);
         const aviso = rachas.length ? rachas[0] : null;
-        // La cápsula del corredor se aparta del señalador del aviso.
-        const capsulaX = !aviso ? 50 : (x(aviso.pico.f) < 50 ? 68 : 30);
 
         // --- Marcas del motor (frecuencia áspera) ---------------------------
         const marcasReales = (marcas || []).filter(m => m && m.f > 20 && m.f <= F1);
@@ -2277,7 +2321,7 @@
 
         return (
             <div>
-                <div className="flex flex-col items-start gap-2 mb-4
+                <div className="flex flex-col items-start gap-2 mb-2.5
                                 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                     <span className="rotulo-v2"
                           style={{ fontSize: '10px', letterSpacing: '.14em', color: '#8e8e97' }}>
@@ -2302,14 +2346,27 @@
                     </div>
                 </div>
 
+                {/* Alto por proporción y no fijo. Con 292 px clavados, en una
+                    tarjeta a todo lo ancho el gráfico salía a 4:1 —un panorama
+                    en el que 10 dB de diferencia se veían como una ondulación—
+                    mientras que en móvil quedaba casi cuadrado. Atado al ancho,
+                    la pendiente de la curva significa lo mismo en cualquier
+                    pantalla. Los topes evitan los dos extremos: que en móvil se
+                    quede en una tira y que en un monitor ancho ocupe la
+                    pantalla entera. */}
                 <div className="relative rounded-lg overflow-hidden"
-                     style={{ background: '#15171a', border: '1px solid #212429', height: 292 }}>
+                     style={{ background: '#15171a', border: '1px solid #212429',
+                              // El ancho va explícito: sin él, al morder el tope de
+                              // alto el navegador estrecha también la caja para
+                              // conservar la proporción y deja un hueco a la derecha.
+                              width: '100%', aspectRatio: '2.4 / 1',
+                              minHeight: 250, maxHeight: 470 }}>
 
                     {/* Canal de niveles. En HTML: el SVG se estira a lo ancho y
                         cualquier texto dentro saldría deformado. */}
                     <div className="absolute left-0 top-0 bottom-0 z-10" style={{ width: CANAL }}>
                         <span className="absolute cifra-v2"
-                              style={{ left: 8, top: 10, fontSize: '8.5px', color: '#5c5c65' }}>
+                              style={{ left: 8, top: 9, fontSize: '8.5px', color: '#55555e' }}>
                             dB
                         </span>
                         {escalones.map(db => (
@@ -2332,23 +2389,32 @@
                                      : `Espectro fuera de la referencia en ${comp.rachas.map(r => r.zona).join(', ')}`)
                                  : 'Espectro del track'}>
                             <defs>
-                                <linearGradient id="v2corrGrad" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor={V2_MORADO} stopOpacity="0.085" />
-                                    <stop offset="100%" stopColor={V2_MORADO} stopOpacity="0.025" />
-                                </linearGradient>
                                 {/* El corredor se desvanece por debajo de 50 Hz, que es
                                     donde deja de juzgarse: ahí mide más de 20 dB de ancho
                                     y no distingue nada. Además era la mancha más pesada
-                                    del gráfico, justo en la zona que menos informa. */}
+                                    del gráfico, justo en la zona que menos informa.
+                                    Por la derecha se remata con una pluma corta —poco más
+                                    de una banda— solo para que el corredor no termine en
+                                    un tajo vertical. Es acabado, no recorte: donde el
+                                    corredor deja de opinar sigue siendo 12.5 kHz. */}
                                 <linearGradient id="v2corrFade" x1="0" y1="0" x2="1" y2="0"
                                                 gradientUnits="objectBoundingBox">
                                     <stop offset="0%" stopColor="#fff" stopOpacity="0" />
                                     <stop offset={`${x(V2_VEREDICTO_DESDE) / 100}`}
                                           stopColor="#fff" stopOpacity="1" />
-                                    <stop offset="100%" stopColor="#fff" stopOpacity="1" />
+                                    <stop offset={`${x(11000) / 100}`}
+                                          stopColor="#fff" stopOpacity="1" />
+                                    <stop offset={`${x(12500) / 100}`}
+                                          stopColor="#fff" stopOpacity="0" />
+                                    <stop offset="100%" stopColor="#fff" stopOpacity="0" />
                                 </linearGradient>
-                                <filter id="v2corrHalo" x="-5%" y="-15%" width="110%" height="130%">
-                                    <feGaussianBlur stdDeviation="0.25 1.3" />
+                                {/* Difuminado leve sobre la nube entera. La caja se
+                                    estira, así que el radio va desigual a propósito: en X
+                                    un punto de viewBox vale muchos más píxeles que en Y, y
+                                    con el mismo número el borde de arriba saldría nítido
+                                    y los laterales borrosos. */}
+                                <filter id="v2corrHalo" x="-6%" y="-18%" width="112%" height="136%">
+                                    <feGaussianBlur stdDeviation="0.10 0.42" />
                                 </filter>
                                 <mask id="v2corrMask" maskUnits="userSpaceOnUse"
                                       x="0" y="0" width="100" height={H}>
@@ -2356,57 +2422,68 @@
                                 </mask>
                             </defs>
 
+                            {/* Rejilla al mínimo legible. Las verticales llegan hasta el
+                                pie de la caja pero no lo cruzan, para que las cifras de
+                                frecuencia no queden tachadas. */}
                             {finas.map(f => (
-                                <line key={f} x1={x(f)} x2={x(f)} y1="0" y2={H}
-                                      stroke="#1b1d21" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+                                <line key={f} x1={x(f)} x2={x(f)} y1="0" y2={H - PIE}
+                                      stroke="#1c1e23" strokeWidth="1" vectorEffect="non-scaling-stroke" />
                             ))}
                             {rotuladas.map(f => (
-                                <line key={f} x1={x(f)} x2={x(f)} y1="0" y2={H}
-                                      stroke="#1f2227" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+                                <line key={f} x1={x(f)} x2={x(f)} y1="0" y2={H - PIE}
+                                      stroke="#212429" strokeWidth="1" vectorEffect="non-scaling-stroke" />
                             ))}
                             {escalones.map(db => (
                                 <line key={db} x1="0" x2="100" y1={y(db)} y2={y(db)}
-                                      stroke={db === 0 ? '#2d3037' : '#1f2126'} strokeWidth="1"
+                                      stroke={db === 0 ? '#33363e' : '#232529'} strokeWidth="1"
                                       vectorEffect="non-scaling-stroke"
-                                      strokeDasharray={db === 0 ? '' : '1 7'} />
+                                      strokeDasharray={db === 0 ? '' : '1 9'} />
                             ))}
 
-                            {/* Cuatro capas para que se lea como UNA nube y no como
-                                franjas: halo difuminado, banda exterior (5-95), núcleo
-                                (25-75, donde cae la mitad) y mediana. Ninguna tiene
-                                borde marcado salvo un filo tenue arriba, así que no
-                                aparecen escalones entre capas. */}
+                            {/* Catorce capas de igual opacidad entre percentiles cada vez
+                                más juntos. Se suman hacia el centro y se quedan solas en
+                                los extremos, así que la nube se apaga sola hacia el 5 y
+                                el 95 sin degradado postizo y sin escalón entre franjas.
+                                Los filos de fuera quedan como un susurro: tienen que
+                                poder localizarse si alguien los busca —son el límite que
+                                juzga— pero no dibujar una caja. */}
                             {corr && (
                                 <g className="v2-corredor" mask="url(#v2corrMask)">
-                                    <path d={corr.area} fill={V2_MORADO} fillOpacity="0.09"
-                                          filter="url(#v2corrHalo)" />
-                                    <path d={corr.area} fill="url(#v2corrGrad)" />
-                                    <path d={corr.nucleo} fill={V2_MORADO} fillOpacity="0.10"
-                                          filter="url(#v2corrHalo)" />
-                                    <path d={corr.borde} fill="none" stroke="#9d86d8"
-                                          strokeOpacity="0.22" strokeWidth="1"
-                                          vectorEffect="non-scaling-stroke" />
-                                    <path d={corr.bordeBajo} fill="none" stroke="#9d86d8"
-                                          strokeOpacity="0.10" strokeWidth="1"
-                                          vectorEffect="non-scaling-stroke" />
-                                    <path d={corr.mediana} fill="none" stroke="#a596cf"
-                                          strokeOpacity="0.16" strokeWidth="1"
-                                          strokeDasharray="2 7" vectorEffect="non-scaling-stroke" />
+                                    <g filter="url(#v2corrHalo)">
+                                        {corr.capas.map((d, k) => (
+                                            <path key={k} d={d} fill={V2_NUBE} fillOpacity="0.048" />
+                                        ))}
+                                        <path d={corr.borde} fill="none" stroke="#a191d0"
+                                              strokeOpacity="0.12" strokeWidth="1"
+                                              vectorEffect="non-scaling-stroke" />
+                                        <path d={corr.bordeBajo} fill="none" stroke="#a191d0"
+                                              strokeOpacity="0.07" strokeWidth="1"
+                                              vectorEffect="non-scaling-stroke" />
+                                    </g>
+                                    <path d={corr.mediana} fill="none" stroke="#b6abd8"
+                                          strokeOpacity="0.12" strokeWidth="1"
+                                          strokeDasharray="1.5 8" vectorEffect="non-scaling-stroke" />
                                 </g>
                             )}
 
                             {/* La curva. Blanca por defecto; los tramos marcados por el
-                                motor se repintan encima con su color de severidad. */}
-                            <path className="v2-curva" d={curva} fill="none" stroke="#eef0f2"
-                                  strokeWidth="1.7" vectorEffect="non-scaling-stroke"
+                                motor se repintan encima con su color de severidad.
+                                El halo va en dos pasadas de `drop-shadow` en vez de un
+                                filtro SVG: `drop-shadow` trabaja en píxeles de pantalla,
+                                así que no se deforma con la caja como sí le pasaría a un
+                                feGaussianBlur dentro de un viewBox estirado. La cercana
+                                pega la línea al fondo, la lejana la posa sobre la nube. */}
+                            <path className="v2-curva" d={curva} fill="none" stroke="#f0f2f4"
+                                  strokeWidth="1.55" vectorEffect="non-scaling-stroke"
                                   strokeLinejoin="round" strokeLinecap="round"
-                                  style={{ filter: 'drop-shadow(0 0 2px rgba(238,240,242,.16))' }} />
+                                  style={{ filter: 'drop-shadow(0 0 1.2px rgba(240,242,244,.16)) '
+                                                 + 'drop-shadow(0 0 4px rgba(206,218,236,.05))' }} />
                             {/* Mismo grosor que la curva base, no más: teñir un
                                 tramo ya lo destaca, engordarlo lo convierte en el
                                 protagonista del gráfico. */}
                             {tramos.map(t => (
                                 <path key={t.clave} d={t.d} fill="none" stroke={t.color}
-                                      strokeWidth="1.7" vectorEffect="non-scaling-stroke"
+                                      strokeWidth="1.55" vectorEffect="non-scaling-stroke"
                                       strokeLinejoin="round" strokeLinecap="round" />
                             ))}
 
@@ -2425,22 +2502,28 @@
                         </svg>
                     </div>
 
-                    {/* Cápsula del corredor, centrada sobre su borde alto. */}
+                    {/* Leyenda del corredor. Antes era una cápsula colgada de su borde
+                        alto y, aunque flotaba sobre la nube, se leía como el nombre de
+                        la frecuencia que tenía justo debajo. Aquí es una clave: la
+                        muestra repite el degradado de la nube —tenue, densa, tenue— así
+                        que nombra la mancha entera y ninguna zona en concreto. */}
                     {corr && (
-                        <span className="absolute rotulo-v2"
-                              style={{
-                                  // Se coloca en el lado contrario a la anotación:
-                                  // en el centro se tocaban.
-                                  left: `calc(${CANAL}px + ${capsulaX}% * (100% - ${CANAL}px) / 100%)`,
-                                  top: `calc(${Math.max(8, corr.altoEn(capsulaX) - 11)}% )`,
-                                  transform: 'translateX(-50%)', whiteSpace: 'nowrap',
-                                  fontSize: '8.5px', letterSpacing: '.1em', fontWeight: 600,
-                                  color: '#a79bc9',
-                                  background: 'rgba(109,16,255,.10)',
-                                  border: '1px solid rgba(157,134,216,.22)',
-                                  borderRadius: 999, padding: '3px 11px',
-                              }}>
-                            Rango de referencia
+                        <span className="absolute flex items-center gap-2"
+                              style={{ left: CANAL + 4, top: 9, pointerEvents: 'none' }}>
+                            <span style={{ width: 17, height: 9, borderRadius: 3,
+                                           // Los mismos valores que alcanza la nube:
+                                           // si la muestra no se le pareciera, la
+                                           // leyenda no serviría de leyenda.
+                                           background: 'linear-gradient(180deg,'
+                                                     + ' rgba(139,124,204,.06) 0%,'
+                                                     + ' rgba(139,124,204,.50) 50%,'
+                                                     + ' rgba(139,124,204,.06) 100%)',
+                                           boxShadow: 'inset 0 0 0 1px rgba(161,145,208,.14)' }} />
+                            <span style={{ fontSize: '8.5px', letterSpacing: '.11em',
+                                           fontWeight: 600, textTransform: 'uppercase',
+                                           whiteSpace: 'nowrap', color: '#8b80aa' }}>
+                                Rango de referencia
+                            </span>
                         </span>
                     )}
 
@@ -2450,7 +2533,7 @@
                         0 en el cuerpo del tema no es evidente. */}
                     <span className="absolute cifra-v2"
                           style={{ right: 12, top: 10, fontSize: '8.5px',
-                                   letterSpacing: '.03em', color: '#4a4a53' }}>
+                                   letterSpacing: '.03em', color: '#474750' }}>
                         {/* En estrecho solo la parte imprescindible: la completa
                             no cabe en 390 px y se montaba sobre la anotación. */}
                         <span className="hidden sm:inline">
@@ -2464,8 +2547,13 @@
                         saldría ovalado y el texto deformado. */}
                     {aviso && (() => {
                         const izq = `calc(${CANAL}px + ${x(aviso.pico.f)}% * (100% - ${CANAL}px) / 100%)`;
-                        const arr = `${Math.min(84, Math.max(14, y(aviso.pico.v)))}%`;
+                        const alto = Math.min(82, Math.max(14, y(aviso.pico.v)));
+                        const arr = `${alto}%`;
                         const aLaDerecha = x(aviso.pico.f) > 56;
+                        // Si el pico va alto, la anotación baja: encima del todo
+                        // chocaría con la leyenda del corredor, que vive en esa
+                        // esquina y no se puede mover a ningún otro sitio.
+                        const debajo = alto < 30;
                         return (
                             <React.Fragment>
                                 <span className="absolute"
@@ -2475,7 +2563,8 @@
                                                border: `1.2px solid ${V2_COLOR.aviso}`,
                                                pointerEvents: 'none' }} />
                                 <span className="absolute"
-                                      style={{ left: izq, top: `calc(${arr} - 40px)`,
+                                      style={{ left: izq,
+                                               top: `calc(${arr} ${debajo ? '+ 14px' : '- 40px'})`,
                                                transform: aLaDerecha ? 'translateX(-100%)' : 'none',
                                                marginLeft: aLaDerecha ? -9 : 9,
                                                fontSize: '9.5px', lineHeight: 1.5,
@@ -2492,22 +2581,26 @@
                             </React.Fragment>
                         );
                     })()}
-                </div>
 
-                <div className="relative h-4 mt-1.5" style={{ marginLeft: CANAL }}>
-                    {rotuladas.map((f, i) => (
-                        <span key={f}
-                              className={'absolute cifra-v2 ' + (esenciales.has(f) ? '' : 'hidden sm:inline')}
-                              style={{ left: `${x(f)}%`,
-                                       transform: i === 0 ? 'translateX(0)'
-                                                 : i === rotuladas.length - 1 ? 'translateX(-100%)'
-                                                 : 'translateX(-50%)',
-                                       fontSize: '9px', color: '#686870' }}>
-                            {etiquetaHz(f)}
-                        </span>
-                    ))}
+                    {/* La escala de frecuencia, dentro de la caja. Fuera quedaba
+                        flotando debajo del marco y el gráfico no se leía como una
+                        pieza cerrada. El pie del SVG (PIE) le reserva su franja y las
+                        verticales de la rejilla se paran ahí, así que nada la cruza. */}
+                    <div className="absolute" style={{ left: CANAL, right: 0, bottom: 7, height: 11 }}>
+                        {rotuladas.map((f, i) => (
+                            <span key={f}
+                                  className={'absolute cifra-v2 ' + (esenciales.has(f) ? '' : 'hidden sm:inline')}
+                                  style={{ left: `${x(f)}%`,
+                                           transform: i === 0 ? 'translateX(0)'
+                                                     : i === rotuladas.length - 1 ? 'translateX(-100%)'
+                                                     : 'translateX(-50%)',
+                                           fontSize: '9px', color: '#63636c' }}>
+                                {etiquetaHz(f)}
+                            </span>
+                        ))}
+                    </div>
                     <span className="absolute cifra-v2"
-                          style={{ right: 2, top: 13, fontSize: '8px', color: '#4e4e57' }}>Hz</span>
+                          style={{ right: 11, bottom: 20, fontSize: '8px', color: '#494952' }}>Hz</span>
                 </div>
 
                 {marcasReales.map((m, k) => (
@@ -2794,15 +2887,15 @@
                 <V2Tarjeta ancho="lg:col-span-2 xl:col-span-3"
                            titulo="Balance espectral" tono={tonoBalance}
                            datos={veredicto ? (
-                               <div className="rounded-lg px-5 py-3 text-right"
-                                    style={{ border: `1px solid ${V2_COLOR[tonoBalance]}38`,
-                                             background: `${V2_COLOR[tonoBalance]}09` }}>
-                                   <div style={{ fontSize: '8.5px', fontWeight: 600,
-                                                 letterSpacing: '.16em', textTransform: 'uppercase',
-                                                 color: '#6e6e78', marginBottom: 3 }}>Referencia</div>
+                               <div className="rounded-lg px-4 py-2 text-right"
+                                    style={{ border: `1px solid ${V2_COLOR[tonoBalance]}33`,
+                                             background: `${V2_COLOR[tonoBalance]}0a` }}>
+                                   <div style={{ fontSize: '8px', fontWeight: 600,
+                                                 letterSpacing: '.17em', textTransform: 'uppercase',
+                                                 color: '#6a6a74', marginBottom: 2 }}>Referencia</div>
                                    <div style={{ color: V2_COLOR[tonoBalance], fontWeight: 600,
-                                                 fontSize: '18px', lineHeight: 1.1,
-                                                 letterSpacing: '.045em', textTransform: 'uppercase' }}>
+                                                 fontSize: '17px', lineHeight: 1.05,
+                                                 letterSpacing: '.05em', textTransform: 'uppercase' }}>
                                        {veredicto.dentro ? 'Dentro' : 'Fuera'}
                                    </div>
                                </div>
@@ -2814,7 +2907,7 @@
                         ? <V2Espectro2 display={disp} displayPond={dispP} fino={fino} ventana={vent}
                                        veredicto={veredicto} />
                         : <V2Espectro grave={sg.db_grave} media={sg.db_media} aguda={sg.db_aguda} />}
-                    <div className="flex items-start gap-3 mt-5">
+                    <div className="flex items-start gap-3 mt-4">
                         <V2IconoOnda />
                         <p style={{ fontSize: '11px', lineHeight: 1.65, color: '#7c7c86' }}>
                             {vent && !vent.track_completo
@@ -2824,7 +2917,7 @@
                     </div>
                     {veredicto ? (
                         <div className="flex items-start gap-3 mt-4 pt-4"
-                             style={{ borderTop: '1px solid #212429' }}>
+                             style={{ borderTop: '1px solid #26292f' }}>
                             {veredicto.dentro
                                 ? <V2IconoCheck color={V2_COLOR.ok} />
                                 : <V2IconoAviso color={V2_COLOR.aviso} />}

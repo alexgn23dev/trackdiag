@@ -297,6 +297,52 @@ class TestLaReglaEsHonesta(unittest.TestCase):
         self.assertIn("veredicto.dentro ? 'Dentro' : 'Fuera'", self.h[i:j])
 
 
+class TestLaNubeNoCambiaLoQueSeJuzga(unittest.TestCase):
+    """El corredor se pinta como una nube de capas anidadas entre percentiles
+    cada vez más juntos, para que se apague hacia los bordes en vez de acabar
+    en un filo. Eso es sombreado: puede hacer creer que el límite es más difuso
+    de lo que es, así que el límite en sí no puede moverse."""
+
+    def setUp(self):
+        self.h = fuente()
+
+    def test_la_capa_de_fuera_sigue_siendo_el_5_95(self):
+        """Si la capa exterior se quedara en, digamos, el 10-90, la nube
+        dibujaría un corredor más estrecho que el que juzga el veredicto: el
+        usuario vería su curva fuera y el texto le diría que está dentro."""
+        i = self.h.index("function v2NubeCorredor(")
+        cuerpo = self.h[i:self.h.index("\n    }", i)]
+        # d arranca en 0 (k = 0), así que la primera pareja es exactamente 95 y 5
+        self.assertIn("const d = (k / V2_CAPAS_NUBE) * 45;", cuerpo)
+        self.assertIn("v2PctCorredor(c, 95 - d)", cuerpo)
+        self.assertIn("v2PctCorredor(c, 5 + d)", cuerpo)
+
+    def test_los_anclajes_son_los_cinco_percentiles_medidos(self):
+        """Entre ellos se interpola para repartir el sombreado, pero la forma
+        la fijan los percentiles que salieron del corpus y no otros."""
+        i = self.h.index("const V2_ANCLAS_PCT")
+        linea = self.h[i:self.h.index("\n", i)]
+        for pct, clave in ((5, "lo"), (25, "lo2"), (50, "med"), (75, "hi2"), (95, "hi")):
+            self.assertIn("[%d, '%s']" % (pct, clave), linea)
+
+    def test_el_corredor_se_curva_igual_que_la_curva_del_track(self):
+        """Los dos bordes pasan por la misma cúbica monótona que el track. Con
+        rectas el corredor salía facetado al lado de una curva suave, y esa
+        diferencia de acabado lo hacía leer como un elemento pegado encima."""
+        i = self.h.index("function v2PathCorredor(")
+        cuerpo = self.h[i:self.h.index("\n    }", i)]
+        self.assertEqual(cuerpo.count("v2CurvaSuave("), 2)
+
+    def test_el_desvanecido_de_los_bordes_es_solo_pintura(self):
+        """La máscara apaga el corredor por debajo de 50 Hz y lo remata por la
+        derecha. Es acabado: el rango que se compara lo fija V2_CORREDOR, y
+        v2CompararCorredor no puede saber nada de la máscara."""
+        i = self.h.index("function v2CompararCorredor(")
+        j = self.h.index("function ", i + 10)
+        self.assertNotIn("v2corrFade", self.h[i:j])
+        self.assertNotIn("v2corrMask", self.h[i:j])
+
+
 class TestElDibujoNoSeDeforma(unittest.TestCase):
     """El SVG se estira con preserveAspectRatio='none': cualquier forma que
     dependa de ser redonda, y cualquier texto, tiene que ir en HTML."""

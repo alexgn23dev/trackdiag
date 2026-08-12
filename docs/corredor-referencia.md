@@ -16,8 +16,16 @@ publicada**. Sin ella el usuario ve su curva y no tiene con qué compararla.
 
 Son percentiles por banda de tercio de octava, **5 / 25 / 50 / 75 / 95**. Los
 del 5 y el 95 delimitan la franja y son los únicos que intervienen en la
-comparación; los del 25 y 75 solo se dibujan, para dar profundidad al corredor
-con datos reales en vez de con un degradado inventado.
+comparación; los del 25 y 75 no se juzgan, solo dan forma al sombreado.
+
+Se pinta como una nube: catorce capas anidadas entre percentiles cada vez más
+juntos —(5, 95), (8.2, 91.8)… hasta rozar la mediana— todas con la misma
+opacidad baja. Se suman hacia el centro y se quedan solas en los bordes, así
+que **la densidad que se ve es la densidad de la muestra**, no un degradado
+decorativo: donde el corpus se dispersa (el sub) la nube sale difusa porque de
+verdad lo es. Entre los cinco percentiles medidos se interpola lineal, pero eso
+solo reparte sombreado — el borde exterior sigue siendo exactamente el 5-95, y
+un test lo vigila.
 
 Anchos medianos: **11.1 dB** el 5–95, **4.3 dB** el 25–75.
 
@@ -226,7 +234,13 @@ graves.
 De ahí salen decisiones que si no parecen arbitrarias: el corredor es morado
 apagado y no rojo; la curva es blanca y solo se tiñe donde hay una racha
 marcada; no hay relleno hasta el fondo (una montaña alta no es un defecto, toda
-la música tiene el grave alto); y el corredor se desvanece donde deja de opinar.
+la música tiene el grave alto); y el corredor se desvanece por debajo de 50 Hz,
+que es donde deja de opinar.
+
+Cuidado con leer ese desvanecido como si marcara siempre el límite: por la
+derecha el corredor lleva **una pluma corta —poco más de una banda— que es solo
+acabado**, para que no termine en un tajo vertical. Ahí sigue juzgando hasta
+12.5 kHz. El límite de verdad lo fija `V2_CORREDOR`, no la máscara del dibujo.
 
 ## 11. Cómo regenerarlo
 
