@@ -1,6 +1,19 @@
 {
   "entries": [
     {
+      "version": "0.5.88",
+      "date": "2026-08-12",
+      "title": "El balance espectral, rediseñado y con referencia",
+      "changes": [
+        "El gráfico lleva detrás una franja: el rango donde cae el espectro de 322 previews de catálogo de 26 sellos, medidos exactamente igual que tu track. Si tu curva va por dentro, tu balance se parece al de esa colección.",
+        "El 0 de la escala es el cuerpo de tu tema (el nivel medio entre 200 Hz y 2 kHz), así que la cifra se lee sola: si el grave está en +12, está 12 dB por encima del cuerpo.",
+        "El veredicto ahora describe en vez de recetar. Antes decía «sobra en los graves», que da a entender que hay que bajarlos; ahora dice «tus graves están por encima del 95 % de la referencia», que es lo único que se ha medido.",
+        "Solo se colorea el tramo de la curva que se sale de la referencia. El resto se queda blanco: si la mayor parte de tu espectro está bien, se ve que está bien.",
+        "Curva más suave, con interpolación que no puede inventar picos entre bandas ni desplazar los máximos. La franja se dibuja por capas para dar profundidad, y se desvanece por debajo de 50 Hz, que es donde deja de poder distinguir nada.",
+        "En «Cómo leer este gráfico» está escrito qué es la referencia y qué límites tiene: son previews, no másters; la mezcla es sobre todo progressive y house; y caer dentro describe dónde está tu balance, no si tu tema está bien."
+      ]
+    },
+    {
       "version": "0.5.87",
       "date": "2026-08-12",
       "title": "El espectro ahora se compara con música ya editada",

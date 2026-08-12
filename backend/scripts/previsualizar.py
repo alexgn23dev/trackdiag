@@ -230,6 +230,44 @@ def pagina(indice: int, tracks: list, datos: list, v2: bool,
     return (html.replace("</body>", barra + "</body>")).encode("utf-8")
 
 
+def marco_movil(indice: int, ancho: int, pestana: str) -> bytes:
+    """Envuelve el informe en un iframe de ancho fijo.
+
+    Chrome impone aquí una ventana mínima de ~500 px, así que `--window-size`
+    no sirve para comprobar móvil. Un iframe SÍ crea su propio viewport: las
+    media queries responden a su ancho, y como va servido del mismo origen se
+    puede además medir desbordes desde fuera.
+    """
+    q = f"?v2=1{'&tab=' + pestana if pestana else ''}"
+    return f"""<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<title>Móvil {ancho}px</title><style>
+ body{{background:#000;margin:0;padding:14px;font:12px system-ui;color:#777}}
+ iframe{{width:{ancho}px;height:2400px;border:1px solid #333;background:#151515;display:block}}
+ .n{{margin-bottom:8px}}
+</style></head><body>
+<div class="n">viewport del iframe: {ancho} px · <span id="MEDIDA">midiendo…</span></div>
+<iframe id="f" src="/ver/{indice}{q}"></iframe>
+<script>
+document.getElementById('f').addEventListener('load', function () {{
+  setTimeout(function () {{
+    var d = this.contentDocument, w = d.documentElement.clientWidth, malos = [];
+    d.querySelectorAll('*').forEach(function (el) {{
+      var r = el.getBoundingClientRect();
+      if (r.width > 0 && (r.right > w + 1 || r.left < -1)
+          && !malos.some(function (m) {{ return m.contains(el); }})) malos.push(el);
+    }});
+    document.getElementById('MEDIDA').textContent =
+      'client=' + w + ' scroll=' + d.documentElement.scrollWidth + ' | ' +
+      (malos.length ? malos.slice(0, 5).map(function (e) {{
+        var r = e.getBoundingClientRect();
+        return e.tagName + '.' + (e.className || '').toString().slice(0, 30) +
+               '[' + Math.round(r.left) + '→' + Math.round(r.right) + ']';
+      }}).join(' ;; ') : 'NADA SE SALE');
+  }}.bind(this), 2200);
+}});
+</script></body></html>""".encode("utf-8")
+
+
 def portada(tracks: list, datos: list) -> bytes:
     filas = []
     for i, t in enumerate(tracks):
@@ -296,6 +334,20 @@ def servir(tracks, datos, puerto):
                     pes = ""
                 return self._enviar(pagina(i, tracks, datos,
                                            q.get("v2", ["1"])[0] != "0", pes))
+            if ruta.startswith("/movil/"):
+                try:
+                    i = max(0, min(len(tracks) - 1, int(ruta.split("/")[2])))
+                except (ValueError, IndexError):
+                    i = 0
+                q = urllib.parse.parse_qs(partes.query)
+                try:
+                    ancho = max(280, min(900, int(q.get("w", ["390"])[0])))
+                except ValueError:
+                    ancho = 390
+                pes = (q.get("tab", [""])[0] or "").strip().lower()
+                if pes not in ("", "resumen", "plan", "mezcla", "master", "detalle"):
+                    pes = ""
+                return self._enviar(marco_movil(i, ancho, pes))
             if ruta.startswith("/api/"):
                 return self._enviar(b"{}", "application/json")
             return super().do_GET()    # el resto de frontend/: logo, fuentes, css
@@ -308,7 +360,7 @@ def servir(tracks, datos, puerto):
         url = f"http://127.0.0.1:{puerto}/"
         print(f"\n  Listo → {url}")
         print("  Edita frontend/index.html y refresca. Ctrl-C para salir.")
-        print("  Truco: añade ?tab=mezcla a la URL para abrir esa pestaña.\n")
+        print("  Truco: ?tab=mezcla abre esa pestaña · /movil/0?w=390 simula móvil.\n")
         threading.Timer(0.7, lambda: webbrowser.open(url + "ver/0?v2=1")).start()
         try:
             srv.serve_forever()

@@ -130,10 +130,14 @@ class TestNoDuplicaLoQueYaFunciona(unittest.TestCase):
         self.assertIn("!(screen === 'diagnostico' && usarVistaV2())", self.html)
 
     def test_la_barra_lleva_las_cuatro_acciones(self):
+        """El CTA dice "Nuevo análisis" en pantalla ancha y solo "Nuevo" en
+        móvil: con el texto completo se salía de la pantalla y había que
+        arrastrar la barra para llegar a la acción principal."""
         i = self.html.find("function V2Nav(")
         cuerpo = self.html[i:i + 2500]
-        for accion in ("Mis proyectos", "Ideas", "Nuevo análisis"):
+        for accion in ("Mis proyectos", "Ideas", "Nuevo"):
             self.assertIn(accion, cuerpo, accion)
+        self.assertIn('Nuevo<span className="hidden sm:inline"> análisis</span>', cuerpo)
 
     def test_el_cierre_es_el_mismo_que_la_clasica(self):
         """Para que el footer global del sitio quede igual en las dos."""

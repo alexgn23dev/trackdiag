@@ -54,6 +54,7 @@ El ancho mediano del corredor es de 11.1 dB.
 
 import argparse
 import glob
+import hashlib
 import json
 import os
 import sys
@@ -65,31 +66,63 @@ RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, RAIZ)
 warnings.filterwarnings("ignore")
 
-from engine.extractor import _CENTROS_TERCIO, _espectro_tercios_octava  # noqa: E402
+from engine.extractor import (  # noqa: E402
+    _CENTROS_TERCIO,
+    _espectro_tercios_octava,
+    ventana_drop,
+)
 
 TILT = 1.5          # la misma inclinación de dibujo que usa el frontend
 CUERPO = (200.0, 2000.0)   # la referencia de nivel, igual que en el gráfico
 TOPE_CORREDOR = 12500  # ver §"límites" arriba
-VENTANA_SEG = 10.0
-PCT_LO, PCT_HI = 5, 95
+PCT_LO, PCT_HI = 5, 95     # el rango habitual, y el que juzga el veredicto
+# Además se publica el 25-75: la mitad central de los discos. Solo se dibuja —
+# da profundidad al corredor con datos reales en vez de con un degradado
+# inventado — y no interviene en el veredicto.
 
 
 def sin_ponderar(f):
     return np.zeros_like(np.asarray(f, dtype=float))
 
 
+def huella_audio(ruta):
+    """Huella de los primeros 20 s decodificados.
+
+    El corpus trae el mismo tema subido con varios track_id (auditoría de
+    agosto de 2026: 5 casos, todos en roche-musique). Con el nombre no se
+    detectan —los ID son distintos— y contarlos varias veces les da un peso
+    que no les corresponde en los percentiles.
+    """
+    import soundfile as sf
+    try:
+        x, _ = sf.read(ruta, start=0, stop=44100 * 20, always_2d=True, dtype="float32")
+    except Exception:
+        return None
+    return hashlib.sha1(
+        np.ascontiguousarray(x.mean(axis=1)).round(4).tobytes()).hexdigest()[:16]
+
+
 def espectro_del_drop(ruta):
-    """Mismo criterio de ventana que el motor: los 10 s de más energía."""
+    """El espectro de la referencia, por EL MISMO camino que el del usuario.
+
+    Cada paso replica `extraer_senales`: carga estéreo a 22 050 Hz, mono por
+    media de canales, RMS con hop 512, y la ventana la elige `ventana_drop`,
+    que es literalmente la misma función que usa el motor.
+
+    Cuando esto era una copia con su propia aritmética, un redondeo distinto
+    desplazaba la ventana 50 ms y movía las bandas hasta 1.5 dB: el 13 % del
+    ancho del corredor. Comparar al usuario contra una referencia medida de
+    otra manera es comparar peras con manzanas, así que no puede haber dos
+    implementaciones.
+    """
     import librosa
-    y, sr = librosa.load(ruta, sr=22050, mono=True)
+    y_stereo, sr = librosa.load(ruta, sr=22050, mono=False)
+    es_stereo = y_stereo.ndim == 2 and y_stereo.shape[0] == 2
+    y = (np.mean(y_stereo, axis=0) if es_stereo
+         else (y_stereo if y_stereo.ndim == 1 else y_stereo[0]))
     rms = librosa.feature.rms(y=y, hop_length=512)[0]
-    frames = max(1, int(VENTANA_SEG * sr / 512))
-    if len(rms) > frames:
-        acum = np.concatenate([[0.0], np.cumsum(rms)])
-        ini = int(np.argmax(acum[frames:] - acum[:-frames])) * 512 / sr
-    else:
-        ini = 0.0
-    e = _espectro_tercios_octava(ruta, ini, ini + VENTANA_SEG, sin_ponderar)
+    ini, fin, _completo, _a, _b = ventana_drop(rms, sr, 512)
+    e = _espectro_tercios_octava(ruta, ini, fin, sin_ponderar)
     if not e:
         return None
     vals = [b["db"] for b in e["bandas"]]
@@ -113,8 +146,14 @@ def main():
         raise SystemExit(f"No hay audio en {args.corpus}")
 
     print(f"Midiendo {len(rutas)} temas…", file=sys.stderr)
-    filas, sellos = [], []
+    filas, sellos, vistas, dup = [], [], set(), []
     for i, r in enumerate(rutas, 1):
+        hh = huella_audio(r)
+        if hh and hh in vistas:
+            dup.append(os.path.relpath(r, args.corpus))
+            continue
+        if hh:
+            vistas.add(hh)
         try:
             v = espectro_del_drop(r)
         except Exception:
@@ -125,6 +164,9 @@ def main():
         if i % 40 == 0:
             print(f"  {i}/{len(rutas)} · {len(filas)} válidos", file=sys.stderr)
 
+    if dup:
+        print(f"  {len(dup)} duplicados de audio descartados: "
+              f"{', '.join(dup[:6])}{'…' if len(dup) > 6 else ''}", file=sys.stderr)
     if len(filas) < 30:
         raise SystemExit(f"Solo {len(filas)} temas válidos: muy pocos para calibrar.")
 
@@ -136,18 +178,20 @@ def main():
     S = T - np.nanmean(T[:, cuerpo], axis=1, keepdims=True)
 
     lo = np.nanpercentile(S, PCT_LO, axis=0)
+    lo2 = np.nanpercentile(S, 25, axis=0)
     med = np.nanpercentile(S, 50, axis=0)
+    hi2 = np.nanpercentile(S, 75, axis=0)
     hi = np.nanpercentile(S, PCT_HI, axis=0)
 
     dentro = hz <= TOPE_CORREDOR
-    print(f"\n    // {len(filas)} temas de {len(set(sellos))} sellos · "
+    print(f"\n    // {len(filas)} previews independientes de {len(set(sellos))} sellos · "
           f"percentiles {PCT_LO}-{PCT_HI} · generado por "
           f"backend/scripts/calibrar_corredor.py")
     print("    const V2_CORREDOR = [")
     for i, h in enumerate(hz):
         if dentro[i]:
-            print(f"        {{ hz: {h:g}, lo: {lo[i]:.1f}, med: {med[i]:.1f}, "
-                  f"hi: {hi[i]:.1f} }},")
+            print(f"        {{ hz: {h:g}, lo: {lo[i]:.1f}, lo2: {lo2[i]:.1f}, "
+                  f"med: {med[i]:.1f}, hi2: {hi2[i]:.1f}, hi: {hi[i]:.1f} }},")
     print("    ];")
 
     # Y el reparto que produce la regla, que es lo que hay que vigilar.
