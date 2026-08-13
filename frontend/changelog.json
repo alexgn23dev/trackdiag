@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "version": "0.5.97",
+      "date": "2026-08-13",
+      "title": "Mentotrack analiza electrónica de club (y ahora lo dice antes)",
+      "changes": [
+        "Si marcas «Otro» y escribes un género que no es electrónica —rock, jazz, flamenco, reggae, trap, balkan, pop, reggaetón…— ya no se hace el análisis. Todo lo que medimos está calibrado con música de club: fuera de ahí te daríamos consejos que no aplican, y preferimos decírtelo antes de que subas el archivo.",
+        "El campo «Otro» sigue siendo útil y necesario: es para subgéneros concretos y para electrónica que no está en el desplegable. Hardgroove, uk garage, nu disco, schranz, drum and bass, guaracha y compañía pasan sin problema.",
+        "¿Te hemos entendido mal? El aviso te lo dice y puedes reescribir el género con el nombre que uses en tu escena."
+      ]
+    },
+    {
       "version": "0.5.96",
       "date": "2026-08-13",
       "title": "Menos «lo mismo de siempre» en el diagnóstico de graves",

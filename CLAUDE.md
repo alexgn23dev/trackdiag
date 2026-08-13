@@ -227,6 +227,15 @@ DENTRO/FUERA y no EQUILIBRADO/REVISAR.
 Regla que no se negocia en ese componente: **la interfaz no puede sugerir un
 problema que el análisis no haya detectado.**
 
+## Alcance: solo electrónica de club
+
+`backend/engine/generos.py` decide si un género escrito a mano entra. Si no,
+`/api/diagnostico` responde **422 `GENERO_FUERA_DE_ALCANCE`** antes de leer el
+audio, y el formulario no deja avanzar. Las listas están duplicadas en
+`frontend/index.html` (espejo, con test que falla si divergen). El criterio
+empuja a ACEPTAR en sus tres decisiones: el error caro es rechazar a alguien
+que sí hace electrónica.
+
 ## Calibración del motor con el corpus
 
 Antes de tocar un umbral de `reglas.py`, medir el componente contra los 322
