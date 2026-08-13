@@ -125,11 +125,18 @@ motor aplica normas de estructura de club (`arreglo_repetitivo`,
 se acerca a la realidad del estilo"). Ya existe `aviso_genero` para género no
 electrónico, pero el diagnóstico sigue jerarquizando con reglas de club.
 
-Arreglo (acotar, como quiere Alex): con género fuera de la lista club (los
-"Otro:" lejanos), bajar la autoridad — mantener las medidas físicas (espectro,
-picos, mono) y **degradar las reglas de estructura a observaciones**, con el
-aviso al frente: "las normas de estructura que usamos son de club; para tu
-estilo tómalas como referencia, no como veredicto".
+**Resuelto en v0.5.97, y más tajante de lo que se proponía aquí.** Alex
+decidió no aceptar esos análisis: el campo "Otro" sigue sirviendo para
+subgéneros y electrónica que no está en el desplegable, pero rock, jazz,
+flamenco, reggae, trap, balkan, pop, reggaetón y compañía se rechazan antes de
+subir el archivo. El criterio, sus listas y el porqué están en
+`backend/engine/generos.py`; el impacto medido, abajo.
+
+Dimensión real (medida sobre 3.195 análisis, no estimada): el **15,5 %** marca
+"Otro" — el doble de lo que estimé aquí — y su satisfacción es **69 % frente
+al 80 %** de los géneros del desplegable. De los 418 análisis con texto libre,
+el clasificador rechaza **154 (4,8 % del total)**. Los más frecuentes: trap
+(19), reggaetón (13), balkan (12), pop (12), rap (9), hip hop (7), rock (6).
 
 ### 3.5 Quieren lo que no analizamos (composición, armonía, vocales)
 

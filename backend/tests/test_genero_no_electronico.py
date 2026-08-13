@@ -1,14 +1,20 @@
-"""El aviso de género fuera de alcance, ANTES del botón de análisis.
+"""Género fuera de alcance: el aviso del informe (histórico).
 
-Mentotrack está calibrado solo para electrónica de club. Hasta la v0.5.78 eso
-se decía en el informe: el usuario subía un bolero, esperaba el análisis
-entero y al final leía que el motor no está pensado para su estilo. Decisión
-de Alex el 2026-08-10: tiene que quedar claro en el formulario, antes de
-pulsar el botón.
+Historia de esta decisión, en tres pasos:
 
-Eso obliga a tener la misma regla en dos sitios —el cliente avisa, el backend
-sigue emitiendo `aviso_genero` para quien analice igualmente— y dos listas que
-se copian son dos listas que se desincronizan. Estos tests las comparan.
+  · hasta v0.5.78 — el usuario subía un bolero, esperaba el análisis entero y
+    al final leía que el motor no está pensado para su estilo;
+  · v0.5.78 (ago-2026) — el aviso sube al formulario, antes del botón, pero
+    NO bloquea: se avisa y cada cual decide. Es lo que fijaba este archivo;
+  · v0.5.97 — Alex decide no aceptar esos análisis. El bloqueo, sus listas y
+    su criterio viven ahora en `engine/generos.py`, y lo que los vigila es
+    `test_alcance_genero.py`.
+
+Lo que queda aquí es el `aviso_genero` del informe, que se conserva como
+mensaje de los análisis YA guardados (los de antes del bloqueo se siguen
+pudiendo abrir desde el panel). Sus listas ya no gobiernan nada del formulario
+— por eso este archivo dejó de comparar las dos copias: la comparación viva es
+la de `test_alcance_genero.TestElFrontendNoDiverge`, contra `generos.py`.
 """
 
 import os
@@ -44,22 +50,15 @@ def _lista_js(nombre):
     return set(re.findall(r'"([^"]*)"', html[i:j]))
 
 
-class TestLasDosListasCoinciden(unittest.TestCase):
-    """Si divergen, el formulario avisaría de un género y el informe de otro."""
+class TestLasListasDelAvisoSiguenSiendoUtilizables(unittest.TestCase):
+    """Ya NO se comparan con el frontend: desde v0.5.97 la lista que gobierna
+    el formulario es la de `engine/generos.py` (ver test_alcance_genero.py).
+    Estas son las del aviso del informe, que sobrevive para los análisis
+    guardados antes del bloqueo. Solo se comprueba que sigan bien formadas."""
 
-    def test_no_electronicos(self):
-        py = _lista_python("_palabras_no_electronicas")
-        js = _lista_js("GENEROS_NO_ELECTRONICOS")
-        self.assertEqual(py, js,
-                         f"\n  solo en Python: {sorted(py - js)}"
-                         f"\n  solo en JS:     {sorted(js - py)}")
-
-    def test_lista_blanca_electronica(self):
-        py = _lista_python("_whitelist_electronic")
-        js = _lista_js("GENEROS_ELECTRONICOS")
-        self.assertEqual(py, js,
-                         f"\n  solo en Python: {sorted(py - js)}"
-                         f"\n  solo en JS:     {sorted(js - py)}")
+    def test_las_listas_del_aviso_no_estan_vacias(self):
+        self.assertGreater(len(_lista_python("_palabras_no_electronicas")), 20)
+        self.assertGreater(len(_lista_python("_whitelist_electronic")), 5)
 
 
 class TestElAvisoEstaEnElFormulario(unittest.TestCase):
@@ -84,13 +83,19 @@ class TestElAvisoEstaEnElFormulario(unittest.TestCase):
         self.assertIn("electrónica de club", bloque)
         self.assertIn("house, techno, trance", bloque.lower())
 
-    def test_no_bloquea_el_analisis(self):
-        """Decisión deliberada: se avisa, no se impide. Un aviso claro antes de
-        pulsar es lo que se pidió; cerrar la puerta es otra decisión y no se ha
-        tomado. Si algún día se toma, este test hay que cambiarlo a propósito."""
+    def test_ahora_si_bloquea_el_analisis(self):
+        """Este test decía lo contrario hasta v0.5.97 ("se avisa, no se
+        impide") y advertía: si algún día se decide cerrar la puerta, hay que
+        cambiarlo a propósito. Es lo que ha pasado — Alex no quiere análisis
+        fuera de la electrónica de club. Se invierte a conciencia, no por
+        arrastre."""
         i = self.html.find("esGeneroNoElectronico(customTxt)")
-        bloque = self.html[i:i + 1800]
-        self.assertIn("Puedes analizarlo igualmente", bloque)
+        bloque = self.html[i:i + 2000]
+        self.assertNotIn("Puedes analizarlo igualmente", bloque)
+        self.assertIn("solo analiza electrónica de club", bloque)
+        # y el cuestionario no avanza
+        self.assertIn("&& !esGeneroNoElectronico((contexto.genero_custom || '').trim())",
+                      self.html)
 
 
 class TestLaReglaSeComportaIgualEnLosDosLados(unittest.TestCase):

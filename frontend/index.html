@@ -306,7 +306,7 @@
     // /api/health. Si no coincide, este fichero viene de la caché del
     // navegador y puede estar dejando de enviar campos que el backend ya
     // espera — se recarga una sola vez y, si aun así no cuadra, se avisa.
-    const APP_VERSION = '0.5.96';
+    const APP_VERSION = '0.5.97';
 
     function comprobarVersionFrontend(onDesfase, onEntorno) {
         fetch(`${API_URL}/api/health`, { cache: 'no-store' })
@@ -979,27 +979,34 @@
                                         Escribe el género para poder analizar correctamente tu track.
                                     </p>
                                 )}
+                                {/* Fuera de alcance: se BLOQUEA aquí, antes de subir el
+                                    archivo. El backend lo rechaza igualmente (es la
+                                    autoridad), pero enterarse después de esperar el
+                                    análisis sería una pérdida de tiempo evitable. */}
                                 {!customVacio && esGeneroNoElectronico(customTxt) && (
                                     <div
                                         className="mt-2 p-3 rounded-lg text-xs leading-relaxed"
                                         style={{
-                                            background: 'rgba(250,204,21,0.06)',
-                                            border: '1px solid rgba(250,204,21,0.28)',
+                                            background: 'rgba(248,113,113,0.07)',
+                                            border: '1px solid rgba(248,113,113,0.32)',
                                             color: 'var(--po-light)',
                                         }}
                                     >
-                                        <p className="text-yellow-400 font-medium mb-1">
-                                            Mentotrack está calibrado para electrónica de club
+                                        <p className="text-red-400 font-medium mb-1">
+                                            Mentotrack solo analiza electrónica de club
                                         </p>
                                         <p>
-                                            House, techno, trance y derivados. Con «{customTxt}» el motor
-                                            aplicará igualmente sus reglas, pero varios diagnósticos —estructura
-                                            de club, loudness de pista, compatibilidad mono— dan por supuestas
-                                            convenciones que tu estilo no tiene por qué seguir.
+                                            House, techno, trance y sus derivados. Todo lo que medimos
+                                            —el rango de referencia del balance, las normas de estructura,
+                                            los niveles de loudness— está calibrado con música de club, así
+                                            que con «{customTxt}» te daríamos consejos que no aplican a tu
+                                            estilo. Preferimos decírtelo antes que darte un diagnóstico en
+                                            el que no puedes confiar.
                                         </p>
                                         <p className="mt-1.5 text-gray-400">
-                                            Puedes analizarlo igualmente y tratarlo como una segunda opinión
-                                            técnica, pero preferimos decírtelo antes y no después.
+                                            ¿Te hemos entendido mal y sí produces electrónica? Escribe el
+                                            género con el nombre que uses en tu escena — por ejemplo
+                                            hardgroove, uk garage, nu disco o drum and bass.
                                         </p>
                                     </div>
                                 )}
@@ -1370,25 +1377,34 @@
     // =====================================================================
     // Espejo de engine/contextualizador.py. Se comprueba en
     // backend/tests/test_genero_no_electronico.py que las dos listas coincidan.
+    // ESPEJO de backend/engine/generos.py — hay un test que compara las dos
+    // listas y falla si divergen. Aquí sirven para parar el formulario ANTES
+    // de subir el archivo; el rechazo autoritativo lo hace el backend.
     const GENEROS_ELECTRONICOS = [
-        "tech", "techno", "house", "trance", "minimal", "ambient", "drum",
-        "dnb", "d&b", "garage", "dubstep", "electro", "edm", "dance",
-        "downtempo", "breakbeat", "breaks", "psy", "hardstyle", "hardcore",
-        "dub techno", "deep", "future", "club", "rave",
+        "tech", "techno", "tekno", "house", "trance", "electro", "electronic", "edm",
+        "dance", "rave", "club", "minimal", "deep", "dub techno", "dnb", "d&b", "drum",
+        "jungle", "neurofunk", "breakbeat", "breaks", "garage", "dubstep", "bass music",
+        "midtempo", "bassline", "hardstyle", "hardcore", "hardteck", "hardgroove",
+        "gabber", "schranz", "makina", "newstyle", "bounce", "hard dance", "psy", "goa",
+        "acid", "progressive", "progresive", "progesive", "disco", "italo", "idm",
+        "ebm", "industrial", "glitch", "complextro", "big room", "future", "synthwave",
+        "vaporwave", "phonk", "ambient", "downtempo", "amapiano", "guaracha",
+        "hypnotic", "peak time", "raw", "groove", "melodic", "organic", "eurodance",
+        "hi-nrg", "hi nrg", "circuit", "afro house", "afrohouse",
     ];
     const GENEROS_NO_ELECTRONICOS = [
-        "vallenato", "salsa", "bachata", "merengue", "cumbia", "mariachi",
-        "ranchera", "banda", "mambo", "rumba", "tango", "samba", "bossa",
-        "reggaeton", "reggaetón", "dembow", "perreo",
-        "pop ", " pop", "indie pop", "k-pop", "kpop",
-        "rock", "metal", "punk", "grunge", "hardcore punk",
-        "rap", "hip hop", "hip-hop", "trap latino", "drill",
-        "jazz", "blues", "soul", "gospel", "r&b", "rnb",
-        "country", "folk", "bluegrass",
-        "reggae", "ska",
-        "classical", "clásica", "clasica", "sinfónic", "sinfonic",
-        "opera", "ópera", "flamenco", "fandango",
-        "vals", "paso doble", "polka", "celta", "afrobeat", "afrobeats",
+        "rap", "hip hop", "hip-hop", "hiphop", "boombap", "boom bap", "drill", "trap",
+        "rnb", "r&b", "neo soul", "grime", "reggaeton", "reggaetón", "reggeton",
+        "regueton", "dembow", "perreo", "reparto", "cumbia", "vallenato", "merengue",
+        "bachata", "salsa", "mambo", "rumba", "tango", "samba", "bossa", "bosa nova",
+        "bolero", "balada", "mariachi", "ranchera", "banda", "corrido", "chacarera",
+        "rock", "metal", "metalcore", "punk", "grunge", "hardcore punk", "jazz",
+        "swing", "blues", "soul", "gospel", "góspel", "country", "folk", "folclore",
+        "bluegrass", "acustic", "acústic", "reggae", "ska", "dancehall", "flamenco",
+        "fandango", "classical", "clásica", "clasica", "clásico", "clasico", "sinfónic",
+        "sinfonic", "opera", "ópera", "vals", "paso doble", "polka", "celta",
+        "afrobeat", "afrobeats", "balkan", "balcan", "pop", "kpop", "k-pop", "j-pop",
+        "hyperpop", "indie", "worship", "new age", "anime", "soundtrack", "ost",
     ];
 
     /** ¿El género escrito a mano queda fuera del alcance del motor?
@@ -1396,19 +1412,26 @@
      * Misma regla que el backend: si el texto contiene alguna palabra
      * claramente electrónica NO se avisa, aunque también contenga una de la
      * otra lista. Evita marcar "rock electrónico" o "indie dance pop". */
+    /** ¿El género escrito a mano queda FUERA del alcance del motor?
+     *
+     *  Espejo exacto de `fuera_de_alcance()` en backend/engine/generos.py:
+     *  marcador electrónico (por subcadena) manda; si no lo hay, marcador no
+     *  electrónico (por palabra completa) rechaza; si no se reconoce nada, se
+     *  acepta. Las tres decisiones empujan a aceptar porque el error caro es
+     *  cerrarle la puerta a alguien que sí hace electrónica.
+     */
     function esGeneroNoElectronico(texto) {
-        // Sin quitar las tildes, "electro" no casa con "electrónico" y
-        // "rock electrónico" saldría marcado — el falso positivo que la lista
-        // blanca dice evitar. Mismo criterio que _sin_tildes() en el backend.
-        const t = (texto || '').toLowerCase()
+        const sinTildes = k => (k || '').toLowerCase()
             .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const t = sinTildes(texto);
         if (t.length < 2) return false;
-        // Se normalizan también las palabras de la lista, para que dé igual
-        // cómo estén escritas ahí.
-        const n = k => k.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        if (GENEROS_ELECTRONICOS.some(k => t.includes(n(k)))) return false;
-        return GENEROS_NO_ELECTRONICOS.some(k => t.includes(n(k)));
+        if (GENEROS_ELECTRONICOS.some(k => t.includes(sinTildes(k)))) return false;
+        return GENEROS_NO_ELECTRONICOS.some(k => {
+            const esc = sinTildes(k).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            return new RegExp('(?<![a-z0-9])' + esc + '(?![a-z0-9])').test(t);
+        });
     }
+
 
     const MASTER_CTA_VARIANTES = {
         mezcla: 'Lo que el análisis ha detectado en tu track se trabaja a fondo en el bloque de Mezcla del Máster: 7 cursos y 106 clases.',
@@ -6120,7 +6143,12 @@
         // Si selecciona "Otro", debe escribir el género en el campo libre.
         // 64 de 95 usuarios marcaban "Otro" sin texto en la versión anterior;
         // hacerlo obligatorio nos da info real para futuras decisiones de catálogo.
-        const otroGeneroValido = contexto.genero !== 'otro' || (contexto.genero_custom || '').trim().length >= 2;
+        // "Otro" exige texto Y que ese texto sea electrónica: fuera del club el
+        // motor no mide peor, mide otra cosa. El backend rechaza igual (422
+        // GENERO_FUERA_DE_ALCANCE); aquí se para antes de subir el archivo.
+        const otroGeneroValido = contexto.genero !== 'otro' || (
+            (contexto.genero_custom || '').trim().length >= 2
+            && !esGeneroNoElectronico((contexto.genero_custom || '').trim()));
         const isQuestionnaireValid = contexto.genero && otroGeneroValido && contexto.fase && contexto.objetivo && contexto.experiencia && contexto.dificultad_habitual;
 
         // ---- Cuestionario completo: si hay sesión analiza ya, si no abre modal de auth ----

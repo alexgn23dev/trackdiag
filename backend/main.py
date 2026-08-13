@@ -59,7 +59,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-APP_VERSION = "0.5.96"
+APP_VERSION = "0.5.97"
 
 app = FastAPI(title="Mentotrack API", version=APP_VERSION)
 app.state.limiter = limiter
@@ -452,6 +452,25 @@ async def diagnosticar(
         return JSONResponse(
             status_code=400,
             content={"error": "Si seleccionas 'Otro' como género, escribe en el campo de texto qué género estás produciendo (mínimo 2 caracteres)."},
+        )
+
+    # Fuera de alcance: Mentotrack analiza electrónica de club. Se rechaza
+    # ANTES de leer el audio — no tiene sentido hacerle subir 100 MB y esperar
+    # un análisis para luego decirle que no aplica. El criterio y su porqué
+    # están en engine/generos.py; empuja a aceptar en las tres decisiones,
+    # porque el error caro es rechazar a alguien que sí hace electrónica.
+    from engine.generos import MENSAJE_FUERA_DE_ALCANCE, fuera_de_alcance
+    _fuera, _termino = fuera_de_alcance(genero, genero_custom)
+    if _fuera:
+        print(f"[ALCANCE] rechazado: '{(genero_custom or '').strip()[:60]}' [{_termino}]")
+        return JSONResponse(
+            status_code=422,
+            content={
+                "codigo": "GENERO_FUERA_DE_ALCANCE",
+                "error": MENSAJE_FUERA_DE_ALCANCE.format(
+                    genero=(genero_custom or "").strip()[:60]),
+                "termino": _termino,
+            },
         )
 
     # Validar extensión, tamaño y magic bytes del track principal
