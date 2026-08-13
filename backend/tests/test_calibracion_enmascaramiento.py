@@ -140,8 +140,12 @@ class TestLaDecisionEstaDocumentada(unittest.TestCase):
         self.assertIn("docs/calibracion-enmascaramiento.md", src)
 
     def test_existe_la_nota_de_calibracion(self):
+        """Solo en el repo: la imagen de producción copia backend/ y frontend/,
+        no docs/, así que allí este test se salta. El guard que de verdad
+        importa —los números junto al código— sí corre en los dos sitios."""
         doc = os.path.join(os.path.dirname(RAIZ), "docs", "calibracion-enmascaramiento.md")
-        self.assertTrue(os.path.exists(doc))
+        if not os.path.exists(doc):
+            self.skipTest("docs/ no viaja en la imagen de producción")
         texto = open(doc, encoding="utf-8").read()
         # Las dos caras: la hipótesis refutada y la causa real.
         self.assertIn("2.35x", texto)   # el umbral espectral SÍ discrimina
