@@ -306,7 +306,7 @@
     // /api/health. Si no coincide, este fichero viene de la caché del
     // navegador y puede estar dejando de enviar campos que el backend ya
     // espera — se recarga una sola vez y, si aun así no cuadra, se avisa.
-    const APP_VERSION = '0.5.92';
+    const APP_VERSION = '0.5.93';
 
     function comprobarVersionFrontend(onDesfase, onEntorno) {
         fetch(`${API_URL}/api/health`, { cache: 'no-store' })
@@ -3462,6 +3462,24 @@
                     {typeof lo.lufs_integrado === 'number' && lo.lufs_integrado > -60 && (
                         <V2BarraRango valor={lo.lufs_integrado} min={-24} max={-4} objetivoMin={-9} objetivoMax={-7} />
                     )}
+                    {/* La cifra que reconcilia el informe con el medidor del DAW.
+                        El LUFS grande es el integrado (track entero, intro y
+                        outro incluidos); el medidor del usuario suele enseñar
+                        solo el momento más fuerte, y sin esta fila los dos
+                        números "no cuadraban" y el que quedaba mal era el
+                        informe (feedback ago-2026: dos «No» solo por esto). */}
+                    {typeof lo.lufs_short_term_max === 'number' && lo.lufs_short_term_max > -60 && (
+                        <div className="flex justify-between v2-cuerpo gap-3 mt-3">
+                            <span className="text-gray-400">En tu sección más fuerte</span>
+                            <span className="text-white font-medium cifra-v2">{lo.lufs_short_term_max} LUFS</span>
+                        </div>
+                    )}
+                    {typeof lo.lufs_short_term_max === 'number' && lo.lufs_short_term_max > -60 && (
+                        <p className="text-gray-600 v2-sec mt-1.5">
+                            Si tu DAW marca más que el LUFS grande, suele estar enseñando esto:
+                            el máximo de la sección más fuerte, no la media del track entero.
+                        </p>
+                    )}
                     {lo.referencia_genero && <p className="text-gray-400 v2-sec mt-3">{lo.referencia_genero}</p>}
                     <V2Desplegable etiqueta="Qué hacer con esto">
                         <p>{lo.referencia}</p>
@@ -4120,6 +4138,13 @@
                             footer global del sitio, que es HTML estático fuera
                             del SPA y aparece en las dos vistas. */}
                         <div className="text-center mb-8 mt-6">
+                            {/* El alcance, declarado donde se pide el feedback: casi la
+                                mitad de los «Parcial» eran gente esperando análisis de
+                                composición/armonía/vocales — cosas que nunca prometimos
+                                pero tampoco negábamos (docs/feedback-jun-ago-2026.md §3.5). */}
+                            <p className="text-gray-600 text-xs mb-2" style={{ maxWidth: '620px', margin: '0 auto 8px' }}>
+                                Este análisis mide la señal: balance tonal, dinámica, picos, estéreo y estructura energética. No evalúa armonía, melodía, composición ni la afinación o el timing de las voces.
+                            </p>
                             <p className="text-gray-600 text-xs">
                                 Mentotrack no almacena el archivo de tu canción, solo los datos
                                 extraídos tras el análisis.
@@ -4468,6 +4493,15 @@
                                             <span className="text-gray-400">Loudness</span>
                                             <span className={loudnessColor}>{d.loudness.lufs_integrado} LUFS</span>
                                         </div>
+                                        {/* La cifra que cuadra con el medidor del DAW: el
+                                            integrado promedia el track entero; el DAW suele
+                                            enseñar el máximo de la sección más fuerte. */}
+                                        {typeof d.loudness.lufs_short_term_max === 'number' && d.loudness.lufs_short_term_max > -60 && (
+                                            <p className="text-gray-600 text-xs mt-1">
+                                                En tu sección más fuerte: {d.loudness.lufs_short_term_max} LUFS — si tu DAW
+                                                marca más que el integrado, suele estar enseñando esto.
+                                            </p>
+                                        )}
                                         <p className="text-gray-600 text-xs mt-1">{d.loudness.referencia}</p>
                                         {d.loudness.referencia_genero && (
                                             <p className="text-gray-500 text-xs mt-1">{d.loudness.referencia_genero}</p>
@@ -4954,6 +4988,9 @@
                                 title="Prueba el rediseño del informe">
                             Probar la vista nueva
                         </button>
+                        <p className="text-gray-600 text-xs mb-2" style={{ maxWidth: '620px', margin: '0 auto 8px' }}>
+                            Este análisis mide la señal: balance tonal, dinámica, picos, estéreo y estructura energética. No evalúa armonía, melodía, composición ni la afinación o el timing de las voces.
+                        </p>
                         <p className="text-gray-600 text-xs">Mentotrack no almacena el archivo de tu canción, solo los datos extraídos tras el análisis.</p>
                     </div>
                 </div>

@@ -87,9 +87,13 @@ comprobó en mono, no perdía nada, y tenía razón. Física del asunto: correla
 correlación *negativa* cancela. El nivel global se asigna por correlación de
 banda **sin mirar la pérdida real que ya calculamos**.
 
-Arreglo: exigir pérdida real para avisar — "problemática" solo si
-`perdida_mono_db` (global o de la banda) supera ~1–1,5 dB; si la correlación es
-baja pero no se pierde energía, es anchura estéreo, no un problema. Afecta al
+Arreglo (implementado en v0.5.93): "problema" de banda exige pérdida más
+allá del suelo estructural de −3 dB (dos canales independientes de igual
+energía pierden exactamente 3 dB al promediarse — es el coste de nivel de
+cualquier elemento paneado, no una cancelación); el gate de banda va a
+−3,5 dB y el global de graves a −1 dB. Si la correlación es baja pero no se
+pierde energía, es anchura estéreo, no un problema — y el resumen lo dice con
+el dato. Afecta al
 5,5 % de los análisis. (Nota de la verificación: con la métrica usada, dos
 canales totalmente independientes de igual energía dan como mucho −3 dB; la
 banda descorrelacionada del caso [33] pesaba poco y la pérdida global quedó en
