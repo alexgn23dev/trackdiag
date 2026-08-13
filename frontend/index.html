@@ -306,7 +306,7 @@
     // /api/health. Si no coincide, este fichero viene de la caché del
     // navegador y puede estar dejando de enviar campos que el backend ya
     // espera — se recarga una sola vez y, si aun así no cuadra, se avisa.
-    const APP_VERSION = '0.5.90';
+    const APP_VERSION = '0.5.91';
 
     function comprobarVersionFrontend(onDesfase, onEntorno) {
         fetch(`${API_URL}/api/health`, { cache: 'no-store' })
