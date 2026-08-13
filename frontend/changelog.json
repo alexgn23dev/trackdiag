@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "version": "0.5.92",
+      "date": "2026-08-13",
+      "title": "El informe rediseñado, para todo el mundo",
+      "changes": [
+        "La vista nueva del diagnóstico (pestañas, balance espectral con rango de referencia, tutoriales visibles) pasa a ser la vista por defecto. Ya no hace falta añadir nada a la dirección.",
+        "La comparación con tu track de referencia ahora también se muestra en la vista nueva, en el Resumen — era lo único que solo enseñaba la clásica.",
+        "¿Prefieres la de antes? El botón «Vista clásica» al pie del informe te devuelve a ella durante la sesión, y desde allí puedes volver con «Probar la vista nueva»."
+      ]
+    },
+    {
       "version": "0.5.91",
       "date": "2026-08-13",
       "title": "Cabecera del informe más compacta",

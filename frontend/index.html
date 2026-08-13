@@ -176,8 +176,8 @@
         .home-v3 .drop-zone:hover { background: rgba(109,16,255,0.04); }
         .home-v3 .drop-zone.active { background: rgba(37,244,100,0.04); }
         /* === Rediseño del diagnóstico (v2) ================================
-           Se activa con ?v2=1. Convive con la vista clásica: nada de esto se
-           aplica salvo que el marcado v2 esté en pantalla. */
+           Vista por defecto desde v0.5.92 (?v2=0 devuelve la clásica). Nada
+           de esto se aplica salvo que el marcado v2 esté en pantalla. */
         .rotulo-v2 {
             font-size: 10px; font-weight: 700; letter-spacing: .12em;
             text-transform: uppercase; color: #7a7a7a;
@@ -306,7 +306,7 @@
     // /api/health. Si no coincide, este fichero viene de la caché del
     // navegador y puede estar dejando de enviar campos que el backend ya
     // espera — se recarga una sola vez y, si aun así no cuadra, se avisa.
-    const APP_VERSION = '0.5.91';
+    const APP_VERSION = '0.5.92';
 
     function comprobarVersionFrontend(onDesfase, onEntorno) {
         fetch(`${API_URL}/api/health`, { cache: 'no-store' })
@@ -1797,7 +1797,7 @@
     // =========================================================================
     // REDISEÑO DEL DIAGNÓSTICO (v2) — piezas
     // =========================================================================
-    // Se activa con ?v2=1 y convive con la vista clásica; ninguna de estas
+    // Vista por defecto desde v0.5.92 (?v2=0 da la clásica); ninguna de estas
     // funciones se ejecuta si el interruptor está apagado.
     //
     // Qué resuelve, respecto a la vista de siempre:
@@ -1844,16 +1844,18 @@
     const V2_COLOR = { neutro: '#3a3a3a', ok: '#25F464', aviso: '#dda75a',
                        alerta: '#d97b73', info: '#60a5fa' };
 
-    /** ¿Pide el usuario la vista nueva? Interruptor por URL: ?v2=1 la enciende,
-     *  ?v2=0 la apaga. Se recuerda en la sesión para que no se pierda al
-     *  navegar dentro de la app. */
+    /** La vista v2 es la POR DEFECTO desde v0.5.92 — hasta entonces vivía
+     *  detrás de ?v2=1 y ningún flujo de producción la enlazaba, así que en la
+     *  práctica nadie la veía. `mt_v2` guarda ahora el OPT-OUT ('0' = quiero
+     *  la clásica, dura la sesión de la pestaña): ?v2=0 o el botón "Vista
+     *  clásica" lo activan, ?v2=1 lo limpia. */
     function usarVistaV2() {
         try {
             const p = new URLSearchParams(location.search).get('v2');
-            if (p === '1') { sessionStorage.setItem('mt_v2', '1'); return true; }
-            if (p === '0') { sessionStorage.removeItem('mt_v2'); return false; }
-            return sessionStorage.getItem('mt_v2') === '1';
-        } catch (e) { return false; }
+            if (p === '1') { sessionStorage.removeItem('mt_v2'); return true; }
+            if (p === '0') { sessionStorage.setItem('mt_v2', '0'); return false; }
+            return sessionStorage.getItem('mt_v2') !== '0';
+        } catch (e) { return true; }
     }
 
     /** Miles con separador: 253164 es ilegible, 253.164 no. */
@@ -2970,6 +2972,78 @@
         { id: 'detalle', label: 'Detalle' },
     ];
 
+    /** Comparación con el track de referencia, en v2. Mismo contenido que
+     *  la tarjeta clásica — era el ÚNICO hueco de paridad entre vistas, y de
+     *  los que duelen: dos usuarios se quejaron de subir referencia y no ver
+     *  nada. Regla heredada de la clásica: el titular es cualitativo
+     *  (algo/bastante/mucho) porque el dB es balance relativo, no un
+     *  movimiento de EQ que copiar. */
+    function V2Comparacion({ comp }) {
+        if (!comp) return null;
+        const CIAN = '#22d3ee';
+        return (
+            <V2Tarjeta titulo="Comparación con tu referencia">
+                {comp.error ? (
+                    <p className="text-gray-400 v2-cuerpo">{comp.error}</p>
+                ) : (
+                    <div>
+                        {comp.ref_filename && (
+                            <p className="text-gray-600 v2-sec mb-3 truncate">{comp.ref_filename}</p>
+                        )}
+                        {(comp.avisos || []).map((a, i) => (
+                            <p key={i} className="v2-sec mb-2" style={{ color: V2_COLOR.aviso }}>{a}</p>
+                        ))}
+                        {(comp.diferencias || []).length > 0 ? (
+                            <div className="space-y-3">
+                                {comp.diferencias.map((d, i) => {
+                                    const mag = d.magnitud || '';
+                                    const esNumerica = /dB|LU/.test(mag);
+                                    const titular = esNumerica
+                                        ? `${d.severidad || 'algo'} por ${mag.trim().startsWith('+') ? 'encima' : 'debajo'}`
+                                        : mag;
+                                    const label = d.label || '';
+                                    return (
+                                        <div key={i} className="flex gap-3">
+                                            <span className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold cifra-v2"
+                                                  style={{ background: 'rgba(34,211,238,0.13)', color: CIAN }}>{i + 1}</span>
+                                            <div className="min-w-0">
+                                                <p className="text-gray-200 v2-cuerpo font-medium">
+                                                    {label.charAt(0).toUpperCase() + label.slice(1)}
+                                                    <span className="v2-sec ml-2" style={{ color: CIAN }}>{titular}</span>
+                                                    {esNumerica && <span className="v2-sec ml-1.5 text-gray-600 cifra-v2">({mag})</span>}
+                                                </p>
+                                                <p className="text-gray-300 v2-cuerpo mt-0.5">{d.texto}</p>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <p className="text-gray-300 v2-cuerpo">
+                                En lo que medimos, tu track va muy en línea con la referencia. Las
+                                diferencias que queden están por debajo de lo que consideramos relevante.
+                            </p>
+                        )}
+                        {comp.n_diferencias_extra > 0 && (
+                            <p className="text-gray-600 v2-sec mt-3">
+                                Hay {comp.n_diferencias_extra} diferencia{comp.n_diferencias_extra > 1 ? 's' : ''} menor{comp.n_diferencias_extra > 1 ? 'es' : ''} más; te mostramos solo lo que más importa.
+                            </p>
+                        )}
+                        {(comp.coincidencias || []).length > 0 && (
+                            <p className="text-gray-400 v2-sec mt-3">
+                                <span style={{ color: 'var(--po-green)' }}>Vas a la par con tu referencia en:</span>{' '}
+                                {comp.coincidencias.join(', ')}.
+                            </p>
+                        )}
+                        {comp.loudness_contexto && comp.loudness_contexto.nota && (
+                            <p className="text-gray-600 v2-sec mt-3">{comp.loudness_contexto.nota}</p>
+                        )}
+                    </div>
+                )}
+            </V2Tarjeta>
+        );
+    }
+
     function V2TabResumen({ r, extras }) {
         const prioridades = (r.prioridades || []).slice(0, 3);
         const hayExtras = extras && (extras.derivacion || extras.tutoriales || extras.feedback);
@@ -2998,6 +3072,10 @@
                         <p className="text-gray-300 v2-cuerpo">{r.aviso_genero}</p>
                     </V2Tarjeta>
                 )}
+
+                {/* Si el usuario subió referencia, la comparación va arriba: la
+                    pidió explícitamente, no puede quedar enterrada. */}
+                <V2Comparacion comp={r.comparacion_referencia} />
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                     {r.diagnostico_principal && r.diagnostico_principal.explicacion && (
@@ -3833,7 +3911,7 @@
         );
 
         // =====================================================================
-        // Vista v2 — el rediseño. Se activa con ?v2=1.
+        // Vista v2 — el rediseño. Por defecto desde v0.5.92 (?v2=0 → clásica).
         // =====================================================================
         // Reutiliza TODO lo que ya funciona: el widget de calibración, el modal
         // de tutoriales, las tarjetas de derivación y compartir en comunidad
@@ -4030,7 +4108,7 @@
 
                         <div className="mt-8 flex flex-wrap gap-3 items-center justify-between border-t border-[#2e2e2e] pt-5">
                             <p className="text-gray-600 text-xs max-w-xl">{r.nota_motivacional}</p>
-                            <button onClick={() => { try { sessionStorage.removeItem('mt_v2'); } catch (e) {}
+                            <button onClick={() => { try { sessionStorage.setItem('mt_v2', '0'); } catch (e) {}
                                                      location.search = ''; }}
                                     className="btn-secondary px-3 py-1.5 rounded v2-sec"
                                     title="Vuelve a la vista de siempre">
@@ -4866,8 +4944,16 @@
                         </div>
                     )}
 
-                    {/* Footer privacidad */}
+                    {/* Footer privacidad — con la vuelta a la vista nueva: quien
+                        haya pulsado "Vista clásica" (opt-out de sesión) tiene que
+                        poder regresar sin conocer el parámetro de URL. */}
                     <div className="text-center mb-8">
+                        <button onClick={() => { try { sessionStorage.removeItem('mt_v2'); } catch (e) {}
+                                                 location.search = ''; }}
+                                className="btn-secondary px-3 py-1.5 rounded text-xs mb-4"
+                                title="Prueba el rediseño del informe">
+                            Probar la vista nueva
+                        </button>
                         <p className="text-gray-600 text-xs">Mentotrack no almacena el archivo de tu canción, solo los datos extraídos tras el análisis.</p>
                     </div>
                 </div>

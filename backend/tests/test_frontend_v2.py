@@ -1,13 +1,14 @@
 """El rediseño del diagnóstico (v2) y su interruptor.
 
-La vista nueva convive con la clásica detrás de `?v2=1`. Eso es deliberado:
-permite encenderla, mirarla en producción con tráfico real y apagarla sin
-revertir un commit. Pero también significa que hay DOS caminos de render y que
-romper uno no rompe el otro — de ahí estos tests.
+Desde v0.5.92 la v2 es la vista POR DEFECTO (antes vivía detrás de `?v2=1` y
+ningún flujo de producción la enlazaba: nadie la veía). `mt_v2` guarda ahora el
+opt-out: `?v2=0` o el botón "Vista clásica" lo activan para la sesión, `?v2=1`
+lo limpia. Siguen existiendo DOS caminos de render y romper uno no rompe el
+otro — de ahí estos tests.
 
 Son comprobaciones sobre el código fuente, no sobre el navegador. Lo que sí se
 ejecuta de verdad es `docs/rediseno/verificar.cjs` sobre el prototipo, y la
-prueba manual: abrir la app con `?v2=1` tras un análisis.
+prueba manual: abrir la app tras un análisis (y con `?v2=0`, la clásica).
 """
 
 import os
@@ -38,23 +39,36 @@ class TestElInterruptor(unittest.TestCase):
         self.assertIn("'v2'", cuerpo)
 
     def test_se_puede_apagar_explicitamente(self):
-        """Sin un `?v2=0` que borre la sesión, quien la encendiera una vez se
-        quedaría atrapado en la vista nueva."""
+        """`?v2=0` marca el opt-out de sesión: sin él, quien quisiera la
+        clásica no tendría forma de pedirla."""
         i = self.html.find("function usarVistaV2(")
-        cuerpo = self.html[i:i + 600]
-        self.assertIn("=== '0'", cuerpo)
-        self.assertIn("removeItem", cuerpo)
+        cuerpo = self.html[i:i + 800]
+        self.assertIn("setItem('mt_v2', '0')", cuerpo)
+        self.assertIn("return false", cuerpo)
 
-    def test_arranca_apagada(self):
-        """Sin parámetro y sin sesión, la vista es la clásica."""
+    def test_arranca_encendida(self):
+        """Sin parámetro y sin opt-out, la vista es la v2 — es el defecto
+        desde v0.5.92. El fallo que se arregló: estaba desplegada pero ningún
+        flujo la enlazaba, así que el rediseño entero era invisible."""
         i = self.html.find("function usarVistaV2(")
-        cuerpo = self.html[i:i + 600]
-        self.assertIn("sessionStorage.getItem('mt_v2') === '1'", cuerpo)
+        cuerpo = self.html[i:i + 800]
+        self.assertIn("sessionStorage.getItem('mt_v2') !== '0'", cuerpo)
+        self.assertIn("catch (e) { return true; }", cuerpo)
 
     def test_hay_salida_desde_la_propia_vista(self):
         """Un usuario que aterrice en v2 tiene que poder volver sin saber que
-        existe un parámetro de URL."""
+        existe un parámetro de URL — y desde la clásica, regresar."""
         self.assertIn("Vista clásica", self.html)
+        self.assertIn("Probar la vista nueva", self.html)
+
+    def test_la_v2_ensena_la_comparacion_con_referencia(self):
+        """Era el único hueco de paridad con la clásica, y de los que duelen:
+        dos usuarios subieron referencia y no vieron nada. Con la v2 por
+        defecto, este hueco sería una regresión para todos."""
+        self.assertIn("function V2Comparacion(", self.html)
+        i = self.html.find("function V2TabResumen(")
+        cuerpo = self.html[i:i + 3000]
+        self.assertIn("<V2Comparacion comp={r.comparacion_referencia} />", cuerpo)
 
     def test_se_resuelve_una_sola_vez(self):
         """Si se recalculara en cada render, la vista podría cambiar a mitad de
