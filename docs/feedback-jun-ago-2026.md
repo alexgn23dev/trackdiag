@@ -65,19 +65,22 @@ confirma. Verificado en `reglas.py`:
   común (ver punto siguiente); (b) el matching es por substring: "trabajo" o
   "abajo" también disparan "bajo". El arreglo tiene que cubrir ambas reglas y
   pasar a matching por palabra.
-- **Umbral espectral dentro de lo normal**: `diff graves(60-200) −
-  low_mid(200-800) > 12 dB` suma +2. Medido sobre los 322 previews publicados
-  del corpus (aprox. por tercios de octava en el drop): mediana 8,7 dB, el
-  **58 % supera 8 dB** (+1) y el **15 % supera 12 dB** (+2 → diagnóstico él
-  solo). La regla marca como defecto un rasgo del género.
+- ~~**Umbral espectral dentro de lo normal**~~ — **HIPÓTESIS REFUTADA.** La
+  cifra de arriba (58 %/15 %) salía de una aproximación por tercios de octava
+  en el drop, que NO es lo que mide la regla. Medido con el pipeline real
+  (`espectro_bandas`), el corte de 12 dB cae en el p90 de lo publicado y es el
+  componente que MEJOR discrimina (2.35x): no se toca. La causa real del
+  sobredisparo era otra — el bonus por `diff_sub_low`, que no discrimina nada
+  (0.97x) — y está en `docs/calibracion-enmascaramiento.md`.
 
 Arreglo en dos fases. **Fase A (implementada en v0.5.94)**: el eco del
 formulario capado a +1 en las dos reglas — con el umbral en 2, las palabras
 del usuario nunca diagnostican solas — y matching por palabra en vez de por
 substring ("trabajo" ya no dispara "bajo", "subida" ya no dispara "sub").
-**Fase B (pendiente de calibrar)**: recalibrar el umbral espectral contra el
-corpus medido con el pipeline real (p. ej. > p90 de lo publicado), validado
-con el circuito de /calibrar. **Fase C (idea)**: si el mismo usuario repite
+**Fase B (hecha en v0.5.96, con resultado inesperado)**: al medir con el
+pipeline real, el umbral espectral resultó estar bien y el problema era el
+bonus del sub, retirado por no discriminar. Ver
+`docs/calibracion-enmascaramiento.md`. **Fase C (idea)**: si el mismo usuario repite
 diagnóstico en análisis consecutivos, decirlo ("sigue siendo lo prioritario")
 en vez de parecer un loop.
 

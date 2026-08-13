@@ -227,6 +227,16 @@ DENTRO/FUERA y no EQUILIBRADO/REVISAR.
 Regla que no se negocia en ese componente: **la interfaz no puede sugerir un
 problema que el análisis no haya detectado.**
 
+## Calibración del motor con el corpus
+
+Antes de tocar un umbral de `reglas.py`, medir el componente contra los 322
+previews publicados: **una señal que se dispara igual en música editada que en
+la de usuario no es evidencia de defecto**. El método y el primer caso
+(`enmascaramiento_bajo`, ago-2026) están en `docs/calibracion-enmascaramiento.md`
+— incluida una hipótesis que la medición refutó. Los `scores` de cada análisis
+se guardan en producción (`analisis.senales->'scores'`), así que el reparto
+real por puntuación se consulta sin reanalizar nada.
+
 ## Punto ciego conocido del motor
 
 El motor de diagnóstico **no detecta problemas armónicos/melódicos** (disonancias, tonalidad incorrecta). Asumido como limitación del análisis de señal básico — no proponer "fix" para esto sin un cambio de stack (ML/embeddings).

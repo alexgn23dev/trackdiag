@@ -787,11 +787,22 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
             razones.append(
                 f"Diferencia notable entre graves (60-200 Hz) y graves-medios (200-800 Hz): {diff_graves_lowmid:.1f} dB"
             )
-        if diff_sub_low > 4:
-            score += 1
-            razones.append(
-                f"El sub (0-60 Hz) está {diff_sub_low:.1f} dB por encima de los graves audibles — posible rumble o sub descontrolado"
-            )
+        # RETIRADO (v0.5.96) el bonus por `diff_sub_low > 4`. Medido con el
+        # pipeline real sobre 322 previews publicados y 32 tracks de usuario:
+        # se disparaba en el 38.8 % de lo publicado y el 37.5 % de lo de
+        # usuario — ratio 0.97x, es decir, CERO poder de discriminación. Y no
+        # es cuestión del corte: probados 2/4/6/8/10/12 dB, el ratio nunca sale
+        # de 0.72-1.01. Era la vía número uno por la que música ya editada
+        # alcanzaba el umbral de esta regla (37 % de los previews elegibles).
+        #
+        # La causa es de medida: `diff_sub_low` compara MEDIAS de dB entre dos
+        # bandas con muy distinto número de bins del mel (el sub cubre ~2, los
+        # graves bastantes más), así que el sesgo es estructural, no musical.
+        # `diff_sub_low` sigue expuesto como señal informativa; no puntúa.
+        #
+        # Al quitarlo la regla dispara menos Y discrimina más: elegibilidad en
+        # lo publicado 22.0 % → 14.0 %, y el ratio usuario/publicado sube de
+        # 1.84x a 2.46x. Detalle en docs/calibracion-enmascaramiento.md.
 
     # Apoyo si el usuario describe el problema con palabras del campo léxico.
     # Por palabra ("trabajo" no es "bajo") y capado a +1: con el umbral en 2,
