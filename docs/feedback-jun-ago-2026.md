@@ -147,11 +147,14 @@ informe** (falló en silencio, sin mensaje de error). Además, verificado en el
 frontend: **la vista v2 no pinta `comparacion_referencia` en ninguna
 pestaña** — solo la clásica la enseña.
 
-Arreglos: (a) si el usuario adjuntó referencia, el informe SIEMPRE dice algo de
-ella, aunque sea "no pudimos procesarla" o "sin diferencias relevantes";
-(b) portar la tarjeta de comparación a la v2; (c) los umbrales del comparador
-siguen sin calibrar desde v0.5.32 — `sesiones.jsonl` guarda `senales_ref`
-para eso.
+Arreglos: (a) **implementado en v0.5.95** — si llegó `audio_ref`, la respuesta
+lleva siempre `comparacion_referencia` (la validación fallida ya no tumba la
+petición: degrada con error legible), cada fallo queda logueado con prefijo
+`[REF]`, y el texto guardado en DB escribe también el caso de error (antes se
+omitía y era inauditable — probablemente eso fue el caso [25]);
+(b) **hecho en v0.5.92** — tarjeta de comparación portada a la v2;
+(c) los umbrales del comparador siguen sin calibrar desde v0.5.32 —
+`sesiones.jsonl` guarda `senales_ref` para eso (pendiente, pariente de la 3b).
 
 ### 3.7 Menores
 

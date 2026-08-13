@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "version": "0.5.95",
+      "date": "2026-08-13",
+      "title": "Tu track de referencia, nunca en silencio",
+      "changes": [
+        "Si subes un track de referencia, el informe siempre responde por él: con la comparación, o con un motivo claro si no se pudo usar. Antes, una referencia con un archivo problemático podía tumbar el análisis entero o desaparecer sin explicación.",
+        "Un archivo de referencia no válido ya no impide tu diagnóstico: el análisis sale igual y se te cuenta qué pasó con la referencia."
+      ]
+    },
+    {
       "version": "0.5.94",
       "date": "2026-08-13",
       "title": "Tus palabras ya no diagnostican solas",

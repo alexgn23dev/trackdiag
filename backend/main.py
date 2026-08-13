@@ -59,7 +59,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-APP_VERSION = "0.5.94"
+APP_VERSION = "0.5.95"
 
 app = FastAPI(title="Mentotrack API", version=APP_VERSION)
 app.state.limiter = limiter
@@ -474,7 +474,20 @@ async def diagnosticar(
         else:
             extension_ref, err = _validar_audio_upload(audio_ref.filename, content_ref, "Track de referencia")
             if err:
-                return err
+                # Degradar, no matar: TODOS los demás fallos de la referencia
+                # (vacía, timeout, silencio, excepción) dejan que el análisis
+                # del usuario salga y lo cuentan en comparacion_referencia.
+                # Este era el único que tumbaba la petición entera — y si el
+                # usuario reintentaba sin la referencia, no quedaba ni rastro
+                # de que lo intentó (docs/feedback-jun-ago-2026.md §3.6).
+                try:
+                    motivo = json.loads(err.body).get("error", "archivo no válido")
+                except Exception:
+                    motivo = "archivo no válido"
+                print(f"[REF] rechazada en validación: {motivo} ({audio_ref.filename})")
+                comparacion_error = (f"No se pudo usar el track de referencia — {motivo} "
+                                     f"Tu diagnóstico se generó igualmente, sin la comparación.")
+                tiene_ref = False
 
     # Guardar archivo temporal
     session_id = str(uuid.uuid4())[:8]
@@ -570,6 +583,7 @@ async def diagnosticar(
                 comparacion_error = "No se pudo analizar el track de referencia (tardó demasiado). Tu diagnóstico se generó igualmente, sin la comparación."
             except AudioSinSenalAnalizable:
                 # La referencia está muda: el diagnóstico del usuario sale igual.
+                print(f"[REF] referencia sin señal analizable ({session_id})")
                 comparacion_error = "El track de referencia está en silencio o no tiene señal analizable. Tu diagnóstico se generó igualmente, sin la comparación."
             except Exception as e:
                 print(f"[ERROR] diagnosticar: referencia {type(e).__name__}: {e}")

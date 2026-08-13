@@ -306,7 +306,7 @@
     // /api/health. Si no coincide, este fichero viene de la caché del
     // navegador y puede estar dejando de enviar campos que el backend ya
     // espera — se recarga una sola vez y, si aun así no cuadra, se avisa.
-    const APP_VERSION = '0.5.94';
+    const APP_VERSION = '0.5.95';
 
     function comprobarVersionFrontend(onDesfase, onEntorno) {
         fetch(`${API_URL}/api/health`, { cache: 'no-store' })
@@ -6222,7 +6222,13 @@
                 if (dx.sugerencias_estructura && dx.sugerencias_estructura.length > 0) {
                     informe += `ESTRUCTURA (qué tocar y dónde): ${dx.sugerencias_estructura.map((s, i) => `${i+1}. ${s}`).join(' | ')}\n`;
                 }
-                // Comparación con track de referencia
+                // Comparación con track de referencia. El caso de error TAMBIÉN
+                // se escribe: antes se omitía y un fallo de la referencia no
+                // dejaba ni rastro en la fila guardada — imposible de auditar
+                // (docs/feedback-jun-ago-2026.md §3.6, caso [25]).
+                if (dx.comparacion_referencia && dx.comparacion_referencia.error) {
+                    informe += `COMPARACIÓN CON REFERENCIA: ERROR — ${dx.comparacion_referencia.error}\n`;
+                }
                 if (dx.comparacion_referencia && !dx.comparacion_referencia.error) {
                     const cr = dx.comparacion_referencia;
                     const difs = (cr.diferencias || []).map((d, i) => `${i+1}. ${d.label} (${d.severidad ? d.severidad + ' — ' : ''}${d.magnitud}): ${d.texto}`).join(' | ');
