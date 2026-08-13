@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "version": "0.5.96",
+      "date": "2026-08-13",
+      "title": "Menos «lo mismo de siempre» en el diagnóstico de graves",
+      "changes": [
+        "El diagnóstico de enmascaramiento de graves dejaba de ser útil de tanto repetirse: era el más frecuente y el peor valorado. Medimos qué lo disparaba contra 322 temas ya editados de 26 sellos y encontramos una señal que saltaba igual en la música publicada que en la vuestra — no distinguía nada. La hemos retirado.",
+        "Resultado: el diagnóstico aparece bastante menos y, cuando aparece, señala mejor. La medida que sí funciona (cuánto dominan los graves sobre los medios-bajos) no se ha tocado."
+      ]
+    },
+    {
       "version": "0.5.95",
       "date": "2026-08-13",
       "title": "Tu track de referencia, nunca en silencio",
