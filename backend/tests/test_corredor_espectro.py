@@ -256,7 +256,7 @@ class TestLaReglaEsHonesta(unittest.TestCase):
         cuerpo = self.h[i:i + 2200]
         self.assertIn("V2_VEREDICTO_DESDE", cuerpo)
         # pero el corredor SÍ se sigue dibujando ahí abajo
-        i = self.h.index("const corr = pond ? null :")
+        i = self.h.index("const corr = (() => {")
         self.assertNotIn("V2_VEREDICTO_DESDE", self.h[i:i + 900])
 
     def test_una_racha_necesita_el_mismo_signo(self):
@@ -266,14 +266,27 @@ class TestLaReglaEsHonesta(unittest.TestCase):
         cuerpo = self.h[i:i + 2000]
         self.assertIn("Math.sign", cuerpo)
 
-    def test_el_corredor_no_se_dibuja_en_la_vista_ponderada(self):
-        """Se construyó sobre la medida sin ponderar. Superponerlo a la curva
-        con ponderación A compararía dos cosas distintas."""
+    def test_no_queda_una_segunda_lectura_del_espectro(self):
+        """Hubo una vista "Oído" con ponderación A, conmutable. Se retiró en
+        agosto de 2026 por dos motivos medidos: decía lo mismo —la desviación
+        respecto al corredor correlacionaba 0.9994 con la vista física— y,
+        como se anclaba al pico del tema en vez de al cuerpo, 27 de los 322
+        previews habrían enseñado la curva fuera del corredor con la insignia
+        diciendo DENTRO.
+
+        Lo que este test protege no es la ausencia del botón, sino que el
+        corredor no se superponga a una medida para la que no se calibró. Si
+        alguien vuelve a añadir una lectura ponderada tendrá que recalibrarlo,
+        así que el motivo tiene que seguir escrito al lado del componente."""
         i = self.h.index("function V2Espectro2(")
         j = self.h.index("function V2Escalones(", i)
         cuerpo = self.h[i:j]
-        self.assertIn("const comp = pond ? null : veredicto;", cuerpo)
-        self.assertIn("const corr = pond ? null :", cuerpo)
+        self.assertNotIn("db_pond", cuerpo)
+        self.assertNotIn("displayPond", cuerpo)
+        self.assertNotIn("setPond", self.h, "ha vuelto el conmutador de vistas")
+        k = self.h.index("function v2PuntosEspectro(")
+        self.assertNotIn("db_pond", self.h[k:k + 800])
+        self.assertIn("0.9994", self.h, "el porqué del cambio, donde se lea")
 
     def test_el_texto_al_usuario_dice_con_que_se_compara(self):
         """Decir "dentro del rango" sin decir de qué rango no significa nada.
@@ -295,6 +308,52 @@ class TestLaReglaEsHonesta(unittest.TestCase):
         i = self.h.index("function V2TabMezcla(")
         j = self.h.index("function V2TabMaster(", i)
         self.assertIn("veredicto.dentro ? 'Dentro' : 'Fuera'", self.h[i:j])
+
+
+class TestLaNubeNoCambiaLoQueSeJuzga(unittest.TestCase):
+    """El corredor se pinta como una nube de capas anidadas entre percentiles
+    cada vez más juntos, para que se apague hacia los bordes en vez de acabar
+    en un filo. Eso es sombreado: puede hacer creer que el límite es más difuso
+    de lo que es, así que el límite en sí no puede moverse."""
+
+    def setUp(self):
+        self.h = fuente()
+
+    def test_la_capa_de_fuera_sigue_siendo_el_5_95(self):
+        """Si la capa exterior se quedara en, digamos, el 10-90, la nube
+        dibujaría un corredor más estrecho que el que juzga el veredicto: el
+        usuario vería su curva fuera y el texto le diría que está dentro."""
+        i = self.h.index("function v2NubeCorredor(")
+        cuerpo = self.h[i:self.h.index("\n    }", i)]
+        # d arranca en 0 (k = 0), así que la primera pareja es exactamente 95 y 5
+        self.assertIn("const d = (k / V2_CAPAS_NUBE) * 45;", cuerpo)
+        self.assertIn("v2PctCorredor(c, 95 - d)", cuerpo)
+        self.assertIn("v2PctCorredor(c, 5 + d)", cuerpo)
+
+    def test_los_anclajes_son_los_cinco_percentiles_medidos(self):
+        """Entre ellos se interpola para repartir el sombreado, pero la forma
+        la fijan los percentiles que salieron del corpus y no otros."""
+        i = self.h.index("const V2_ANCLAS_PCT")
+        linea = self.h[i:self.h.index("\n", i)]
+        for pct, clave in ((5, "lo"), (25, "lo2"), (50, "med"), (75, "hi2"), (95, "hi")):
+            self.assertIn("[%d, '%s']" % (pct, clave), linea)
+
+    def test_el_corredor_se_curva_igual_que_la_curva_del_track(self):
+        """Los dos bordes pasan por la misma cúbica monótona que el track. Con
+        rectas el corredor salía facetado al lado de una curva suave, y esa
+        diferencia de acabado lo hacía leer como un elemento pegado encima."""
+        i = self.h.index("function v2PathCorredor(")
+        cuerpo = self.h[i:self.h.index("\n    }", i)]
+        self.assertEqual(cuerpo.count("v2CurvaSuave("), 2)
+
+    def test_el_desvanecido_de_los_bordes_es_solo_pintura(self):
+        """La máscara apaga el corredor por debajo de 50 Hz y lo remata por la
+        derecha. Es acabado: el rango que se compara lo fija V2_CORREDOR, y
+        v2CompararCorredor no puede saber nada de la máscara."""
+        i = self.h.index("function v2CompararCorredor(")
+        j = self.h.index("function ", i + 10)
+        self.assertNotIn("v2corrFade", self.h[i:j])
+        self.assertNotIn("v2corrMask", self.h[i:j])
 
 
 class TestElDibujoNoSeDeforma(unittest.TestCase):

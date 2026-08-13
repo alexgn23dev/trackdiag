@@ -59,7 +59,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-APP_VERSION = "0.5.88"
+APP_VERSION = "0.5.90"
 
 app = FastAPI(title="Mentotrack API", version=APP_VERSION)
 app.state.limiter = limiter
@@ -4718,6 +4718,33 @@ async def perfil_borrar_foto(request: Request):
         except OSError:
             pass
     return {"ok": True}
+
+
+# La portada pide esto en cada visita y el dato cambia despacio: caché de
+# proceso 5 minutos para no pagar un viaje a la DB por pageview.
+_PORTADA_AVATARES_CACHE = {"ts": 0.0, "data": None}
+
+
+@app.get("/api/portada/avatares")
+@limiter.limit("60/minute")
+async def portada_avatares(request: Request):
+    """Prueba social de la portada: avatares reales (foto o inicial) y el
+    total de usuarios. Público. Si no hay DB devuelve vacío y el frontend
+    enseña su fallback sin cifra — mejor eso que un número inventado."""
+    import time as _t
+    if _PORTADA_AVATARES_CACHE["data"] and _t.time() - _PORTADA_AVATARES_CACHE["ts"] < 300:
+        return _PORTADA_AVATARES_CACHE["data"]
+    if not _pg_available():
+        return {"avatares": [], "total": None}
+    try:
+        from db import get_pool
+        import repositories as repo
+        data = await repo.avatares_portada(get_pool())
+    except Exception as e:
+        print(f"[PORTADA] avatares fallaron: {e}")
+        return {"avatares": [], "total": None}
+    _PORTADA_AVATARES_CACHE.update(ts=_t.time(), data=data)
+    return data
 
 
 @app.get("/api/comunidad/foto/{filename}")

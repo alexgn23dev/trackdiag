@@ -28,6 +28,7 @@ Documento de referencia para trabajar en este repo. Para la visión completa del
 - **PWA admin:** dashboard instalable en móvil (`manifest-admin.json`, `sw-admin.js`).
 - **Páginas legales:** `/aviso-legal`, `/privacidad`, `/cookies`, `/terminos`, `/changelog`.
 - **Seguridad extra:** bloqueo de `.git` y `dashboard.html` en el catch-all, límite de upload 150 MB por archivo validado en cliente y servidor.
+- **Portada rediseñada (v0.5.90, en `dev`):** `LandingScreen` según el prototipo de Alex (titular + 3 pasos + tarjeta de subida). La prueba social es una frase con el total real de cuentas, vía el endpoint público `GET /api/portada/avatares` (caché de proceso 5 min; devuelve también avatares foto/inicial, hoy sin uso en la UI). `previsualizar.py` sirve la portada en `/home` y `/homemovil?w=390`.
 - **Reporte mensual automático (v0.5.29):** tarea cron que se ejecuta el día 1 de cada mes a las 09:00 UTC. Calcula métricas del mes anterior (análisis totales, usuarios nuevos, análisis por persona, embudo CTA) y envía email vía Resend a `ADMIN_EMAIL` (default: alexgn23@gmail.com). Endpoint manual `/api/admin/reporte-mensual?year=2026&month=5` para generar reportes bajo demanda (requiere cookie admin).
 
 ### Tamaños actuales
@@ -208,6 +209,22 @@ Auditoría V-01 a V-10 cerrada (ver `MENTOTRACK.md §7.3`). Reglas vivas:
 - **Tras el cutover B**: rotar password de Postgres y desactivar Public Networking en Railway.
 
 ---
+
+## El corredor de referencia del balance espectral
+
+El gráfico de balance espectral compara el track contra una franja de referencia
+(`V2_CORREDOR` en `frontend/index.html`). Esos percentiles **no salen de este
+repo**: se calibran con audio de `../label-match/data/audio_samples`, que son
+previews de Beatport, no másters.
+
+Antes de tocar el corredor, el veredicto de balance o el copy que lo acompaña,
+leer **`docs/corredor-referencia.md`**. Documenta la procedencia, la
+deduplicación (328 → 322), el sesgo del corpus, por qué no hay referencias por
+género, qué rango se dibuja frente a cuál se juzga, y por qué la interfaz dice
+DENTRO/FUERA y no EQUILIBRADO/REVISAR.
+
+Regla que no se negocia en ese componente: **la interfaz no puede sugerir un
+problema que el análisis no haya detectado.**
 
 ## Punto ciego conocido del motor
 

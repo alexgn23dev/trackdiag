@@ -142,19 +142,39 @@
         .input-field::placeholder { color: #666; }
         .accent-green { color: var(--po-green); }
         .accent-purple { color: var(--po-white); }
-        /* Wave decoration */
-        .wave-bg { position: relative; overflow: hidden; }
-        .wave-bg::before {
-            content: '';
-            position: absolute;
-            top: 50%;
-            left: -10%;
-            width: 120%;
-            height: 200px;
-            background: radial-gradient(ellipse at center, rgba(109,16,255,0.06) 0%, transparent 70%);
-            transform: translateY(-50%);
-            pointer-events: none;
+        /* --- Portada (rediseño ago-2026, prototipo de Alex) ---------------
+           Solo la usa LandingScreen. Sustituye a .wave-bg, que era el fondo
+           de la portada anterior y no lo usaba nadie más. */
+        .home-v3 {
+            background:
+                radial-gradient(ellipse 60% 50% at 10% 92%, rgba(109,16,255,0.16), transparent 68%),
+                radial-gradient(ellipse 45% 40% at 92% 4%, rgba(109,16,255,0.07), transparent 70%),
+                #0e0e14;
         }
+        .paso-card { background: rgba(255,255,255,0.025); border: 1px solid #232331; border-radius: 14px; }
+        .paso-conn { width: 18px; height: 2px; flex: none; align-self: center; background: rgba(109,16,255,0.55); }
+        .paso-num {
+            width: 22px; height: 22px; border-radius: 50%; flex: none;
+            background: rgba(37,244,100,0.12); color: var(--po-green);
+            font-size: 11px; font-weight: 700;
+            display: inline-flex; align-items: center; justify-content: center;
+        }
+        .avatar-home {
+            width: 36px; height: 36px; border-radius: 50%; flex: none;
+            border: 2px solid #12121a;
+            display: inline-flex; align-items: center; justify-content: center;
+        }
+        .avatar-home + .avatar-home { margin-left: -10px; }
+        .pill-fmt {
+            font-size: 12px; letter-spacing: .02em; color: var(--po-green);
+            border: 1px solid rgba(37,244,100,0.3); border-radius: 999px;
+            padding: 5px 14px;
+        }
+        /* El interior de la zona de arrastre va un punto más oscuro que la
+           tarjeta; en reglas y no en línea para no pisar el hover/active. */
+        .home-v3 .drop-zone { background: #101017; }
+        .home-v3 .drop-zone:hover { background: rgba(109,16,255,0.04); }
+        .home-v3 .drop-zone.active { background: rgba(37,244,100,0.04); }
         /* === Rediseño del diagnóstico (v2) ================================
            Se activa con ?v2=1. Convive con la vista clásica: nada de esto se
            aplica salvo que el marcado v2 esté en pantalla. */
@@ -286,7 +306,7 @@
     // /api/health. Si no coincide, este fichero viene de la caché del
     // navegador y puede estar dejando de enviar campos que el backend ya
     // espera — se recarga una sola vez y, si aun así no cuadra, se avisa.
-    const APP_VERSION = '0.5.88';
+    const APP_VERSION = '0.5.90';
 
     function comprobarVersionFrontend(onDesfase, onEntorno) {
         fetch(`${API_URL}/api/health`, { cache: 'no-store' })
@@ -516,7 +536,7 @@
         );
     }
 
-    function LandingScreen({ onFileSelected, onHistorial, historialCount, intencionCompartir }) {
+    function LandingScreen({ onFileSelected, onHistorial, historialCount, intencionCompartir, onPanel, panelAuth }) {
         const [isDragging, setIsDragging] = useState(false);
         const [file, setFile] = useState(null);
         const inputRef = useRef(null);
@@ -533,101 +553,257 @@
             if (f) { setFile(f); onFileSelected(f); }
         };
 
-        return (
-            <div className="min-h-screen flex items-center justify-center px-6 sm:px-8 fade-in wave-bg">
-                <div className="max-w-5xl w-full grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-16 items-center">
-                    {/* Left column — branding + text */}
-                    <div>
-                        {intencionCompartir && (
-                            <div className="mb-6 p-4 rounded-xl fade-in" style={{background: 'rgba(37,244,100,0.08)', border: '1px solid rgba(37,244,100,0.28)'}}>
-                                <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{color: 'var(--po-green)'}}>
-                                    Compartir en la comunidad
-                                </p>
-                                <p className="text-sm" style={{color: 'var(--po-white)', lineHeight: '1.55'}}>
-                                    Para compartir un track primero tienes que <strong>analizarlo</strong>. Sube tu bounce aquí,
-                                    completa el cuestionario y, al terminar el análisis, verás el botón <strong>"Compartir con la comunidad"</strong>.
-                                </p>
-                            </div>
-                        )}
-                        <div className="mb-6">
-                            <MentoLogo size={72} />
-                        </div>
-                        <p className="text-lg mb-3" style={{color: 'var(--po-white)', lineHeight: '1.5'}}>
-                            Detecta qué debería corregirse antes, qué no conviene tocar todavía
-                            y cuál es el siguiente paso para avanzar con tu track.
-                        </p>
-                        <p className="text-sm mb-6" style={{color: 'var(--po-light)'}}>
-                            No te damos más información. Te damos dirección.
-                        </p>
-                        <div className="flex items-center gap-4">
-                            <span className="text-xs px-3 py-1.5 rounded-full" style={{background: 'rgba(37,244,100,0.1)', color: 'var(--po-green)', border: '1px solid rgba(37,244,100,0.2)'}}>WAV</span>
-                            <span className="text-xs px-3 py-1.5 rounded-full" style={{background: 'rgba(37,244,100,0.1)', color: 'var(--po-green)', border: '1px solid rgba(37,244,100,0.2)'}}>MP3</span>
-                            <span className="text-xs px-3 py-1.5 rounded-full" style={{background: 'rgba(37,244,100,0.1)', color: 'var(--po-green)', border: '1px solid rgba(37,244,100,0.2)'}}>FLAC</span>
-                            <span className="text-xs px-3 py-1.5 rounded-full" style={{background: 'rgba(37,244,100,0.1)', color: 'var(--po-green)', border: '1px solid rgba(37,244,100,0.2)'}}>AIFF</span>
-                        </div>
-                        {historialCount > 0 && (
-                            <button
-                                onClick={onHistorial}
-                                className="mt-6 text-sm transition-colors"
-                                style={{color: 'var(--po-light)'}}
-                                onMouseOver={(e) => e.target.style.color = 'var(--po-white)'}
-                                onMouseOut={(e) => e.target.style.color = 'var(--po-light)'}
-                            >
-                                Ver historial ({historialCount})
-                            </button>
-                        )}
-                    </div>
+        const trazo = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.7,
+                        strokeLinecap: 'round', strokeLinejoin: 'round' };
+        const pasos = [
+            { n: 1, titulo: 'Sube tu canción',
+              texto: 'Arrastra tu archivo de audio o selecciónalo desde tu dispositivo.',
+              icono: <svg width="26" height="26" viewBox="0 0 24 24" {...trazo}>
+                         <path d="M20 16.6A4.5 4.5 0 0 0 17.5 8h-1.8A7 7 0 1 0 4 14.9" />
+                         <polyline points="16 16 12 12 8 16" />
+                         <line x1="12" y1="12" x2="12" y2="21" />
+                     </svg> },
+            { n: 2, titulo: 'Recibe una guía clara',
+              texto: 'Te mostramos qué merece atención ahora, qué puede esperar y por qué.',
+              icono: <svg width="26" height="26" viewBox="0 0 24 24" {...trazo}>
+                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                         <polyline points="14 2 14 8 20 8" />
+                         <line x1="16" y1="13" x2="8" y2="13" />
+                         <line x1="16" y1="17" x2="8" y2="17" />
+                     </svg> },
+            { n: 3, titulo: 'Avanza con foco',
+              texto: 'Sigue el siguiente paso más útil y mejora tu track con seguridad.',
+              icono: <svg width="26" height="26" viewBox="0 0 24 24" {...trazo}>
+                         <circle cx="10.5" cy="13.5" r="7" />
+                         <circle cx="10.5" cy="13.5" r="2.8" />
+                         <path d="M10.5 13.5 17.5 6.5" />
+                         <path d="M17.5 6.5h3.2M17.5 6.5V3.3" />
+                     </svg> },
+        ];
+        // Prueba social: el número REAL de cuentas, del endpoint público
+        // /api/portada/avatares (devuelve también avatares; aquí solo se usa
+        // el total — Alex prefirió la frase sola, sin fotos). Mientras llega
+        // o si la API no contesta, la frase va SIN cifra: un número que no
+        // podemos respaldar es peor que no poner número.
+        // Los perfiles junto a la cifra son imágenes REALES pero sin caras
+        // reconocibles, elegidas a propósito para no fabricar usuarios que no
+        // existen: un sello inventado (avatar-sello.png, generado para esto),
+        // un DJ de espaldas en cabina (avatar-dj.jpg — Flickr 21887721729,
+        // licencia CC0) y un home studio con sintes (avatar-studio.jpg —
+        // Wikimedia Commons/piqsels, CC0), más una inicial sin foto. La cifra
+        // de al lado sí es de cuentas reales (o no sale).
+        const perfilesDecor = [
+            { titulo: 'Sello', src: '/avatar-sello.png' },
+            { titulo: 'DJ', src: '/avatar-dj.jpg' },
+            { titulo: 'Home studio', src: '/avatar-studio.jpg' },
+            { titulo: 'Sin foto' },
+        ];
+        const [totalUsuarios, setTotalUsuarios] = useState(null);
+        useEffect(() => {
+            let vivo = true;
+            fetch(`${API_URL}/api/portada/avatares`)
+                .then(r => (r.ok ? r.json() : null))
+                .then(d => {
+                    if (vivo && d && typeof d.total === 'number' && d.total > 0) setTotalUsuarios(d.total);
+                })
+                .catch(() => {});
+            return () => { vivo = false; };
+        }, []);
 
-                    {/* Right column — drop zone */}
-                    <div>
-                        <div
-                            className={`drop-zone rounded-xl p-12 text-center cursor-pointer ${isDragging ? 'active' : ''}`}
-                            style={{minHeight: '280px', display: 'flex', alignItems: 'center', justifyContent: 'center'}}
-                            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-                            onDragLeave={() => setIsDragging(false)}
-                            onDrop={handleDrop}
-                            onClick={() => inputRef.current?.click()}
+        return (
+            <div className="min-h-screen home-v3 relative fade-in">
+                {/* Cabecera alineada con el contenido: mismo ancho máximo y el
+                    mismo padding lateral que el grid de abajo, así el logo
+                    arranca donde arrancan las letras del titular y "Mi panel"
+                    acaba donde acaba la tarjeta de subida. El botón es el mismo
+                    flotante de App (idéntico estilo y handler); aquí App lo
+                    oculta y lo pinta esta cabecera. */}
+                <div className="absolute top-0 left-0 right-0 px-6 sm:px-10" style={{ paddingTop: 20 }}>
+                    <div className="w-full mx-auto flex items-center justify-between" style={{ maxWidth: '1220px' }}>
+                        <MentoLogo size={26} />
+                        <button
+                            onClick={onPanel}
+                            className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs transition-colors"
+                            style={{ background: 'rgba(109,16,255,0.15)', border: '1px solid rgba(109,16,255,0.3)', color: '#a78bfa' }}
                         >
-                            <input
-                                ref={inputRef}
-                                type="file"
-                                accept=".mp3,.wav,.flac,.aiff,.aif,.ogg"
-                                onChange={handleChange}
-                                className="hidden"
-                            />
-                            {file ? (
-                                <div>
-                                    <div className="mb-3">
-                                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#25F464" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{margin: '0 auto'}}>
-                                            <path d="M20 6L9 17l-5-5"/>
-                                        </svg>
-                                    </div>
-                                    <p className="font-medium" style={{color: 'var(--po-white)'}}>{file.name}</p>
-                                    <p className="text-sm mt-1" style={{color: 'var(--po-light)'}}>
-                                        {(file.size / 1024 / 1024).toFixed(1)} MB
+                            {panelAuth ? (
+                                <React.Fragment>
+                                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--po-green)', display: 'inline-block' }}></span>
+                                    Mi panel
+                                </React.Fragment>
+                            ) : 'Mi panel'}
+                        </button>
+                    </div>
+                </div>
+
+                <div className="min-h-screen flex items-center justify-center px-6 sm:px-10"
+                     style={{ paddingTop: 88, paddingBottom: 48 }}>
+                    <div className="w-full grid grid-cols-1 md:grid-cols-12 gap-10 lg:gap-14 items-center"
+                         style={{ maxWidth: '1220px' }}>
+
+                        {/* ===== Izquierda: la promesa y los tres pasos ===== */}
+                        <div className="md:col-span-7">
+                            {intencionCompartir && (
+                                <div className="mb-6 p-4 rounded-xl fade-in" style={{background: 'rgba(37,244,100,0.08)', border: '1px solid rgba(37,244,100,0.28)'}}>
+                                    <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{color: 'var(--po-green)'}}>
+                                        Compartir en la comunidad
                                     </p>
-                                </div>
-                            ) : (
-                                <div>
-                                    <div className="mb-4" style={{color: 'var(--po-medium)'}}>
-                                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{margin: '0 auto'}}>
-                                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                                            <polyline points="17 8 12 3 7 8"/>
-                                            <line x1="12" y1="3" x2="12" y2="15"/>
-                                        </svg>
-                                    </div>
-                                    <p style={{color: 'var(--po-light)'}}>
-                                        Arrastra tu archivo aquí
-                                    </p>
-                                    <p className="text-sm mt-2" style={{color: 'var(--po-medium)'}}>
-                                        o haz clic para seleccionar
+                                    <p className="text-sm" style={{color: 'var(--po-white)', lineHeight: '1.55'}}>
+                                        Para compartir un track primero tienes que <strong>analizarlo</strong>. Sube tu bounce aquí,
+                                        completa el cuestionario y, al terminar el análisis, verás el botón <strong>"Compartir con la comunidad"</strong>.
                                     </p>
                                 </div>
                             )}
+                            <h1 style={{ color: 'var(--po-white)', fontWeight: 700, lineHeight: 1.07,
+                                         letterSpacing: '-0.02em', fontSize: 'clamp(34px, 4.6vw, 57px)' }}>
+                                Menos dudas.<br />
+                                <span style={{ color: 'var(--po-green)' }}>Más dirección</span><br />
+                                para tu track.
+                            </h1>
+                            <p className="mt-5" style={{ color: '#b8b8c2', fontSize: '15px',
+                                                         lineHeight: 1.65, maxWidth: '33rem' }}>
+                                Analiza tu canción para saber qué necesitas mejorar y cuál es el
+                                siguiente paso para acercarte al resultado que buscas. Evita
+                                perderte en cambios que no aportan y detecta cuándo tu track está
+                                realmente listo.
+                            </p>
+
+                            <div className="mt-8 flex flex-col sm:flex-row gap-3 sm:gap-0 items-stretch">
+                                {pasos.map((p, i) => (
+                                    <React.Fragment key={p.n}>
+                                        {i > 0 && <div className="paso-conn hidden sm:block" />}
+                                        <div className="paso-card relative flex-1 text-center px-4 pb-4"
+                                             style={{ paddingTop: 38 }}>
+                                            <span className="paso-num absolute" style={{ top: 10, left: 10 }}>{p.n}</span>
+                                            <div className="flex justify-center" style={{ color: 'var(--po-green)' }}>{p.icono}</div>
+                                            <p className="mt-2.5" style={{ color: 'var(--po-white)', fontWeight: 700,
+                                                                           fontSize: '13.5px' }}>{p.titulo}</p>
+                                            <p className="mt-1.5" style={{ color: '#8d8d99', fontSize: '12px',
+                                                                           lineHeight: 1.55 }}>{p.texto}</p>
+                                        </div>
+                                    </React.Fragment>
+                                ))}
+                            </div>
+
+                            {/* Los perfiles ilustrados y la frase, en una sola línea
+                                sin saltos forzados: la cifra en blanco y el resto en
+                                gris. Sin número confirmado, la frase sale sola. */}
+                            <div className="mt-8 flex items-center gap-3.5">
+                                <div className="flex items-center flex-none" aria-hidden="true">
+                                    {perfilesDecor.map(pf => (
+                                        <span key={pf.titulo} className="avatar-home overflow-hidden"
+                                              style={{ background: 'rgba(109,16,255,0.32)' }} title={pf.titulo}>
+                                            {pf.src
+                                                ? <img src={pf.src} alt="" width="36" height="36"
+                                                       className="w-full h-full object-cover" />
+                                                : <span style={{ color: '#fff', fontWeight: 700, fontSize: '14px' }}>A</span>}
+                                        </span>
+                                    ))}
+                                </div>
+                                <p style={{ color: '#9a9aa5', fontSize: '14px', lineHeight: 1.5 }}>
+                                    {totalUsuarios && (
+                                        <span style={{ color: 'var(--po-white)', fontWeight: 700 }}>
+                                            +{totalUsuarios}{' '}
+                                        </span>
+                                    )}
+                                    {totalUsuarios ? 'productores' : 'Productores'} y artistas ya han usado Mentotrack.
+                                </p>
+                            </div>
                         </div>
-                        <p className="text-xs mt-3 text-center" style={{color: 'var(--po-medium)'}}>
-                            🔒 Mentotrack no guarda el archivo de tu canción
-                        </p>
+
+                        {/* ===== Derecha: la tarjeta de subida ===== */}
+                        <div className="md:col-span-5">
+                            <div className="rounded-2xl p-5 sm:p-6"
+                                 style={{ background: '#14141b', border: '1px solid #262633',
+                                          boxShadow: '0 30px 90px rgba(0,0,0,0.5)' }}>
+                                <div
+                                    className={`drop-zone rounded-xl cursor-pointer ${isDragging ? 'active' : ''}`}
+                                    style={{ minHeight: '385px', display: 'flex', alignItems: 'center',
+                                             justifyContent: 'center', textAlign: 'center' }}
+                                    onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                                    onDragLeave={() => setIsDragging(false)}
+                                    onDrop={handleDrop}
+                                    onClick={() => inputRef.current?.click()}
+                                >
+                                    <input
+                                        ref={inputRef}
+                                        type="file"
+                                        accept=".mp3,.wav,.flac,.aiff,.aif,.ogg"
+                                        onChange={handleChange}
+                                        className="hidden"
+                                    />
+                                    {file ? (
+                                        <div>
+                                            <div className="mb-3">
+                                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#25F464" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{margin: '0 auto'}}>
+                                                    <path d="M20 6L9 17l-5-5"/>
+                                                </svg>
+                                            </div>
+                                            <p className="font-medium" style={{color: 'var(--po-white)'}}>{file.name}</p>
+                                            <p className="text-sm mt-1" style={{color: 'var(--po-light)'}}>
+                                                {(file.size / 1024 / 1024).toFixed(1)} MB
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <div className="px-6">
+                                            <div className="mb-5" style={{ color: '#b18cff' }}>
+                                                <svg width="42" height="42" viewBox="0 0 24 24" fill="none"
+                                                     stroke="currentColor" strokeWidth="1.6"
+                                                     strokeLinecap="round" strokeLinejoin="round"
+                                                     style={{ margin: '0 auto' }}>
+                                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                                    <polyline points="17 8 12 3 7 8" />
+                                                    <line x1="12" y1="3" x2="12" y2="15" />
+                                                </svg>
+                                            </div>
+                                            <p style={{ color: 'var(--po-white)', fontWeight: 600, fontSize: '17px' }}>
+                                                Arrastra tu archivo aquí
+                                            </p>
+                                            <p className="mt-2" style={{ color: '#8d8d99', fontSize: '14px' }}>
+                                                o haz clic para seleccionarlo
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="mt-5 flex flex-wrap items-center gap-2">
+                                    <span className="mr-1" style={{ color: '#8d8d99', fontSize: '13px' }}>
+                                        Formatos compatibles:
+                                    </span>
+                                    {['WAV', 'MP3', 'FLAC', 'AIFF'].map(f => (
+                                        <span key={f} className="pill-fmt">{f}</span>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="mt-5 flex items-center justify-center gap-2.5">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9a9aa5"
+                                     strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                    <rect x="3" y="11" width="18" height="11" rx="2" />
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                                </svg>
+                                <p style={{ color: '#c9c9d2', fontSize: '14px' }}>
+                                    Mentotrack no guarda el archivo de tu canción.
+                                </p>
+                            </div>
+
+                            {historialCount > 0 && (
+                                <button onClick={onHistorial}
+                                        className="mt-4 inline-flex items-center gap-2 transition-opacity hover:opacity-80"
+                                        style={{ color: 'var(--po-green)', fontSize: '14px', fontWeight: 500 }}>
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                         strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                        <polyline points="1 4 1 10 7 10" />
+                                        <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                                    </svg>
+                                    Ver historial ({historialCount})
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <polyline points="9 18 15 12 9 6" />
+                                    </svg>
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1081,7 +1257,7 @@
 
     // CTA hacia Relesit (relesit.com) — solo tras un diagnóstico BUENO: el track
     // está fino, así que invitamos a buscarle sello. Relesit es gratis.
-    function RelesitCTA({ diagId, estado, userEmail, bpm, genero }) {
+    function RelesitCTA({ diagId, estado, userEmail, bpm, genero, clase }) {
         useEffect(() => {
             try { trackEvent('cta_relesit_visto', { diagnostico: diagId, estado }); } catch (e) {}
             try { window.mtCtaEvent && window.mtCtaEvent('relesit_visto', { diagnostico_id: diagId || '', email: userEmail || '' }); } catch (e) {}
@@ -1112,7 +1288,7 @@
                     } catch (err) {}
                     window.location.assign(dest);
                 }}
-                className="block card p-5 mb-6 transition-all"
+                className={`block card p-5 transition-all ${clase || 'mb-6'}`}
                 style={{
                     background: 'linear-gradient(135deg, rgba(37,244,100,0.08) 0%, rgba(34,211,238,0.06) 100%)',
                     border: '1px solid rgba(37,244,100,0.28)',
@@ -1969,23 +2145,22 @@
     /** Los puntos del espectro, ya inclinados y recortados. Una sola función
      *  para el gráfico y para el veredicto: si divergieran, el rótulo volvería
      *  a contradecir a la curva, que es justo lo que se venía de arreglar. */
-    function v2PuntosEspectro(fino, display, displayPond, pond) {
+    function v2PuntosEspectro(fino, display) {
         const detallado = !!(fino && fino.bandas && fino.bandas.length);
-        const datos = pond ? displayPond : display;
-        if (!detallado && (!datos || Object.keys(datos).length === 0)) return [];
+        if (!detallado && (!display || Object.keys(display).length === 0)) return [];
         return (detallado
-            ? fino.bandas.map(b => ({ f: b.hz, v: pond ? b.db_pond : b.db }))
+            ? fino.bandas.map(b => ({ f: b.hz, v: b.db }))
                          .filter(q => typeof q.v === 'number')
-            : V2_BANDAS.map(b => ({ f: Math.sqrt(Math.max(b.f0, 20) * b.f1), v: datos[b.k] }))
+            : V2_BANDAS.map(b => ({ f: Math.sqrt(Math.max(b.f0, 20) * b.f1), v: display[b.k] }))
                        .filter(q => typeof q.v === 'number')
-        ).map(q => ({ f: q.f, v: pond ? q.v : q.v + V2_TILT * Math.log2(q.f / 1000) }))
+        ).map(q => ({ f: q.f, v: q.v + V2_TILT * Math.log2(q.f / 1000) }))
          .filter(q => q.f <= V2_TOPE_DIBUJO);
     }
 
     /** Veredicto del balance, calculado fuera del componente para que la tarjeta
      *  lo tenga en el primer render (nada de useEffect: parpadeaba). */
-    function v2VeredictoEspectro(fino, display, displayPond) {
-        const pts = v2PuntosEspectro(fino, display, displayPond, false);
+    function v2VeredictoEspectro(fino, display) {
+        const pts = v2PuntosEspectro(fino, display);
         if (pts.length < 2) return null;
         const ref = v2Referencia(pts);
         return v2CompararCorredor(pts.map(q => ({ f: q.f, v: q.v - ref })));
@@ -2055,15 +2230,28 @@
      *  energía tiene cada zona. Permite ver de un vistazo dónde está cargado
      *  el track. Acepta marcas (`marcas`) para señalar una frecuencia
      *  concreta, como el pico de aspereza. */
-    /** Espectro del track en el drop, con dos lecturas.
+    /** Espectro del track en el drop. Una sola lectura.
      *
-     * COMPENSADA (por defecto): pasa cada banda por la curva del oído. El
-     * oído no es plano — a igual nivel físico, un grave se percibe mucho más
-     * flojo que un medio —, así que un espectro crudo SIEMPRE enseña una
-     * montaña de graves aunque el balance sea correcto. Compensando, un track
-     * equilibrado se ve equilibrado.
+     * Hubo dos: la física (lo que enseña un analizador) y una compensada con la
+     * ponderación A, conmutables con una pestaña "Oído". Se retiró la segunda
+     * (ago-2026) y conviene saber por qué, porque la idea vuelve sola:
      *
-     * SIN COMPENSAR: el nivel físico, tal cual. Es lo que enseña un analizador.
+     *   · No decía nada nuevo. La ponderación A es un desplazamiento fijo por
+     *     banda, así que corre la curva y el corredor por igual. Medido sobre
+     *     los 322 previews y 19 temas de usuario: la desviación respecto al
+     *     corredor correlaciona 0.9994 entre las dos vistas, con 0.03 dB de
+     *     diferencia media. Era la misma medida dibujada en otro eje.
+     *   · Y podía contradecir a la insignia. Aquella vista se anclaba al pico
+     *     del tema en vez de al cuerpo, y con ese anclaje sí es una estadística
+     *     distinta: 27 de 322 previews (8 %) habrían visto REFERENCIA/DENTRO
+     *     en la cabecera con la curva saliéndose del corredor en pantalla.
+     *   · Además la ponderación A es la curva de 40 fon —escucha a volumen
+     *     bajo—. Esta música se oye a 85-100 dB SPL, donde las isofónicas son
+     *     mucho más planas, así que compensaba de más. Como ilustración valía;
+     *     como juez, le habría dado autoridad que no tiene.
+     *
+     * El motor sigue calculando `db_pond` y `espectro_display_pond`: ya no los
+     * lee nadie, pero son el dato crudo si la vista vuelve.
      *
      * Se dibuja sobre una escala de dB FIJA, no normalizada 0-100: normalizar
      * pone siempre una banda arriba del todo y otra abajo, por pequeña que sea
@@ -2154,24 +2342,83 @@
         return out;
     }
 
-    /** El corredor, como polígono cerrado: borde alto de ida, bajo de vuelta. */
+    /** El corredor, como polígono cerrado: borde alto de ida, bajo de vuelta.
+     *
+     *  Los dos bordes van con la MISMA cúbica monótona que la curva del track.
+     *  Antes se unían con rectas y a 29 bandas eso se veía: el corredor salía
+     *  facetado mientras la curva de encima iba suave, y esa diferencia de
+     *  acabado era justo lo que hacía leer la franja como una pegatina en vez
+     *  de como el fondo del gráfico.
+     *
+     *  La cúbica monótona es simétrica al invertir el eje X, así que el borde
+     *  de vuelta es esa misma curva recorrida al revés: basta con encadenarla
+     *  cambiando su `M` inicial por un `L`.
+     */
     function v2PathCorredor(arriba, abajo) {
-        if (arriba.length < 2) return '';
-        const ida = arriba.map(p => `${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(' L ');
-        const vuelta = abajo.slice().reverse()
-            .map(p => `${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(' L ');
-        return `M ${ida} L ${vuelta} Z`;
+        if (arriba.length < 2 || abajo.length < 2) return '';
+        const vuelta = v2CurvaSuave(abajo.slice().reverse());
+        return `${v2CurvaSuave(arriba)} L ${vuelta.slice(2)} Z`;
     }
 
-    function V2Espectro2({ display, displayPond, fino, ventana, marcas, veredicto }) {
-        // Arranca en la vista de analizador, no en la ponderada: es la única
-        // calibrada para que "plano" signifique "normal", y es la que el
-        // usuario puede cotejar con SPAN o Pro-Q en su DAW.
-        const [pond, setPond] = useState(false);
+    /** La nube del corredor: capas anidadas entre percentiles simétricos.
+     *
+     *  Con dos bandas (5-95 y 25-75) el corredor se leía como dos franjas con
+     *  un escalón entre ellas. Aquí se dibujan catorce parejas —(5,95), luego
+     *  (8.2, 91.8)… hasta rozar la mediana— todas con la misma opacidad baja.
+     *  Con ocho todavía se distinguían las capas donde la nube es ancha; con
+     *  catorce el salto entre una y otra cae por debajo de lo que se ve.
+     *  Donde el corpus se concentra las capas se apilan y la nube se espesa;
+     *  donde se dispersa quedan separadas y se desvanece sola. La densidad que
+     *  se ve ES la de la muestra, no un degradado decorativo: el sub, que es la
+     *  zona donde más se diferencian los discos, sale difuso porque de verdad
+     *  lo es.
+     *
+     *  Los cinco percentiles medidos siguen fijando la forma; entre ellos se
+     *  interpola lineal y eso solo reparte sombreado. El borde exterior sigue
+     *  siendo exactamente el 5-95, que es el que juzga.
+     */
+    const V2_CAPAS_NUBE = 14;
+    const V2_ANCLAS_PCT = [[5, 'lo'], [25, 'lo2'], [50, 'med'], [75, 'hi2'], [95, 'hi']];
+    // El morado de marca (#6D10FF) apilado capa sobre capa sale eléctrico: en los
+    // medios, donde el 25-75 mide 4 dB, las capas se juntan y el corredor
+    // parecía un tubo de neón. Este es el mismo tono aclarado y desaturado, que
+    // a igual densidad se lee como tela y no como luz. Solo para la nube: el
+    // resto de la interfaz sigue con el morado de marca.
+    const V2_NUBE = '#8b7ccc';
 
+    function v2PctCorredor(c, p) {
+        for (let i = 1; i < V2_ANCLAS_PCT.length; i++) {
+            if (p <= V2_ANCLAS_PCT[i][0]) {
+                const a = V2_ANCLAS_PCT[i - 1], b = V2_ANCLAS_PCT[i];
+                return c[a[1]] + (c[b[1]] - c[a[1]]) * ((p - a[0]) / (b[0] - a[0]));
+            }
+        }
+        return c.hi;
+    }
+
+    function v2NubeCorredor(x, y) {
+        // La opacidad de cada capa va en rampa cuadrática: las de fuera casi
+        // no pintan (el 5-95 entero queda en un velo) y las de dentro cargan
+        // el peso. Con opacidad uniforme la nube era una neblina pareja que
+        // invadía medio gráfico; así el perfil es halo tenue → cuerpo (25-75)
+        // → centro, sin que se distinga ninguna capa suelta.
+        const capas = [];
+        for (let k = 0; k < V2_CAPAS_NUBE; k++) {
+            const d = (k / V2_CAPAS_NUBE) * 45;
+            const t = k / (V2_CAPAS_NUBE - 1);
+            capas.push({
+                path: v2PathCorredor(
+                    V2_CORREDOR.map(c => [x(c.hz), y(v2PctCorredor(c, 95 - d))]),
+                    V2_CORREDOR.map(c => [x(c.hz), y(v2PctCorredor(c, 5 + d))])),
+                op: 0.026 + 0.055 * t * t,
+            });
+        }
+        return capas;
+    }
+
+    function V2Espectro2({ display, fino, ventana, marcas, veredicto }) {
         const detallado = !!(fino && fino.bandas && fino.bandas.length);
-        const datos = pond ? displayPond : display;
-        const puntos = v2PuntosEspectro(fino, display, displayPond, pond);
+        const puntos = v2PuntosEspectro(fino, display);
 
         // Sin datos no se dibuja una curva falsa: se dice que no los hay.
         if (puntos.length < 2) {
@@ -2186,15 +2433,25 @@
         // --- Escala ---------------------------------------------------------
         // El 0 es el cuerpo del tema (200 Hz–2 kHz), no su banda más alta. Ver
         // el comentario largo de V2_CORREDOR: anclar al pico dejaba el corredor
-        // ciego al exceso de grave. En la vista ponderada no hay corredor, así
-        // que ahí se ancla al pico y el rótulo lo dice.
-        const ref = pond ? Math.max(...puntos.map(p => p.v)) : v2Referencia(puntos);
-        const ARRIBA = pond ? 0 : 18;
-        const RANGO = pond ? 36 : 42;
+        // ciego al exceso de grave justo donde más importa.
+        //
+        // La ventana es +24…−30 (54 dB). Con la de antes (+18…−24) cada valle
+        // de la curva parecía un precipicio y había tracks reales que se
+        // recortaban planos contra el techo (medido: +18.5 en 50 Hz). El
+        // margen extra comprime la curva un 22 % — mismo dato, menos drama —
+        // y deja sitio de sobra por arriba. Es dibujo: el veredicto no mira
+        // esta ventana.
+        const ref = v2Referencia(puntos);
+        const ARRIBA = 24, RANGO = 54;
         const PASO = 6;
         const F0 = 20, F1 = 16000;
-        // AIRE deja sitio arriba al rótulo del eje y a la cápsula del corredor.
-        const H = 100, AIRE = 19, PIE = 6;
+        // AIRE es el margen de arriba y PIE el de abajo, en % de la caja. El de
+        // arriba baja de 19 a 11: con la leyenda del corredor movida a la
+        // esquina ya no hay nada que alojar ahí, y esos 8 puntos eran hueco
+        // vacío entre el techo y el punto más alto del corredor (que cae en
+        // 13 %). El de abajo sube a 9 porque las etiquetas de frecuencia se han
+        // metido dentro de la caja.
+        const H = 100, AIRE = 11, PIE = 9;
         const util = H - AIRE - PIE;
         const CANAL = 40;   // px del canal de etiquetas de nivel
 
@@ -2207,40 +2464,30 @@
         const curva = v2CurvaSuave(pts);
 
         // --- El corredor de referencia --------------------------------------
-        // Percentiles reales del corpus (ver V2_CORREDOR). Solo sobre la medida
-        // sin ponderar: se construyó así, y superponerlo a la curva ponderada
-        // compararía dos cosas distintas.
-        const corr = pond ? null : (() => {
+        // Percentiles reales del corpus (ver V2_CORREDOR), medidos por este
+        // mismo camino. Es la única medida que hay: no queda ninguna otra
+        // lectura del espectro con la que se pueda confundir.
+        const corr = (() => {
             const arriba = V2_CORREDOR.map(c => [x(c.hz), y(c.hi)]);
             const abajo = V2_CORREDOR.map(c => [x(c.hz), y(c.lo)]);
-            const medi = V2_CORREDOR.map(c => [x(c.hz), y(c.med)]);
-            // La mitad central (p25-p75): más densa porque ahí cae más gente.
-            const arriba2 = V2_CORREDOR.map(c => [x(c.hz), y(c.hi2)]);
-            const abajo2 = V2_CORREDOR.map(c => [x(c.hz), y(c.lo2)]);
-            // Altura del borde alto en la posición donde irá la cápsula, para
-            // que cuelgue de la banda y no del techo de la caja (ahí chocaba con
-            // la ficha técnica de la esquina).
-            const altoEn = px => {
-                const c = V2_CORREDOR.reduce((mejor, cur) =>
-                    Math.abs(x(cur.hz) - px) < Math.abs(x(mejor.hz) - px) ? cur : mejor);
-                return y(c.hi);
-            };
             return {
-                altoEn,
-                area: v2PathCorredor(arriba, abajo),
-                nucleo: v2PathCorredor(arriba2, abajo2),
+                capas: v2NubeCorredor(x, y),
+                // El centro estadístico, como banda p40-p60 difuminada y no
+                // como línea: una mediana a trazos se leía como un dato más
+                // que consultar, y solo es el "por aquí pasa el medio de la
+                // distribución". Una lomita de densidad lo dice sin hablar.
+                nucleo: v2PathCorredor(
+                    V2_CORREDOR.map(c => [x(c.hz), y(v2PctCorredor(c, 60))]),
+                    V2_CORREDOR.map(c => [x(c.hz), y(v2PctCorredor(c, 40))])),
                 borde: v2CurvaSuave(arriba),
                 bordeBajo: v2CurvaSuave(abajo),
-                mediana: v2CurvaSuave(medi),
-                centroX: (x(V2_CORREDOR[0].hz) + x(V2_CORREDOR[V2_CORREDOR.length - 1].hz)) / 2,
-                topeY: Math.min(...arriba.map(p => p[1])),
             };
         })();
 
         // --- Tramos con desviación real -------------------------------------
         // Solo se tiñen los tramos que el motor ya ha marcado. Sin rachas, la
         // curva entera se queda blanca: la estética no fabrica problemas.
-        const comp = pond ? null : veredicto;
+        const comp = veredicto;
         const rachas = (comp && comp.rachas) || [];
         const tramos = rachas.map(r => {
             const dentro = rel.filter(p => p.f >= r.desde && p.f <= r.hasta);
@@ -2256,8 +2503,6 @@
             };
         }).filter(Boolean);
         const aviso = rachas.length ? rachas[0] : null;
-        // La cápsula del corredor se aparta del señalador del aviso.
-        const capsulaX = !aviso ? 50 : (x(aviso.pico.f) < 50 ? 68 : 30);
 
         // --- Marcas del motor (frecuencia áspera) ---------------------------
         const marcasReales = (marcas || []).filter(m => m && m.f > 20 && m.f <= F1);
@@ -2277,39 +2522,35 @@
 
         return (
             <div>
-                <div className="flex flex-col items-start gap-2 mb-4
-                                sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-                    <span className="rotulo-v2"
-                          style={{ fontSize: '10px', letterSpacing: '.14em', color: '#8e8e97' }}>
-                        {pond ? 'Compensado al oído' : 'Espectro, como tu analizador'}
-                    </span>
-                    <div className="flex rounded-md overflow-hidden shrink-0"
-                         style={{ border: '1px solid #2f2f2f' }}>
-                        {[[true, 'Oído'], [false, 'Espectro']].map(([v, et]) => (
-                            <button key={et} onClick={() => setPond(v)}
-                                    aria-pressed={pond === v}
-                                    className="px-2.5 py-1 transition"
-                                    style={{
-                                        fontSize: '10px', letterSpacing: '.07em',
-                                        textTransform: 'uppercase', fontWeight: 700,
-                                        background: pond === v ? '#15171a' : 'transparent',
-                                        color: pond === v ? '#f2f2f2' : '#686870',
-                                        boxShadow: pond === v ? `inset 0 0 0 1px ${V2_MORADO}` : 'none',
-                                    }}>
-                                {et}
-                            </button>
-                        ))}
-                    </div>
-                </div>
+                {/* Aquí vivía la fila "Espectro, como tu analizador" con el
+                    conmutador Oído/Espectro. Retirado el conmutador, la fila se
+                    quedaba con un rótulo solo a la izquierda y medio ancho
+                    vacío a la derecha, y costaba 30 px de la cabecera que
+                    justamente había que apretar. Lo que decía sigue dicho: la
+                    ficha de la esquina lleva el "+4.5 dB/oct" —la convención de
+                    SPAN y Pro-Q— y "Cómo leer este gráfico" lo desarrolla. */}
 
+                {/* Alto por proporción y no fijo. Con 292 px clavados, en una
+                    tarjeta a todo lo ancho el gráfico salía a 4:1 —un panorama
+                    en el que 10 dB de diferencia se veían como una ondulación—
+                    mientras que en móvil quedaba casi cuadrado. Atado al ancho,
+                    la pendiente de la curva significa lo mismo en cualquier
+                    pantalla. Los topes evitan los dos extremos: que en móvil se
+                    quede en una tira y que en un monitor ancho ocupe la
+                    pantalla entera. */}
                 <div className="relative rounded-lg overflow-hidden"
-                     style={{ background: '#15171a', border: '1px solid #212429', height: 292 }}>
+                     style={{ background: '#15171a', border: '1px solid #212429',
+                              // El ancho va explícito: sin él, al morder el tope de
+                              // alto el navegador estrecha también la caja para
+                              // conservar la proporción y deja un hueco a la derecha.
+                              width: '100%', aspectRatio: '2.4 / 1',
+                              minHeight: 250, maxHeight: 470 }}>
 
                     {/* Canal de niveles. En HTML: el SVG se estira a lo ancho y
                         cualquier texto dentro saldría deformado. */}
                     <div className="absolute left-0 top-0 bottom-0 z-10" style={{ width: CANAL }}>
                         <span className="absolute cifra-v2"
-                              style={{ left: 8, top: 10, fontSize: '8.5px', color: '#5c5c65' }}>
+                              style={{ left: 8, top: 9, fontSize: '8.5px', color: '#55555e' }}>
                             dB
                         </span>
                         {escalones.map(db => (
@@ -2332,23 +2573,41 @@
                                      : `Espectro fuera de la referencia en ${comp.rachas.map(r => r.zona).join(', ')}`)
                                  : 'Espectro del track'}>
                             <defs>
-                                <linearGradient id="v2corrGrad" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor={V2_MORADO} stopOpacity="0.085" />
-                                    <stop offset="100%" stopColor={V2_MORADO} stopOpacity="0.025" />
-                                </linearGradient>
                                 {/* El corredor se desvanece por debajo de 50 Hz, que es
                                     donde deja de juzgarse: ahí mide más de 20 dB de ancho
                                     y no distingue nada. Además era la mancha más pesada
-                                    del gráfico, justo en la zona que menos informa. */}
+                                    del gráfico, justo en la zona que menos informa.
+                                    Por la derecha se remata con una pluma corta —poco más
+                                    de una banda— solo para que el corredor no termine en
+                                    un tajo vertical. Es acabado, no recorte: donde el
+                                    corredor deja de opinar sigue siendo 12.5 kHz. */}
                                 <linearGradient id="v2corrFade" x1="0" y1="0" x2="1" y2="0"
                                                 gradientUnits="objectBoundingBox">
+                                    {/* La rampa del subgrave es cóncava a propósito: entre
+                                        20 y 40 Hz apenas levanta y solo llega a plena
+                                        opacidad en 50, donde empieza a juzgarse. Lineal, el
+                                        corredor —que ahí es anchísimo— pesaba en pantalla
+                                        más que la zona que sí opina. */}
                                     <stop offset="0%" stopColor="#fff" stopOpacity="0" />
+                                    <stop offset={`${x(31.5) / 100}`}
+                                          stopColor="#fff" stopOpacity="0.14" />
+                                    <stop offset={`${x(40) / 100}`}
+                                          stopColor="#fff" stopOpacity="0.4" />
                                     <stop offset={`${x(V2_VEREDICTO_DESDE) / 100}`}
                                           stopColor="#fff" stopOpacity="1" />
-                                    <stop offset="100%" stopColor="#fff" stopOpacity="1" />
+                                    <stop offset={`${x(11000) / 100}`}
+                                          stopColor="#fff" stopOpacity="1" />
+                                    <stop offset={`${x(12500) / 100}`}
+                                          stopColor="#fff" stopOpacity="0" />
+                                    <stop offset="100%" stopColor="#fff" stopOpacity="0" />
                                 </linearGradient>
-                                <filter id="v2corrHalo" x="-5%" y="-15%" width="110%" height="130%">
-                                    <feGaussianBlur stdDeviation="0.25 1.3" />
+                                {/* Difuminado leve sobre la nube entera. La caja se
+                                    estira, así que el radio va desigual a propósito: en X
+                                    un punto de viewBox vale muchos más píxeles que en Y, y
+                                    con el mismo número el borde de arriba saldría nítido
+                                    y los laterales borrosos. */}
+                                <filter id="v2corrHalo" x="-6%" y="-18%" width="112%" height="136%">
+                                    <feGaussianBlur stdDeviation="0.075 0.32" />
                                 </filter>
                                 <mask id="v2corrMask" maskUnits="userSpaceOnUse"
                                       x="0" y="0" width="100" height={H}>
@@ -2356,57 +2615,67 @@
                                 </mask>
                             </defs>
 
+                            {/* Rejilla al mínimo legible. Las verticales llegan hasta el
+                                pie de la caja pero no lo cruzan, para que las cifras de
+                                frecuencia no queden tachadas. */}
                             {finas.map(f => (
-                                <line key={f} x1={x(f)} x2={x(f)} y1="0" y2={H}
-                                      stroke="#1b1d21" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+                                <line key={f} x1={x(f)} x2={x(f)} y1="0" y2={H - PIE}
+                                      stroke="#1a1c20" strokeWidth="1" vectorEffect="non-scaling-stroke" />
                             ))}
                             {rotuladas.map(f => (
-                                <line key={f} x1={x(f)} x2={x(f)} y1="0" y2={H}
-                                      stroke="#1f2227" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+                                <line key={f} x1={x(f)} x2={x(f)} y1="0" y2={H - PIE}
+                                      stroke="#1e2126" strokeWidth="1" vectorEffect="non-scaling-stroke" />
                             ))}
                             {escalones.map(db => (
                                 <line key={db} x1="0" x2="100" y1={y(db)} y2={y(db)}
-                                      stroke={db === 0 ? '#2d3037' : '#1f2126'} strokeWidth="1"
+                                      stroke={db === 0 ? '#30333b' : '#202227'} strokeWidth="1"
                                       vectorEffect="non-scaling-stroke"
-                                      strokeDasharray={db === 0 ? '' : '1 7'} />
+                                      strokeDasharray={db === 0 ? '' : '1 9'} />
                             ))}
 
-                            {/* Cuatro capas para que se lea como UNA nube y no como
-                                franjas: halo difuminado, banda exterior (5-95), núcleo
-                                (25-75, donde cae la mitad) y mediana. Ninguna tiene
-                                borde marcado salvo un filo tenue arriba, así que no
-                                aparecen escalones entre capas. */}
+                            {/* Catorce capas de igual opacidad entre percentiles cada vez
+                                más juntos. Se suman hacia el centro y se quedan solas en
+                                los extremos, así que la nube se apaga sola hacia el 5 y
+                                el 95 sin degradado postizo y sin escalón entre franjas.
+                                Los filos de fuera quedan como un susurro: tienen que
+                                poder localizarse si alguien los busca —son el límite que
+                                juzga— pero no dibujar una caja. */}
                             {corr && (
                                 <g className="v2-corredor" mask="url(#v2corrMask)">
-                                    <path d={corr.area} fill={V2_MORADO} fillOpacity="0.09"
-                                          filter="url(#v2corrHalo)" />
-                                    <path d={corr.area} fill="url(#v2corrGrad)" />
-                                    <path d={corr.nucleo} fill={V2_MORADO} fillOpacity="0.10"
-                                          filter="url(#v2corrHalo)" />
-                                    <path d={corr.borde} fill="none" stroke="#9d86d8"
-                                          strokeOpacity="0.22" strokeWidth="1"
-                                          vectorEffect="non-scaling-stroke" />
-                                    <path d={corr.bordeBajo} fill="none" stroke="#9d86d8"
-                                          strokeOpacity="0.10" strokeWidth="1"
-                                          vectorEffect="non-scaling-stroke" />
-                                    <path d={corr.mediana} fill="none" stroke="#a596cf"
-                                          strokeOpacity="0.16" strokeWidth="1"
-                                          strokeDasharray="2 7" vectorEffect="non-scaling-stroke" />
+                                    <g filter="url(#v2corrHalo)">
+                                        {corr.capas.map((c, k) => (
+                                            <path key={k} d={c.path} fill={V2_NUBE}
+                                                  fillOpacity={c.op.toFixed(3)} />
+                                        ))}
+                                        <path d={corr.nucleo} fill={V2_NUBE} fillOpacity="0.07" />
+                                        <path d={corr.borde} fill="none" stroke="#a191d0"
+                                              strokeOpacity="0.12" strokeWidth="1"
+                                              vectorEffect="non-scaling-stroke" />
+                                        <path d={corr.bordeBajo} fill="none" stroke="#a191d0"
+                                              strokeOpacity="0.07" strokeWidth="1"
+                                              vectorEffect="non-scaling-stroke" />
+                                    </g>
                                 </g>
                             )}
 
                             {/* La curva. Blanca por defecto; los tramos marcados por el
-                                motor se repintan encima con su color de severidad. */}
-                            <path className="v2-curva" d={curva} fill="none" stroke="#eef0f2"
-                                  strokeWidth="1.7" vectorEffect="non-scaling-stroke"
+                                motor se repintan encima con su color de severidad.
+                                El halo va en dos pasadas de `drop-shadow` en vez de un
+                                filtro SVG: `drop-shadow` trabaja en píxeles de pantalla,
+                                así que no se deforma con la caja como sí le pasaría a un
+                                feGaussianBlur dentro de un viewBox estirado. La cercana
+                                pega la línea al fondo, la lejana la posa sobre la nube. */}
+                            <path className="v2-curva" d={curva} fill="none" stroke="#e9ecef"
+                                  strokeWidth="1.55" vectorEffect="non-scaling-stroke"
                                   strokeLinejoin="round" strokeLinecap="round"
-                                  style={{ filter: 'drop-shadow(0 0 2px rgba(238,240,242,.16))' }} />
+                                  style={{ filter: 'drop-shadow(0 0 1px rgba(233,236,239,.13)) '
+                                                 + 'drop-shadow(0 0 3px rgba(206,218,236,.03))' }} />
                             {/* Mismo grosor que la curva base, no más: teñir un
                                 tramo ya lo destaca, engordarlo lo convierte en el
                                 protagonista del gráfico. */}
                             {tramos.map(t => (
                                 <path key={t.clave} d={t.d} fill="none" stroke={t.color}
-                                      strokeWidth="1.7" vectorEffect="non-scaling-stroke"
+                                      strokeWidth="1.55" vectorEffect="non-scaling-stroke"
                                       strokeLinejoin="round" strokeLinecap="round" />
                             ))}
 
@@ -2425,47 +2694,57 @@
                         </svg>
                     </div>
 
-                    {/* Cápsula del corredor, centrada sobre su borde alto. */}
+                    {/* Leyenda del corredor. Antes era una cápsula colgada de su borde
+                        alto y, aunque flotaba sobre la nube, se leía como el nombre de
+                        la frecuencia que tenía justo debajo. Aquí es una clave: la
+                        muestra repite el degradado de la nube —tenue, densa, tenue— así
+                        que nombra la mancha entera y ninguna zona en concreto. */}
                     {corr && (
-                        <span className="absolute rotulo-v2"
-                              style={{
-                                  // Se coloca en el lado contrario a la anotación:
-                                  // en el centro se tocaban.
-                                  left: `calc(${CANAL}px + ${capsulaX}% * (100% - ${CANAL}px) / 100%)`,
-                                  top: `calc(${Math.max(8, corr.altoEn(capsulaX) - 11)}% )`,
-                                  transform: 'translateX(-50%)', whiteSpace: 'nowrap',
-                                  fontSize: '8.5px', letterSpacing: '.1em', fontWeight: 600,
-                                  color: '#a79bc9',
-                                  background: 'rgba(109,16,255,.10)',
-                                  border: '1px solid rgba(157,134,216,.22)',
-                                  borderRadius: 999, padding: '3px 11px',
-                              }}>
-                            Rango de referencia
+                        <span className="absolute flex items-center gap-2"
+                              style={{ left: CANAL + 4, top: 9, pointerEvents: 'none' }}>
+                            <span style={{ width: 17, height: 9, borderRadius: 3,
+                                           // Los mismos valores que alcanza la nube:
+                                           // si la muestra no se le pareciera, la
+                                           // leyenda no serviría de leyenda.
+                                           background: 'linear-gradient(180deg,'
+                                                     + ' rgba(139,124,204,.06) 0%,'
+                                                     + ' rgba(139,124,204,.50) 50%,'
+                                                     + ' rgba(139,124,204,.06) 100%)',
+                                           boxShadow: 'inset 0 0 0 1px rgba(161,145,208,.14)' }} />
+                            <span style={{ fontSize: '8.5px', letterSpacing: '.11em',
+                                           fontWeight: 600, textTransform: 'uppercase',
+                                           whiteSpace: 'nowrap', color: '#8b80aa' }}>
+                                Rango de referencia
+                            </span>
                         </span>
                     )}
 
-                    {/* Ficha técnica: visible para quien la entiende, secundaria para el resto. */}
                     {/* Ficha técnica: legible para quien la entiende, secundaria
                         para el resto. Dice de qué son los dB del eje, que con el
-                        0 en el cuerpo del tema no es evidente. */}
+                        0 en el cuerpo del tema no es evidente, y con qué
+                        inclinación se dibuja, que es la que permite cotejar el
+                        gráfico con el analizador del DAW. */}
                     <span className="absolute cifra-v2"
                           style={{ right: 12, top: 10, fontSize: '8.5px',
-                                   letterSpacing: '.03em', color: '#4a4a53' }}>
+                                   letterSpacing: '.03em', color: '#474750' }}>
                         {/* En estrecho solo la parte imprescindible: la completa
                             no cabe en 390 px y se montaba sobre la anotación. */}
-                        <span className="hidden sm:inline">
-                            {pond ? 'bajo el pico' : 'sobre el cuerpo del tema'}{' · '}
-                        </span>
+                        <span className="hidden sm:inline">sobre el cuerpo del tema · </span>
                         {detallado ? '1/3 de octava' : '6 bandas'}
-                        {!pond && <span className="hidden sm:inline"> · +4.5 dB/oct</span>}
+                        <span className="hidden sm:inline"> · +4.5 dB/oct</span>
                     </span>
 
                     {/* El señalador del aviso, en HTML: dentro del SVG el círculo
                         saldría ovalado y el texto deformado. */}
                     {aviso && (() => {
                         const izq = `calc(${CANAL}px + ${x(aviso.pico.f)}% * (100% - ${CANAL}px) / 100%)`;
-                        const arr = `${Math.min(84, Math.max(14, y(aviso.pico.v)))}%`;
+                        const alto = Math.min(82, Math.max(14, y(aviso.pico.v)));
+                        const arr = `${alto}%`;
                         const aLaDerecha = x(aviso.pico.f) > 56;
+                        // Si el pico va alto, la anotación baja: encima del todo
+                        // chocaría con la leyenda del corredor, que vive en esa
+                        // esquina y no se puede mover a ningún otro sitio.
+                        const debajo = alto < 30;
                         return (
                             <React.Fragment>
                                 <span className="absolute"
@@ -2475,7 +2754,8 @@
                                                border: `1.2px solid ${V2_COLOR.aviso}`,
                                                pointerEvents: 'none' }} />
                                 <span className="absolute"
-                                      style={{ left: izq, top: `calc(${arr} - 40px)`,
+                                      style={{ left: izq,
+                                               top: `calc(${arr} ${debajo ? '+ 14px' : '- 40px'})`,
                                                transform: aLaDerecha ? 'translateX(-100%)' : 'none',
                                                marginLeft: aLaDerecha ? -9 : 9,
                                                fontSize: '9.5px', lineHeight: 1.5,
@@ -2492,22 +2772,26 @@
                             </React.Fragment>
                         );
                     })()}
-                </div>
 
-                <div className="relative h-4 mt-1.5" style={{ marginLeft: CANAL }}>
-                    {rotuladas.map((f, i) => (
-                        <span key={f}
-                              className={'absolute cifra-v2 ' + (esenciales.has(f) ? '' : 'hidden sm:inline')}
-                              style={{ left: `${x(f)}%`,
-                                       transform: i === 0 ? 'translateX(0)'
-                                                 : i === rotuladas.length - 1 ? 'translateX(-100%)'
-                                                 : 'translateX(-50%)',
-                                       fontSize: '9px', color: '#686870' }}>
-                            {etiquetaHz(f)}
-                        </span>
-                    ))}
+                    {/* La escala de frecuencia, dentro de la caja. Fuera quedaba
+                        flotando debajo del marco y el gráfico no se leía como una
+                        pieza cerrada. El pie del SVG (PIE) le reserva su franja y las
+                        verticales de la rejilla se paran ahí, así que nada la cruza. */}
+                    <div className="absolute" style={{ left: CANAL, right: 0, bottom: 7, height: 11 }}>
+                        {rotuladas.map((f, i) => (
+                            <span key={f}
+                                  className={'absolute cifra-v2 ' + (esenciales.has(f) ? '' : 'hidden sm:inline')}
+                                  style={{ left: `${x(f)}%`,
+                                           transform: i === 0 ? 'translateX(0)'
+                                                     : i === rotuladas.length - 1 ? 'translateX(-100%)'
+                                                     : 'translateX(-50%)',
+                                           fontSize: '9px', color: '#63636c' }}>
+                                {etiquetaHz(f)}
+                            </span>
+                        ))}
+                    </div>
                     <span className="absolute cifra-v2"
-                          style={{ right: 2, top: 13, fontSize: '8px', color: '#4e4e57' }}>Hz</span>
+                          style={{ right: 11, bottom: 20, fontSize: '8px', color: '#494952' }}>Hz</span>
                 </div>
 
                 {marcasReales.map((m, k) => (
@@ -2545,6 +2829,72 @@
                         );
                     })}
                 </div>
+            </div>
+        );
+    }
+
+    /** Tutorial destacado de la cabecera v2. Ocupa el hueco del CTA de
+     *  Relesit cuando el track todavía no está para buscar sello: si hay
+     *  trabajo que hacer, lo útil no es una derivación sino el tutorial de
+     *  Producción Online que enseña a hacerlo — el primero del mapa del
+     *  diagnóstico principal, que es el que mejor se ajusta.
+     *
+     *  El player de YouTube no se incrusta hasta que el usuario pulsa: la
+     *  página no carga scripts de terceros en cada informe, y el clic pasa
+     *  por el MISMO tracking que los tutoriales de la lista (la métrica del
+     *  dashboard sigue midiendo lo mismo). Tras el clic, reproduce aquí.
+     */
+    function V2TutorialDestacado({ tut, diagId, userEmail }) {
+        const [reproduciendo, setReproduciendo] = useState(false);
+        const vid = (tut.url.match(/[?&]v=([\w-]{11})/) || [])[1];
+        const registrar = () => {
+            try { trackEvent('tutorial_clicked', { diagnostico: diagId, tutorial: tut.titulo }); } catch (e) {}
+            try {
+                fetch(`${API_URL}/api/sheets/tutorial-click`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: userEmail || '', tutorial_clickado: tut.titulo }),
+                }).catch(() => {});
+            } catch (e) {}
+        };
+        return (
+            <div className="card p-5 h-full flex flex-col">
+                <div className="rotulo-v2 mb-3">Tutorial recomendado</div>
+                <div className="relative rounded-lg overflow-hidden"
+                     style={{ background: '#101015', aspectRatio: '16 / 9' }}>
+                    {reproduciendo && vid ? (
+                        <iframe src={`https://www.youtube-nocookie.com/embed/${vid}?autoplay=1&rel=0`}
+                                title={tut.titulo} className="absolute inset-0 w-full h-full"
+                                style={{ border: 0 }}
+                                allow="autoplay; encrypted-media; picture-in-picture"
+                                allowFullScreen />
+                    ) : (
+                        <button type="button" className="absolute inset-0 w-full h-full group"
+                                style={{ padding: 0, border: 0, background: 'transparent', cursor: 'pointer' }}
+                                onClick={() => {
+                                    registrar();
+                                    if (vid) setReproduciendo(true);
+                                    else window.open(tut.url, '_blank', 'noopener');
+                                }}
+                                aria-label={`Ver tutorial: ${tut.titulo}`}>
+                            {vid && (
+                                <img src={`https://i.ytimg.com/vi/${vid}/hqdefault.jpg`} alt="" loading="lazy"
+                                     className="absolute inset-0 w-full h-full object-cover opacity-85 group-hover:opacity-100 transition" />
+                            )}
+                            <span className="absolute inset-0 flex items-center justify-center">
+                                <span className="w-12 h-12 rounded-full flex items-center justify-center transition"
+                                      style={{ background: 'rgba(0,0,0,0.62)' }}>
+                                    <span style={{ width: 0, height: 0, marginLeft: '3px',
+                                                   borderTop: '8px solid transparent',
+                                                   borderBottom: '8px solid transparent',
+                                                   borderLeft: '14px solid #fff' }} />
+                                </span>
+                            </span>
+                        </button>
+                    )}
+                </div>
+                <p className="text-white text-sm font-medium leading-snug mt-3">{tut.titulo}</p>
+                <p className="text-gray-500 text-xs mt-1 leading-snug">{tut.descripcion}</p>
             </div>
         );
     }
@@ -2771,14 +3121,13 @@
         const m = d.mono_compat || {};
         const h = d.harshness || {};
         const disp = d.espectro_display || {};
-        const dispP = d.espectro_display_pond || {};
         const vent = d.espectro_ventana || {};
         const fino = d.espectro_fino || {};
         // El veredicto lo produce el propio gráfico, comparando con el corredor
         // de referencia. Así la palabra y la curva salen de la MISMA medida: era
         // el fallo de antes, que el rótulo decía "elevado" mientras el gráfico
         // se veía recto, porque venían de sitios distintos.
-        const veredicto = v2VeredictoEspectro(fino, disp, dispP);
+        const veredicto = v2VeredictoEspectro(fino, disp);
         const tonoBalance = veredicto
             ? (veredicto.dentro ? 'ok' : 'aviso')
             : v2TonoEstado('balance_grave', d.balance_grave);
@@ -2794,15 +3143,15 @@
                 <V2Tarjeta ancho="lg:col-span-2 xl:col-span-3"
                            titulo="Balance espectral" tono={tonoBalance}
                            datos={veredicto ? (
-                               <div className="rounded-lg px-5 py-3 text-right"
-                                    style={{ border: `1px solid ${V2_COLOR[tonoBalance]}38`,
-                                             background: `${V2_COLOR[tonoBalance]}09` }}>
-                                   <div style={{ fontSize: '8.5px', fontWeight: 600,
-                                                 letterSpacing: '.16em', textTransform: 'uppercase',
-                                                 color: '#6e6e78', marginBottom: 3 }}>Referencia</div>
+                               <div className="rounded-lg px-4 py-2 text-right"
+                                    style={{ border: `1px solid ${V2_COLOR[tonoBalance]}33`,
+                                             background: `${V2_COLOR[tonoBalance]}0a` }}>
+                                   <div style={{ fontSize: '8px', fontWeight: 600,
+                                                 letterSpacing: '.17em', textTransform: 'uppercase',
+                                                 color: '#6a6a74', marginBottom: 2 }}>Referencia</div>
                                    <div style={{ color: V2_COLOR[tonoBalance], fontWeight: 600,
-                                                 fontSize: '18px', lineHeight: 1.1,
-                                                 letterSpacing: '.045em', textTransform: 'uppercase' }}>
+                                                 fontSize: '17px', lineHeight: 1.05,
+                                                 letterSpacing: '.05em', textTransform: 'uppercase' }}>
                                        {veredicto.dentro ? 'Dentro' : 'Fuera'}
                                    </div>
                                </div>
@@ -2811,10 +3160,10 @@
                                        tono={tonoBalance} />
                            )}>
                     {(Object.keys(disp).length > 0 || (fino.bandas || []).length > 0)
-                        ? <V2Espectro2 display={disp} displayPond={dispP} fino={fino} ventana={vent}
+                        ? <V2Espectro2 display={disp} fino={fino} ventana={vent}
                                        veredicto={veredicto} />
                         : <V2Espectro grave={sg.db_grave} media={sg.db_media} aguda={sg.db_aguda} />}
-                    <div className="flex items-start gap-3 mt-5">
+                    <div className="flex items-start gap-3 mt-4">
                         <V2IconoOnda />
                         <p style={{ fontSize: '11px', lineHeight: 1.65, color: '#7c7c86' }}>
                             {vent && !vent.track_completo
@@ -2824,7 +3173,7 @@
                     </div>
                     {veredicto ? (
                         <div className="flex items-start gap-3 mt-4 pt-4"
-                             style={{ borderTop: '1px solid #212429' }}>
+                             style={{ borderTop: '1px solid #26292f' }}>
                             {veredicto.dentro
                                 ? <V2IconoCheck color={V2_COLOR.ok} />
                                 : <V2IconoAviso color={V2_COLOR.aviso} />}
@@ -2909,13 +3258,12 @@
                         <p>La montaña de 50–60 Hz sigue ahí y está bien que siga: es el bombo, y es el
                            género. Lo que hay que mirar no es que exista, sino
                            <span className="text-gray-300"> cuánto sobresale</span> sobre el resto.</p>
-                        <p>La vista <span className="text-gray-300">Oído</span> es otra cosa: aplica
-                           las curvas isofónicas de Fletcher y Munson, que describen cuánta energía
-                           hace falta en cada zona para que se perciba igual de fuerte. Se parece más
-                           a lo que oyes; se parece menos a lo que mide un analizador.</p>
-                        <p className="text-gray-500">Letra pequeña: en Oído se usa la ponderación A, la
-                           forma normalizada de la curva de 40 fon — volumen de escucha moderado. A
-                           volumen de club el oído es más plano, así que compensa de más.</p>
+                        <p className="text-gray-500">Antes había una segunda vista, «Oído», que
+                           compensaba el gráfico con la curva de sensibilidad del oído. Se ha
+                           quitado: comprobado sobre los 322 temas de la referencia, acababa
+                           diciendo lo mismo que esta. Y la curva que usaba está calibrada para
+                           escuchar bajito — a volumen de club el oído es bastante más plano, así
+                           que corregía de más.</p>
                         <p className="text-gray-500">Qué es exactamente la referencia: 322 previews
                            de catálogo de 120 s de 26 sellos, con el género tomado del sello y no del
                            tema. La mezcla no es neutra — el 40 % es progressive house y no hay
@@ -2997,7 +3345,7 @@
                     {/* La barra solo cuando hay pico que señalar: sin aspereza
                         repetiría la de arriba sin añadir nada. */}
                     {h.tiene_harshness && h.peak_freq_hz > 0 && Object.keys(disp).length > 0 && (
-                        <V2Espectro2 display={disp} displayPond={dispP} fino={fino} ventana={vent}
+                        <V2Espectro2 display={disp} fino={fino} ventana={vent}
                             marcas={[{ f: h.peak_freq_hz, color: V2_COLOR.aviso,
                                        texto: `Pico áspero en ${h.peak_freq_hz} Hz${h.zona_problema ? ` · ${h.zona_problema}` : ''}` }]} />
                     )}
@@ -3517,9 +3865,20 @@
                               && r.estado_track !== 'verde';
             const tarjetaRelesit = esRelesit ? (
                 <RelesitCTA diagId={diagId} estado={r.estado_track} userEmail={userEmail}
-                            bpm={d && d.bpm}
+                            bpm={d && d.bpm} clase="h-full"
                             genero={contexto && (contexto.genero === 'otro' ? (contexto.genero_custom || '') : contexto.genero)} />
             ) : null;
+            // La columna derecha de la cabecera: Relesit si el track está para
+            // sello; si no, el tutorial que mejor encaja (el primero del mapa
+            // del diagnóstico principal). Gracias al fallback 'sin_diagnostico'
+            // del mapa, este hueco no queda vacío nunca.
+            const tutorialDestacadoV2 = !esRelesit && allTutoriales.length > 0 ? allTutoriales[0] : null;
+            const bloqueDerechoV2 = tarjetaRelesit || (tutorialDestacadoV2
+                ? <V2TutorialDestacado tut={tutorialDestacadoV2} diagId={diagId} userEmail={userEmail} />
+                : null);
+            // Si el destacado es un tutorial, la lista de abajo no lo repite.
+            const listaTutorialesV2 = tutorialDestacadoV2
+                ? allTutoriales.slice(1, 4) : allTutoriales.slice(0, 3);
             const derivacionV2 = esRelesit ? null : (
                 <MasterCTA diagId={diagId} variante={masterCta.variante}
                            categoria={masterCta.categoria} userEmail={userEmail} />
@@ -3528,11 +3887,11 @@
             // Tutoriales: en la vista clásica están tras un botón al final del
             // informe. Aquí se enseñan directamente — que estuvieran escondidos
             // es una de las hipótesis de por qué solo los usa el 4,6 %.
-            const tutorialesV2 = allTutoriales.length > 0 ? (
+            const tutorialesV2 = listaTutorialesV2.length > 0 ? (
                 <div className="card p-5">
                     <div className="rotulo-v2 mb-3">Tutoriales para esto</div>
                     <ul className="space-y-3">
-                        {allTutoriales.slice(0, 3).map((tut, i) => {
+                        {listaTutorialesV2.map((tut, i) => {
                             const vid = (tut.url.match(/[?&]v=([\w-]{11})/) || [])[1];
                             return (
                                 <li key={i}>
@@ -3581,10 +3940,17 @@
                     <V2Nav onNuevo={onReset} onPanel={onAbrirPanel} onPerfil={onIrAPerfil}
                            sesionIniciada={sesionIniciada} />
                     <div className="max-w-7xl mx-auto px-4 sm:px-5 py-5">
-                        {/* Cabecera: estado, titular y las cifras que se miran
-                            de un vistazo, siempre visibles sin hacer scroll. */}
-                        <div className="card p-5 mb-4" style={{ borderTop: `2px solid ${cfgV2.color}` }}>
-                            <div className="flex flex-col xl:flex-row xl:items-center gap-4 justify-between">
+                        {/* Cabecera a dos columnas iguales: a la izquierda el
+                            veredicto con sus cifras, a la derecha la acción —
+                            Relesit si el track está para sello, y si no el
+                            tutorial que mejor encaja. A media pantalla los
+                            chips pasan bajo el titular, así que el bloque va
+                            en columna con las cifras abajo. */}
+                        <div className={bloqueDerechoV2
+                            ? 'grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4 items-stretch'
+                            : 'mb-4'}>
+                            <div className="card p-5 h-full flex flex-col justify-between gap-4"
+                                 style={{ borderTop: `2px solid ${cfgV2.color}` }}>
                                 <div className="min-w-0">
                                     <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                                         <span className="punto-v2" style={{ background: cfgV2.color }} />
@@ -3595,7 +3961,7 @@
                                         {r.diagnostico_principal.titulo}
                                     </h1>
                                 </div>
-                                <div className="flex gap-2 flex-wrap xl:justify-end xl:flex-shrink-0 min-w-0">
+                                <div className="flex gap-2 flex-wrap min-w-0">
                                     <V2Dato etiqueta="Duración" valor={d.duracion} />
                                     <V2Dato etiqueta="BPM" valor={d.bpm == null ? '—' : d.bpm} />
                                     <V2Dato etiqueta="LUFS" valor={loV2.lufs_integrado == null ? '—' : loV2.lufs_integrado} />
@@ -3606,9 +3972,8 @@
                                     <V2Dato etiqueta="Mono" valor={(d.mono_compat && d.mono_compat.nivel_compatibilidad) || '—'} />
                                 </div>
                             </div>
+                            {bloqueDerechoV2 && <div className="min-w-0">{bloqueDerechoV2}</div>}
                         </div>
-
-                        {tarjetaRelesit}
 
                         {/* min-w-0 y shrink-0: sin ellos la fila crece hasta caber
                             en vez de desplazarse, y en móvil la página entera se
@@ -6200,8 +6565,10 @@
                 {/* Botón Mi panel — siempre visible arriba a la derecha (no en panel).
                     En la vista v2 del diagnóstico NO se pinta: allí hay una barra
                     de navegación propia y este botón flotante se le encimaba en
-                    cuanto la ventana se estrechaba. */}
-                {screen !== 'panel' && !(screen === 'diagnostico' && usarVistaV2()) && (
+                    cuanto la ventana se estrechaba. En la portada tampoco: allí
+                    lo pinta LandingScreen dentro de su cabecera, alineado con el
+                    contenido — pegado a la esquina quedaba descolgado de todo. */}
+                {screen !== 'panel' && screen !== 'landing' && !(screen === 'diagnostico' && usarVistaV2()) && (
                     <div className="fixed top-4 right-4 z-40">
                         <button
                             onClick={handleOpenPanel}
@@ -6231,6 +6598,8 @@
                         onHistorial={() => setScreen('historial')}
                         historialCount={historialCount}
                         intencionCompartir={intencionCompartir}
+                        onPanel={handleOpenPanel}
+                        panelAuth={panelAuth}
                     />
                 )}
                 {screen === 'historial' && (

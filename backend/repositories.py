@@ -223,6 +223,25 @@ async def list_emails_migrated(pool: asyncpg.Pool) -> list[str]:
 
 
 @with_retry()
+async def avatares_portada(pool: asyncpg.Pool, n: int = 4) -> dict:
+    """La prueba social de la portada: unos pocos avatares reales y el total
+    de usuarios registrados. Van primero los que tienen foto (los más
+    recientes); si no llegan a `n`, se rellena con usuarios sin foto, de los
+    que solo sale la INICIAL — nunca el username completo ni el email."""
+    async with pool.acquire() as conn:
+        filas = await conn.fetch(
+            """SELECT perfil_foto, COALESCE(username, email) AS quien
+                 FROM usuarios
+                ORDER BY (perfil_foto IS NULL), fecha_registro DESC, id DESC
+                LIMIT $1""", n)
+        total = await conn.fetchval("SELECT COUNT(*) FROM usuarios")
+    avatares = [{"foto": f["perfil_foto"],
+                 "inicial": ((f["quien"] or "?").strip()[:1] or "?").upper()}
+                for f in filas]
+    return {"avatares": avatares, "total": int(total or 0)}
+
+
+@with_retry()
 async def stats_usuarios_migrated(pool: asyncpg.Pool) -> dict:
     """Inventario del cierre del cutover B. Devuelve cuántos usuarios tienen
     password_hash placeholder (__MIGRATED__) — los que todavía dependen del

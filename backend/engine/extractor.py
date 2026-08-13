@@ -333,8 +333,15 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None,
     #
     # Límite declarado: 40 fon es volumen de escucha moderado. A volumen de
     # club el oído es bastante más plano, así que la ponderación A exagera un
-    # poco la corrección del grave. Por eso se enseñan las dos vistas y no
-    # solo la ponderada.
+    # poco la corrección del grave.
+    #
+    # Desde ago-2026 la interfaz NO consume esta medida: la vista "Oído" se
+    # retiró porque decía lo mismo que la física (la desviación respecto al
+    # corredor correlacionaba 0.9994) y porque, anclada al pico, contradecía a
+    # la insignia en el 8 % de los casos. Se sigue calculando y publicando —
+    # cuesta microsegundos y es el dato crudo si la vista vuelve— pero hoy no
+    # la lee nadie. El porqué largo está en frontend/index.html, encima de
+    # V2Espectro2.
     def _ponderacion_a_db(f):
         f = np.asarray(f, dtype=np.float64)
         f2 = f ** 2
@@ -637,6 +644,7 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None,
         # `_pond` la pasa por la curva del oído (ponderación A, la forma
         # normalizada de la curva de 40 fon de Fletcher-Munson).
         "espectro_display": espectro_display,
+        # `_pond` ya no lo lee la interfaz; ver la nota de la ponderación arriba.
         "espectro_display_pond": espectro_display_pond,
         # El mismo dato con resolución de analizador: tercios de octava, leídos
         # del archivo a su frecuencia real (el análisis va a 22 kHz y ahí no

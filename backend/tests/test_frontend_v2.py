@@ -115,12 +115,20 @@ class TestNoDuplicaLoQueYaFunciona(unittest.TestCase):
 
     def test_relesit_va_arriba_cuando_el_track_esta_fino(self):
         """Si no hay nada urgente que arreglar, lo principal es "búscale
-        sello", no el plan de acción. Por eso sube sobre las pestañas."""
+        sello", no el plan de acción. Por eso vive en la cabecera, encima de
+        las pestañas: es la columna derecha del bloque del veredicto, y cuando
+        el track no está para sello ese mismo hueco lo ocupa el tutorial
+        recomendado — nunca queda vacío ni baja de ahí."""
         self.assertIn("const tarjetaRelesit", self.v2)
-        i = self.v2.find("{tarjetaRelesit}")
+        # Relesit alimenta la columna derecha de la cabecera…
+        self.assertIn("const bloqueDerechoV2 = tarjetaRelesit ||", self.v2)
+        # …que se pinta antes de las pestañas.
+        i = self.v2.find("{bloqueDerechoV2}")
         j = self.v2.find("V2_TABS.map")
-        self.assertGreater(i, 0, "no se pinta la tarjeta de Relesit")
-        self.assertLess(i, j, "Relesit tiene que ir ANTES de las pestañas")
+        self.assertGreater(i, 0, "no se pinta la columna derecha de la cabecera")
+        self.assertLess(i, j, "la cabecera tiene que ir ANTES de las pestañas")
+        # Y el tutorial destacado no se repite en la lista de abajo.
+        self.assertIn("allTutoriales.slice(1, 4)", self.v2)
 
     def test_hay_barra_de_navegacion_propia(self):
         """El botón flotante "Mi panel" se encimaba al contenido en cuanto la
