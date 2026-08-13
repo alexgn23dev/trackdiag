@@ -159,6 +159,12 @@
             font-size: 11px; font-weight: 700;
             display: inline-flex; align-items: center; justify-content: center;
         }
+        .avatar-home {
+            width: 36px; height: 36px; border-radius: 50%; flex: none;
+            border: 2px solid #12121a;
+            display: inline-flex; align-items: center; justify-content: center;
+        }
+        .avatar-home + .avatar-home { margin-left: -10px; }
         .pill-fmt {
             font-size: 12px; letter-spacing: .02em; color: var(--po-green);
             border: 1px solid rgba(37,244,100,0.3); border-radius: 999px;
@@ -530,7 +536,7 @@
         );
     }
 
-    function LandingScreen({ onFileSelected, onHistorial, historialCount, intencionCompartir }) {
+    function LandingScreen({ onFileSelected, onHistorial, historialCount, intencionCompartir, onPanel, panelAuth }) {
         const [isDragging, setIsDragging] = useState(false);
         const [file, setFile] = useState(null);
         const inputRef = useRef(null);
@@ -579,6 +585,37 @@
         // el total — Alex prefirió la frase sola, sin fotos). Mientras llega
         // o si la API no contesta, la frase va SIN cifra: un número que no
         // podemos respaldar es peor que no poner número.
+        // Los perfiles junto a la cifra son ILUSTRACIONES dibujadas aquí
+        // mismo, no fotos: un sello discográfico (vinilo), un DJ en cabina,
+        // un monitor de home studio y una inicial sin foto. Alex no quiere
+        // caras de stock que parezcan usuarios que no existen; la cifra de al
+        // lado sí es real (o no sale).
+        const trazoAvatar = { fill: 'none', stroke: 'rgba(255,255,255,0.92)', strokeWidth: 1.5,
+                              strokeLinecap: 'round', strokeLinejoin: 'round' };
+        const perfilesDecor = [
+            { titulo: 'Sello', fondo: 'linear-gradient(135deg, #45278f 0%, #241250 90%)',
+              dibujo: <svg width="19" height="19" viewBox="0 0 24 24" {...trazoAvatar}>
+                          <circle cx="12" cy="12" r="8.2" />
+                          <circle cx="12" cy="12" r="1.6" fill="rgba(255,255,255,0.92)" stroke="none" />
+                          <path d="M16.6 7.4a6.5 6.5 0 0 1 1.9 4.6" />
+                      </svg> },
+            { titulo: 'DJ', fondo: 'linear-gradient(135deg, #0e6e4f 0%, #06392a 90%)',
+              dibujo: <svg width="19" height="19" viewBox="0 0 24 24" {...trazoAvatar}>
+                          <circle cx="12" cy="6.6" r="2.4" />
+                          <path d="M7.6 13.6a4.6 4.6 0 0 1 8.8 0" />
+                          <line x1="3.6" y1="16.6" x2="20.4" y2="16.6" />
+                          <circle cx="7.6" cy="19.4" r="1.7" />
+                          <circle cx="16.4" cy="19.4" r="1.7" />
+                      </svg> },
+            { titulo: 'Home studio', fondo: 'linear-gradient(135deg, #9a5b16 0%, #4f2a08 90%)',
+              dibujo: <svg width="19" height="19" viewBox="0 0 24 24" {...trazoAvatar}>
+                          <rect x="8" y="4.6" width="8" height="14.8" rx="1.6" />
+                          <circle cx="12" cy="8.6" r="1.2" />
+                          <circle cx="12" cy="14.4" r="2.5" />
+                      </svg> },
+            { titulo: 'Sin foto', fondo: 'rgba(109,16,255,0.32)',
+              dibujo: <span style={{ color: '#fff', fontWeight: 700, fontSize: '14px' }}>A</span> },
+        ];
         const [totalUsuarios, setTotalUsuarios] = useState(null);
         useEffect(() => {
             let vivo = true;
@@ -593,10 +630,28 @@
 
         return (
             <div className="min-h-screen home-v3 relative fade-in">
-                {/* El logo, pequeño y arriba: el protagonismo es del titular. El
-                    botón "Mi panel" flotante lo pinta App en la otra esquina. */}
-                <div className="absolute" style={{ top: 26, left: 30 }}>
-                    <MentoLogo size={26} />
+                {/* Cabecera alineada con el contenido: mismo ancho máximo y el
+                    mismo padding lateral que el grid de abajo, así el logo
+                    arranca donde arrancan las letras del titular y "Mi panel"
+                    acaba donde acaba la tarjeta de subida. El botón es el mismo
+                    flotante de App (idéntico estilo y handler); aquí App lo
+                    oculta y lo pinta esta cabecera. */}
+                <div className="absolute top-0 left-0 right-0 px-6 sm:px-10" style={{ paddingTop: 20 }}>
+                    <div className="w-full mx-auto flex items-center justify-between" style={{ maxWidth: '1220px' }}>
+                        <MentoLogo size={26} />
+                        <button
+                            onClick={onPanel}
+                            className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs transition-colors"
+                            style={{ background: 'rgba(109,16,255,0.15)', border: '1px solid rgba(109,16,255,0.3)', color: '#a78bfa' }}
+                        >
+                            {panelAuth ? (
+                                <React.Fragment>
+                                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--po-green)', display: 'inline-block' }}></span>
+                                    Mi panel
+                                </React.Fragment>
+                            ) : 'Mi panel'}
+                        </button>
+                    </div>
                 </div>
 
                 <div className="min-h-screen flex items-center justify-center px-6 sm:px-10"
@@ -648,17 +703,27 @@
                                 ))}
                             </div>
 
-                            {/* Una sola línea, sin saltos forzados: la cifra en
-                                blanco y el resto en gris. Sin número confirmado, la
-                                frase sale sola. */}
-                            <p className="mt-8" style={{ color: '#9a9aa5', fontSize: '14px', lineHeight: 1.5 }}>
-                                {totalUsuarios && (
-                                    <span style={{ color: 'var(--po-white)', fontWeight: 700 }}>
-                                        +{totalUsuarios}{' '}
-                                    </span>
-                                )}
-                                {totalUsuarios ? 'productores' : 'Productores'} y artistas ya han usado Mentotrack.
-                            </p>
+                            {/* Los perfiles ilustrados y la frase, en una sola línea
+                                sin saltos forzados: la cifra en blanco y el resto en
+                                gris. Sin número confirmado, la frase sale sola. */}
+                            <div className="mt-8 flex items-center gap-3.5">
+                                <div className="flex items-center flex-none" aria-hidden="true">
+                                    {perfilesDecor.map(pf => (
+                                        <span key={pf.titulo} className="avatar-home"
+                                              style={{ background: pf.fondo }} title={pf.titulo}>
+                                            {pf.dibujo}
+                                        </span>
+                                    ))}
+                                </div>
+                                <p style={{ color: '#9a9aa5', fontSize: '14px', lineHeight: 1.5 }}>
+                                    {totalUsuarios && (
+                                        <span style={{ color: 'var(--po-white)', fontWeight: 700 }}>
+                                            +{totalUsuarios}{' '}
+                                        </span>
+                                    )}
+                                    {totalUsuarios ? 'productores' : 'Productores'} y artistas ya han usado Mentotrack.
+                                </p>
+                            </div>
                         </div>
 
                         {/* ===== Derecha: la tarjeta de subida ===== */}
@@ -6515,8 +6580,10 @@
                 {/* Botón Mi panel — siempre visible arriba a la derecha (no en panel).
                     En la vista v2 del diagnóstico NO se pinta: allí hay una barra
                     de navegación propia y este botón flotante se le encimaba en
-                    cuanto la ventana se estrechaba. */}
-                {screen !== 'panel' && !(screen === 'diagnostico' && usarVistaV2()) && (
+                    cuanto la ventana se estrechaba. En la portada tampoco: allí
+                    lo pinta LandingScreen dentro de su cabecera, alineado con el
+                    contenido — pegado a la esquina quedaba descolgado de todo. */}
+                {screen !== 'panel' && screen !== 'landing' && !(screen === 'diagnostico' && usarVistaV2()) && (
                     <div className="fixed top-4 right-4 z-40">
                         <button
                             onClick={handleOpenPanel}
@@ -6546,6 +6613,8 @@
                         onHistorial={() => setScreen('historial')}
                         historialCount={historialCount}
                         intencionCompartir={intencionCompartir}
+                        onPanel={handleOpenPanel}
+                        panelAuth={panelAuth}
                     />
                 )}
                 {screen === 'historial' && (
