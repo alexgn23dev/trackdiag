@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "version": "0.5.93",
+      "date": "2026-08-13",
+      "title": "Tres arreglos que salen de vuestro feedback",
+      "changes": [
+        "El aviso de compatibilidad mono ya no salta por tener el estéreo abierto: solo avisa cuando al sumar a mono se pierde energía de verdad (cancelación de fase), y si tu track es ancho pero suma limpio, te lo dice con la cifra. Un usuario nos lo señaló con razón — gracias.",
+        "El loudness enseña también el LUFS de tu sección más fuerte, que es lo que suele marcar el medidor del DAW. Si tu DAW dice un número y Mentotrack otro, ahora ves por qué: son dos medidas distintas del mismo track.",
+        "El informe declara su alcance al pie: mide la señal (balance, dinámica, picos, estéreo, estructura energética) y no evalúa armonía, melodía, composición ni voces. Mejor saberlo antes que descubrirlo después."
+      ]
+    },
+    {
       "version": "0.5.92",
       "date": "2026-08-13",
       "title": "El informe rediseñado, para todo el mundo",

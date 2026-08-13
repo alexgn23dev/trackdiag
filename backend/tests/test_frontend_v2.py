@@ -61,6 +61,21 @@ class TestElInterruptor(unittest.TestCase):
         self.assertIn("Vista clásica", self.html)
         self.assertIn("Probar la vista nueva", self.html)
 
+    def test_el_lufs_de_la_seccion_mas_fuerte_se_ensena(self):
+        """Dos «No» del feedback fueron solo porque el LUFS integrado no cuadra
+        con lo que enseña el medidor del DAW (que suele ser el máximo de la
+        sección más fuerte). La cifra que los reconcilia ya se medía; ahora
+        tiene que estar en pantalla en las DOS vistas, con su explicación."""
+        self.assertEqual(self.html.count("En tu sección más fuerte"), 2,
+                         "la fila del short-term tiene que estar en v2 y en clásica")
+        self.assertIn("lufs_short_term_max", self.html)
+
+    def test_el_alcance_esta_declarado_en_ambas_vistas(self):
+        """Casi la mitad de los «Parcial» eran expectativas de análisis de
+        composición/armonía/vocales — que nunca prometimos pero tampoco
+        negábamos. El alcance se declara en el pie de las dos vistas."""
+        self.assertEqual(self.html.count("No evalúa armonía, melodía, composición"), 2)
+
     def test_la_v2_ensena_la_comparacion_con_referencia(self):
         """Era el único hueco de paridad con la clásica, y de los que duelen:
         dos usuarios subieron referencia y no vieron nada. Con la v2 por

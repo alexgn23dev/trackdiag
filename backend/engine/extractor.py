@@ -2036,7 +2036,12 @@ def _analizar_mono_compatibility(y_stereo: np.ndarray, sr: int) -> dict:
         else:
             perdida_banda = 0.0
 
-        # Estado de la banda
+        # Estado de la banda. La correlación clasifica, pero "problema" exige
+        # ademas PÉRDIDA REAL: correlación ~0 significa canales independientes
+        # (suman sin cancelarse — solo la correlación negativa cancela). Sin
+        # este gate, unos medios muy abiertos en estéreo salían como "problema"
+        # con −0.4 dB de pérdida, y el usuario que lo comprobaba en mono tenía
+        # razón él (feedback ago-2026, docs/feedback-jun-ago-2026.md §3.2).
         if banda_nombre == "graves":
             # Graves DEBEN ser mono-compatibles (corr > 0.85)
             if corr_banda > 0.85:
@@ -2061,6 +2066,15 @@ def _analizar_mono_compatibility(y_stereo: np.ndarray, sr: int) -> dict:
                 estado = "revisar"
             else:
                 estado = "problema"
+
+        # El gate: "problema" exige pérdida MÁS ALLÁ de los −3 dB estructurales.
+        # Dos canales totalmente independientes de igual energía pierden
+        # exactamente 3 dB al promediarse — es el coste de nivel de cualquier
+        # elemento paneado, no una cancelación. La cancelación de fase de
+        # verdad rebasa ese suelo; el margen a −3.5 dB deja fuera el caso
+        # estructural. Con menos pérdida, lo peor que se dice es "revisar".
+        if estado == "problema" and perdida_banda > -3.5:
+            estado = "revisar"
 
         resultado["bandas"][banda_nombre] = {
             "correlacion": round(corr_banda, 3),
@@ -2107,7 +2121,15 @@ def _analizar_mono_compatibility(y_stereo: np.ndarray, sr: int) -> dict:
             "Buena compatibilidad mono con espacialidad estéreo saludable. "
             "No debería haber problemas en la mayoría de sistemas."
         )
-    elif not graves_ok or tiene_problema_banda:
+    elif (tiene_problema_banda
+          or (not graves_ok
+              and (resultado["bandas"]["graves"]["perdida_db"] <= -1.0
+                   or perdida_db <= -1.0))):
+        # "problematica" solo con pérdida REAL: las bandas en "problema" ya la
+        # exigen (gate de arriba), y los graves descentrados solo cuentan si de
+        # verdad se pierde energía al sumar (≥1 dB en la banda o en el total).
+        # Antes bastaba la correlación y el aviso saltaba con −0.4 dB de
+        # pérdida: un falso positivo confirmado con caso real.
         resultado["nivel_compatibilidad"] = "problematica"
         problemas = []
         if not graves_ok:
@@ -2119,6 +2141,16 @@ def _analizar_mono_compatibility(y_stereo: np.ndarray, sr: int) -> dict:
         resultado["resumen"] = (
             f"Hay aspectos a revisar: {', '.join(problemas)}. "
             f"Esto puede causar pérdida de impacto en sistemas mono."
+        )
+    elif not graves_ok or any(
+            b["estado"] == "revisar" for b in resultado["bandas"].values()):
+        # Correlación baja pero SIN pérdida real: es anchura estéreo, no un
+        # fallo. Se dice tal cual, con el dato que lo respalda.
+        resultado["nivel_compatibilidad"] = "buena"
+        resultado["resumen"] = (
+            f"El estéreo va abierto (correlación {correlacion*100:.0f}%), pero al "
+            f"sumar a mono apenas se pierde energía ({perdida_db:+.1f} dB): "
+            f"compatibilidad correcta. La anchura es una elección, no un fallo."
         )
     else:
         resultado["nivel_compatibilidad"] = "buena"
