@@ -3,8 +3,29 @@ Motor de reglas diagnósticas.
 Evalúa hipótesis, aplica jerarquía pedagógica y genera el diagnóstico final.
 """
 
+import re
+
 # Recalibrado con 38 sesiones: 3 era demasiado alto, muchos falsos "sin_diagnostico"
 UMBRAL_MINIMO_CONFIANZA = 2
+
+
+def _menciona(texto: str, terminos) -> bool:
+    """Matching por PALABRA, no por substring: "trabajo" no menciona el bajo.
+
+    El bug que arregla (docs/feedback-jun-ago-2026.md §3.1): con `p in texto`,
+    "trabajo", "abajo" o "debajo" disparaban el léxico de "bajo" y sumaban
+    puntos de diagnóstico desde el formulario. Convención: un término acabado
+    en "-" es un prefijo de palabra ("enmasc-" cubre enmascara/enmascarando);
+    las frases de varias palabras se buscan enteras, con borde a ambos lados.
+    """
+    for t in terminos:
+        if t.endswith("-"):
+            pat = r"\b" + re.escape(t[:-1])
+        else:
+            pat = r"\b" + re.escape(t) + r"\b"
+        if re.search(pat, texto):
+            return True
+    return False
 
 
 # =============================================================================
@@ -259,8 +280,10 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
                          "hard_techno", "psytrance"]
     generos_graves_menos = ["trance", "progressive_house",
                             "melodic_techno", "indie_dance", "organic_house"]
-    usuario_menciona_graves = any(p in bloqueo for p in
-                                  ["grave", "bajo", "bass", "kick", "bombo", "turbio", "mud", "sub"])
+    # Por palabra: "subida" ya no es "sub" ni "trabajo" es "bajo".
+    usuario_menciona_graves = _menciona(bloqueo,
+                                        ["grave", "graves", "bajo", "bass", "kick",
+                                         "bombo", "turbio", "mud-", "sub"])
     if senales["balance_grave"] == "excesivo":
         score += 3; razones.append(f"Los graves dominan {senales['diff_grave_media']:.0f}dB por encima de los medios")
     elif senales["balance_grave"] == "elevado":
@@ -270,7 +293,11 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
     if senales["carencia_agudos"]:
         score += 1; razones.append(f"Poca presencia en agudos (nivel medio: {senales['db_aguda']:.0f}dB)")
     if usuario_menciona_graves:
-        score += 2; razones.append("El usuario percibe problemas en graves")
+        # +1 y no +2: con el umbral en 2, el eco del formulario NUNCA puede
+        # diagnosticar por sí solo — siempre hace falta al menos una señal
+        # física del audio. Antes devolvíamos al usuario sus propias palabras
+        # como diagnóstico (docs/feedback-jun-ago-2026.md §3.1).
+        score += 1; razones.append("Tu propia descripción apunta a los graves — lo contamos como apoyo, no como evidencia")
     # Ajuste por género: en géneros con kick protagonista, ser muy permisivo.
     # tech_house y techno especialmente — el kick prominente es parte del lenguaje.
     # "elevado" → -2 (suficiente para neutralizar el +1 de balance y los +1/+1 de
@@ -766,12 +793,16 @@ def evaluar_diagnosticos(senales: dict, contexto: dict) -> tuple[dict, dict]:
                 f"El sub (0-60 Hz) está {diff_sub_low:.1f} dB por encima de los graves audibles — posible rumble o sub descontrolado"
             )
 
-    # Boost si el usuario describe el problema con palabras del campo léxico
-    palabras_masking = ["kick", "bombo", "bajo", "bass", "enmasc", "barro", "mud",
-                         "turbio", "se come", "pierde el kick", "kick perdido", "low end"]
-    if any(p in bloqueo for p in palabras_masking):
-        score += 2
-        razones.append("El usuario percibe problemas con el kick o el bajo")
+    # Apoyo si el usuario describe el problema con palabras del campo léxico.
+    # Por palabra ("trabajo" no es "bajo") y capado a +1: con el umbral en 2,
+    # el eco del formulario nunca diagnostica solo — hace falta señal física.
+    # El caso que lo motivó: un informe cuya única "evidencia" era la frase
+    # del propio usuario (docs/feedback-jun-ago-2026.md §3.1).
+    palabras_masking = ["kick", "bombo", "bajo", "bass", "enmasc-", "barro", "mud-",
+                        "turbio", "se come", "pierde el kick", "kick perdido", "low end"]
+    if _menciona(bloqueo, palabras_masking):
+        score += 1
+        razones.append("Tu propia descripción apunta al kick o al bajo — lo contamos como apoyo, no como evidencia")
 
     # Cruce: enmascaramiento + densidad baja = no es densidad, es masking
     if senales["densidad_global"] == "baja" and diff_graves_lowmid > 10:
