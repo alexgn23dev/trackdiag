@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "version": "0.5.94",
+      "date": "2026-08-13",
+      "title": "Tus palabras ya no diagnostican solas",
+      "changes": [
+        "Lo que escribes en «qué te bloquea» ahora solo APOYA un diagnóstico, nunca lo decide: hace falta al menos una señal física en el audio. Antes, mencionar «el bajo y el kick» podía bastar para que el informe te devolviera exactamente eso — un espejo, no un análisis.",
+        "Arreglado un fallo de detección de palabras: escribir «trabajo» o «subida» contaba como mencionar «bajo» o «sub»."
+      ]
+    },
+    {
       "version": "0.5.93",
       "date": "2026-08-13",
       "title": "Tres arreglos que salen de vuestro feedback",

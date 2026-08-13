@@ -71,12 +71,15 @@ confirma. Verificado en `reglas.py`:
   **58 % supera 8 dB** (+1) y el **15 % supera 12 dB** (+2 → diagnóstico él
   solo). La regla marca como defecto un rasgo del género.
 
-Arreglo propuesto (conservador): (a) el eco del formulario no puede puntuar
-por sí solo — que sea desempate (+1 máx) y solo si ya hay ≥2 de señal física;
-(b) recalibrar el umbral espectral contra el corpus (p. ej. exigir > p90 de lo
-publicado ≈ 13-14 dB, y con densidad/harshness corroborando); (c) variedad en
-el texto: si el mismo usuario repite diagnóstico en análisis consecutivos,
-decirlo ("sigue siendo lo más prioritario") en vez de parecer un loop.
+Arreglo en dos fases. **Fase A (implementada en v0.5.94)**: el eco del
+formulario capado a +1 en las dos reglas — con el umbral en 2, las palabras
+del usuario nunca diagnostican solas — y matching por palabra en vez de por
+substring ("trabajo" ya no dispara "bajo", "subida" ya no dispara "sub").
+**Fase B (pendiente de calibrar)**: recalibrar el umbral espectral contra el
+corpus medido con el pipeline real (p. ej. > p90 de lo publicado), validado
+con el circuito de /calibrar. **Fase C (idea)**: si el mismo usuario repite
+diagnóstico en análisis consecutivos, decirlo ("sigue siendo lo prioritario")
+en vez de parecer un loop.
 
 ### 3.2 Mono "problemática" sin pérdida real — falso positivo confirmado
 
