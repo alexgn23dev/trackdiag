@@ -306,7 +306,7 @@
     // /api/health. Si no coincide, este fichero viene de la caché del
     // navegador y puede estar dejando de enviar campos que el backend ya
     // espera — se recarga una sola vez y, si aun así no cuadra, se avisa.
-    const APP_VERSION = '0.5.90';
+    const APP_VERSION = '0.5.91';
 
     function comprobarVersionFrontend(onDesfase, onEntorno) {
         fetch(`${API_URL}/api/health`, { cache: 'no-store' })
@@ -3949,7 +3949,12 @@
                         <div className={bloqueDerechoV2
                             ? 'grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4 items-stretch'
                             : 'mb-4'}>
-                            <div className="card p-5 h-full flex flex-col justify-between gap-4"
+                            {/* El contenido va centrado en vertical y las cifras
+                                pegadas al titular, no ancladas al fondo: cuando la
+                                columna derecha lleva el vídeo (que es alta), el
+                                justify-between de antes abría un agujero de media
+                                tarjeta entre el título y los parámetros. */}
+                            <div className="card p-5 h-full flex flex-col justify-center"
                                  style={{ borderTop: `2px solid ${cfgV2.color}` }}>
                                 <div className="min-w-0">
                                     <div className="flex items-center gap-2 mb-1.5 flex-wrap">
@@ -3961,15 +3966,23 @@
                                         {r.diagnostico_principal.titulo}
                                     </h1>
                                 </div>
-                                <div className="flex gap-2 flex-wrap min-w-0">
-                                    <V2Dato etiqueta="Duración" valor={d.duracion} />
-                                    <V2Dato etiqueta="BPM" valor={d.bpm == null ? '—' : d.bpm} />
-                                    <V2Dato etiqueta="LUFS" valor={loV2.lufs_integrado == null ? '—' : loV2.lufs_integrado} />
-                                    <V2Dato etiqueta="True peak"
-                                            valor={typeof loV2.true_peak_dbtp === 'number' && loV2.true_peak_dbtp > -99
-                                                   ? loV2.true_peak_dbtp.toFixed(1) : '—'}
-                                            tono={tonoPicosV2} />
-                                    <V2Dato etiqueta="Mono" valor={(d.mono_compat && d.mono_compat.nivel_compatibilidad) || '—'} />
+                                {/* Dos filas a propósito: duración/BPM/LUFS arriba y
+                                    true peak/mono debajo. En una sola, con la tarjeta a
+                                    media pantalla, el quinto chip envolvía él solo y las
+                                    filas quedaban descompensadas. */}
+                                <div className="min-w-0" style={{ marginTop: 20 }}>
+                                    <div className="flex gap-2 flex-wrap">
+                                        <V2Dato etiqueta="Duración" valor={d.duracion} />
+                                        <V2Dato etiqueta="BPM" valor={d.bpm == null ? '—' : d.bpm} />
+                                        <V2Dato etiqueta="LUFS" valor={loV2.lufs_integrado == null ? '—' : loV2.lufs_integrado} />
+                                    </div>
+                                    <div className="flex gap-2 flex-wrap" style={{ marginTop: 8 }}>
+                                        <V2Dato etiqueta="True peak"
+                                                valor={typeof loV2.true_peak_dbtp === 'number' && loV2.true_peak_dbtp > -99
+                                                       ? loV2.true_peak_dbtp.toFixed(1) : '—'}
+                                                tono={tonoPicosV2} />
+                                        <V2Dato etiqueta="Mono" valor={(d.mono_compat && d.mono_compat.nivel_compatibilidad) || '—'} />
+                                    </div>
                                 </div>
                             </div>
                             {bloqueDerechoV2 && <div className="min-w-0">{bloqueDerechoV2}</div>}

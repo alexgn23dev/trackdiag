@@ -1,6 +1,14 @@
 {
   "entries": [
     {
+      "version": "0.5.91",
+      "date": "2026-08-13",
+      "title": "Cabecera del informe más compacta",
+      "changes": [
+        "Las cifras de la cabecera (duración, BPM, LUFS, true peak y mono) van ahora en dos filas fijas y pegadas al titular: se acabó el hueco vacío que quedaba cuando al lado hay un tutorial en vídeo."
+      ]
+    },
+    {
       "version": "0.5.90",
       "date": "2026-08-13",
       "title": "Portada nueva",
