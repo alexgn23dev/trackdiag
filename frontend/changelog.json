@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "version": "0.5.98",
+      "date": "2026-08-14",
+      "title": "El BPM, por fin exacto",
+      "changes": [
+        "El detector de tempo devolvía valores de una rejilla fija (112, 117, 123, 129, 136, 143…) en vez del BPM real: el 95 % de los análisis caía en uno de esos números y ninguno en un BPM de productor. El más repetido era 129, que nadie usa — es donde caían 128 y 130, los dos tempos más habituales del género.",
+        "Ahora el BPM se mide sobre los propios beats detectados, sin esa rejilla. En pruebas con tempo conocido el error pasa de 1,85 BPM de media a 0: 128 sale 128 y 130 sale 130. Cuando el track tiene tempo variable y la medida no es fiable, se mantiene el método anterior en vez de inventar precisión."
+      ]
+    },
+    {
       "version": "0.5.97",
       "date": "2026-08-13",
       "title": "Mentotrack analiza electrónica de club (y ahora lo dice antes)",

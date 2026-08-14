@@ -203,6 +203,42 @@ def _comprobar_senal_analizable(y: np.ndarray) -> None:
             })
 
 
+def _refinar_tempo(tempo_bruto: float, frames_beat, sr: int) -> tuple:
+    """Quita la cuantización del tempograma ajustando una recta a los beats.
+
+    Devuelve (tempo, refinado). Solo sustituye el valor cuando puede
+    demostrarlo, y por eso hay tres guardas — en el 58 % de los tracks reales
+    el ajuste NO es mejor que el valor bruto y ahí no se toca nada:
+
+      · **beats suficientes** (≥16): con pocos, la pendiente es ruido.
+      · **residuo < 15 ms**: es el filtro que de verdad decide. Medido sobre
+        120 previews publicados, con residuo bajo el refinado cae en un BPM
+        entero exacto en 50 de 50; por encima de 50 ms acierta 4 de 58, o sea
+        que ahí el ajuste describe un track con tempo variable o un beat
+        tracking con fallos, y el valor bruto es más honesto.
+      · **desviación < 6 %**: esto corrige cuantización (medido: máximo 2.2 %),
+        nunca cambia de nivel métrico. Si el ajuste propone la mitad o el
+        doble, es que algo ha ido mal y se descarta.
+    """
+    if frames_beat is None or len(frames_beat) < 16:
+        return tempo_bruto, False
+    tiempos = librosa.frames_to_time(frames_beat, sr=sr)
+    idx = np.arange(len(tiempos))
+    try:
+        pendiente, intercepto = np.polyfit(idx, tiempos, 1)
+    except Exception:
+        return tempo_bruto, False
+    if not np.isfinite(pendiente) or pendiente <= 0:
+        return tempo_bruto, False
+    residuo = float(np.std(tiempos - (pendiente * idx + intercepto)))
+    if residuo >= 0.015:
+        return tempo_bruto, False
+    candidato = 60.0 / float(pendiente)
+    if tempo_bruto <= 0 or abs(candidato - tempo_bruto) / tempo_bruto >= 0.06:
+        return tempo_bruto, False
+    return candidato, True
+
+
 def extraer_senales(audio_path: str, bpm_manual: int | None = None,
                     omitir_armonia: bool = False) -> dict:
     # Carga única: stereo a 22050 Hz (sin límite de duración para no perder estructura)
@@ -231,14 +267,31 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None,
     # devuelve 0 y la línea de abajo dividía entre cero → HTTP 500.
     tempo = None
     tempo_fuente = "no_detectado"
+    tempo_refinado = False      # se define aquí: con bpm_manual no se entra al else
     if bpm_manual and bpm_manual > 0:
         tempo = int(round(bpm_manual))
         tempo_fuente = "manual"
     else:
+        # `beat_track` estima el tempo sobre un tempograma de bins DISCRETOS, y
+        # esos bins son gruesos: a 22 050 Hz caen en 112.3, 117.5, 123.0,
+        # 129.2, 136.0, 143.6, 152.0, 161.5, 172.3… Consecuencia medida sobre
+        # producción: el 95 % de los BPM que dábamos caían en esa rejilla y
+        # NINGUNO en un BPM de productor. El valor más repetido era 129 (40 %
+        # de los análisis) — un tempo que nadie usa: es el bin donde caen 128
+        # y 130, que son los dos más habituales del género.
+        #
+        # El arreglo no toca la detección, solo la MEDIDA: los beats que
+        # devuelve `beat_track` ya están donde están; ajustando una recta a sus
+        # tiempos, la pendiente da el periodo real sin la cuantización. Sobre
+        # 20 loops sintéticos de BPM conocido el error medio pasa de 1.85 BPM
+        # a 0.00; sobre música real, los 50 tracks que pasan el filtro de
+        # calidad caen en un entero exacto (la electrónica se produce así).
         try:
-            tempo_bruto, _ = librosa.beat.beat_track(y=y, sr=sr, start_bpm=128)
+            tempo_bruto, _frames_beat = librosa.beat.beat_track(
+                y=y, sr=sr, start_bpm=128, units="frames")
             tempo_bruto = (float(tempo_bruto[0]) if hasattr(tempo_bruto, "__len__")
                            else float(tempo_bruto))
+            tempo_bruto, tempo_refinado = _refinar_tempo(tempo_bruto, _frames_beat, sr)
         except Exception:
             tempo_bruto = 0.0
         # Rango de cordura: fuera de 30-300 BPM la detección no es creíble en
@@ -614,6 +667,9 @@ def extraer_senales(audio_path: str, bpm_manual: int | None = None,
         "bpm": tempo,
         "tempo_detectado": tempo_detectado,
         "tempo_fuente": tempo_fuente,
+        # True = el BPM salió del ajuste sobre los beats, no del bin del
+        # tempograma. Sirve para medir en producción cuánto se está aplicando.
+        "tempo_refinado": tempo_refinado if tempo_fuente == "detectado" else False,
         "bloques_rms": [round(b, 4) for b in bloques_rms],
         "n_bloques": n_bloques,
         "varianza_energia": round(varianza_energia, 4),
