@@ -59,7 +59,7 @@ def _load_engine():
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-APP_VERSION = "0.5.97"
+APP_VERSION = "0.5.98"
 
 app = FastAPI(title="Mentotrack API", version=APP_VERSION)
 app.state.limiter = limiter
