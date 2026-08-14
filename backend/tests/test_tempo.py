@@ -137,17 +137,31 @@ class TestElAnalisisSigueSiendoUtil(unittest.TestCase):
 
 
 class TestMetricasQueDependenDelBpm(unittest.TestCase):
-    """Las que necesitan BPM se OMITEN, no se rellenan con un valor falso."""
+    """Ninguna métrica del informe depende ya del BPM.
 
-    def test_la_referencia_en_compases_se_omite(self):
-        r = generar_diagnostico(senales("sin_pulso_drone"), CONTEXTO)
-        self.assertEqual(r.get("referencia_temporal", ""), "",
-                         "sin tempo no se puede decir cuánto dura un compás")
+    Hasta v0.5.98 la referencia en compases ("A 128 BPM, 8 compases duran
+    ~15s") solo se omitía cuando no había pulso. Desde v0.5.99 no se emite
+    NUNCA: el BPM solo es fiable en el 15 % de los tracks de usuario, y un
+    dato derivado hereda ese error además de disimularlo — el usuario ve
+    segundos y no ve de dónde salen. Ver docs/bpm-por-que-no-se-ensena.md."""
 
-    def test_con_tempo_si_aparece(self):
+    def test_la_referencia_en_compases_no_se_emite_nunca(self):
+        for caso in ("sin_pulso_drone", "pulso_claro_128"):
+            r = generar_diagnostico(senales(caso), dict(CONTEXTO, genero="techno"))
+            self.assertEqual(r.get("referencia_temporal", ""), "", caso)
+
+    def test_ningun_texto_del_informe_afirma_un_bpm(self):
+        """El diagnóstico entero, no solo la referencia temporal."""
         r = generar_diagnostico(senales("pulso_claro_128"),
                                 dict(CONTEXTO, genero="techno"))
-        self.assertIn("BPM", r.get("referencia_temporal", ""))
+        textos = []
+        for k in ("referencia_temporal", "nota_contextual", "nota_motivacional"):
+            if r.get(k):
+                textos.append(str(r[k]))
+        for lista in ("prioridades", "tips_genero", "sugerencias_estructura"):
+            textos += [str(x) for x in (r.get(lista) or [])]
+        for t in textos:
+            self.assertNotIn("BPM", t, f"el informe sigue afirmando un BPM: {t[:120]}")
 
     def test_el_bpm_viaja_como_null_hasta_la_respuesta(self):
         r = generar_diagnostico(senales("sin_pulso_drone"), CONTEXTO)

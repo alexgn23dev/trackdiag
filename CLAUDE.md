@@ -227,6 +227,14 @@ DENTRO/FUERA y no EQUILIBRADO/REVISAR.
 Regla que no se negocia en ese componente: **la interfaz no puede sugerir un
 problema que el análisis no haya detectado.**
 
+## El BPM no se enseña
+
+Se calcula (lo usa el reparto en bloques) pero **no se le afirma al usuario**:
+el detector solo pasa su filtro de confianza en el 15 % de los tracks de
+usuario reales. `datos_audio.tempo_refinado` marca los casos fiables — es la
+única condición bajo la que el número se puede usar. Ver
+`docs/bpm-por-que-no-se-ensena.md` antes de proponer recuperarlo.
+
 ## Alcance: solo electrónica de club
 
 `backend/engine/generos.py` decide si un género escrito a mano entra. Si no,

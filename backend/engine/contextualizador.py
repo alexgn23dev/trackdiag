@@ -341,18 +341,17 @@ def contextualizar_feedback(diagnostico_id: str, contexto: dict, senales: dict) 
             if diagnostico_id in dx_mezcla:
                 resultado["prioridades_extra"].append(info_objetivo["prioridad_extra_mezcla"])
 
-    # --- Referencia temporal (BPM → compases en segundos) ---
-    # `bpm` es None cuando no hay pulso detectable: sin tempo no se puede dar
-    # una referencia en compases, así que se omite la métrica en vez de
-    # inventarla. `or 0` porque None > 0 lanza TypeError.
-    bpm = senales.get("bpm") or 0
-    if bpm > 0:
-        seg_8_compases = round((60.0 / bpm) * 4 * 8, 1)
-        seg_16_compases = round(seg_8_compases * 2, 1)
-        resultado["referencia_temporal"] = (
-            f"A {bpm:.0f} BPM, 8 compases duran ~{seg_8_compases:.0f}s "
-            f"y 16 compases ~{seg_16_compases:.0f}s."
-        )
+    # --- Referencia temporal (compases en segundos) ---
+    # RETIRADO (v0.5.99). Esta nota decía "A 128 BPM, 8 compases duran ~15s",
+    # y ese BPM no es de fiar: medido sobre 33 tracks de usuario, solo el 15 %
+    # pasa el filtro de confianza del detector; el resto sale del bin del
+    # tempograma, con error típico de 1-4 BPM y algún fallo grueso. Un dato
+    # derivado de un dato malo hereda el error y además lo disimula — el
+    # usuario ve segundos, no ve de dónde salen.
+    #
+    # El BPM SIGUE calculándose y se usa por dentro para partir el track en
+    # bloques de ~8 compases, donde un 1-3 % de error es irrelevante. Lo que
+    # se retira es afirmárselo al usuario. Ver docs/bpm-por-que-no-se-ensena.md
 
     # --- Referencia LUFS por género (comparar medición vs target del género) ---
     lufs_ref = LUFS_GENERO.get(genero)
@@ -527,14 +526,14 @@ def _generar_tips_genero(diagnostico_id: str, info_genero: dict, genero: str, se
             f"Escucha una referencia con un medidor de volumen y fíjate en cómo "
             f"la energía baja justo antes del drop y sube al entrar."
         )
-        bpm = senales.get("bpm") or 0
-        if bpm > 0:
-            compas_seg = 4 * 60 / bpm
-            tips.append(
-                f"A {bpm} BPM, prueba a hacer la automatización de bajada de volumen "
-                f"durante los últimos 4 compases antes del drop ({compas_seg * 4:.0f}s). "
-                f"Una bajada sutil de 1-3dB es suficiente para crear la sensación de impacto."
-            )
+        # Sin la cifra en segundos: se derivaba del BPM detectado y hereda su
+        # error (ver la nota de la referencia temporal). El consejo en
+        # compases vale igual y no depende de que acertemos el tempo.
+        tips.append(
+            "Prueba a hacer la automatización de bajada de volumen durante los "
+            "últimos 4 compases antes del drop. Una bajada sutil de 1-3dB es "
+            "suficiente para crear la sensación de impacto."
+        )
 
     elif diagnostico_id == "carencia_espectral":
         carencia_medios = senales.get("carencia_medios", False)
@@ -954,16 +953,9 @@ def _generar_nota_contextual(
             )
 
     # --- Dato contextual temporal ---
-    # None cuando no hay pulso detectable: `or 0` evita el TypeError y
-    # hace que la nota en compases se omita en vez de inventarse.
-    bpm = senales.get("bpm") or 0
-    if bpm > 0 and diagnostico_id in ("problema_arreglo", "poco_contraste", "track_verde"):
-        seg_16 = round((60.0 / bpm) * 4 * 16)
-        seg_32 = round((60.0 / bpm) * 4 * 32)
-        partes.append(
-            f"Referencia práctica: a {bpm:.0f} BPM, 16 compases duran ~{seg_16}s "
-            f"y 32 compases ~{seg_32}s. Úsalo para planificar la duración de tus secciones."
-        )
+    # RETIRADO (v0.5.99) por lo mismo que la referencia temporal: los segundos
+    # por compás salían del BPM detectado, que solo es fiable en el 15 % de
+    # los tracks de usuario.
 
     return " ".join(partes) if partes else ""
 

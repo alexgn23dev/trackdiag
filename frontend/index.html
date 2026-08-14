@@ -306,7 +306,7 @@
     // /api/health. Si no coincide, este fichero viene de la caché del
     // navegador y puede estar dejando de enviar campos que el backend ya
     // espera — se recarga una sola vez y, si aun así no cuadra, se avisa.
-    const APP_VERSION = '0.5.98';
+    const APP_VERSION = '0.5.99';
 
     function comprobarVersionFrontend(onDesfase, onEntorno) {
         fetch(`${API_URL}/api/health`, { cache: 'no-store' })
@@ -1117,7 +1117,7 @@
     function ProcessingScreen({ datos, conReferencia }) {
         const steps = [
             "Cargando audio...",
-            `${datos?.bpm ? datos.bpm + ' BPM detectados' : 'Detectando tempo...'}`,
+            "Detectando el pulso y las secciones...",
             "Analizando distribución de energía...",
             "Evaluando balance espectral...",
             ...(conReferencia ? ["Analizando tu track de referencia...", "Comparando balance, dinámica y estéreo..."] : []),
@@ -1264,7 +1264,7 @@
 
     // CTA hacia Relesit (relesit.com) — solo tras un diagnóstico BUENO: el track
     // está fino, así que invitamos a buscarle sello. Relesit es gratis.
-    function RelesitCTA({ diagId, estado, userEmail, bpm, genero, clase }) {
+    function RelesitCTA({ diagId, estado, userEmail, bpm, bpmFiable, genero, clase }) {
         useEffect(() => {
             try { trackEvent('cta_relesit_visto', { diagnostico: diagId, estado }); } catch (e) {}
             try { window.mtCtaEvent && window.mtCtaEvent('relesit_visto', { diagnostico_id: diagId || '', email: userEmail || '' }); } catch (e) {}
@@ -1289,7 +1289,10 @@
                         const resp = await fetch('/api/sso/relesit', {
                             method: 'POST',
                             headers: { 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ track: { bpm: bpm || null, genero: genero || null } }),
+                            // El BPM solo viaja si el detector lo pudo refinar; con el
+                            // valor sin refinar Relesit haría matching sobre un dato
+                            // que ni nosotros enseñamos.
+                            body: JSON.stringify({ track: { bpm: bpmFiable || null, genero: genero || null } }),
                         });
                         if (resp.ok) { const d = await resp.json(); if (d && d.url) dest = d.url; }
                     } catch (err) {}
@@ -1536,7 +1539,9 @@
             setOpen(true);
             setError('');
             setTitulo(t => t || nombreProyecto || (file?.name || '').replace(/\.[^.]+$/, ''));
-            setBpmEdit(b => b || (d.bpm ? String(d.bpm) : ''));
+            // Solo se pre-rellena si el detector pasó su filtro de confianza;
+            // si no, el campo va vacío y lo escribe el usuario, que lo sabe.
+            setBpmEdit(b => b || (d.tempo_refinado && d.bpm ? String(d.bpm) : ''));
             setEstado('cargando');
             trackEvent('comunidad_share_opened', {});
             fetch(`${API_URL}/api/perfil`, { headers: authHeaders() })
@@ -1666,7 +1671,7 @@
                                     <div className="flex gap-3 mb-4">
                                         <div className="flex-1">
                                             <label className="block text-xs font-medium mb-1.5" style={{color: 'var(--po-light)'}}>
-                                                BPM <span style={{color: 'var(--po-medium)'}}>(corrígelo si el detector falló)</span>
+                                                BPM <span style={{color: 'var(--po-medium)'}}>(el de tu proyecto)</span>
                                             </label>
                                             <input type="number" value={bpmEdit} onChange={e => setBpmEdit(e.target.value)} min={40} max={300}
                                                 className="w-full px-4 py-3 rounded-lg text-sm input-field" />
@@ -3584,7 +3589,6 @@
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
                 <V2Tarjeta titulo="Estructura">
                     {fila('Duración', d.duracion)}
-                    {fila('BPM', d.bpm == null ? 'no detectado' : d.bpm)}
                     {fila('Bloques', d.n_bloques)}
                     {fila('Contraste', d.contraste)}
                     {fila('Desarrollo', d.desarrollo_temporal ? 'sí' : 'no')}
@@ -3984,7 +3988,7 @@
                               && r.estado_track !== 'verde';
             const tarjetaRelesit = esRelesit ? (
                 <RelesitCTA diagId={diagId} estado={r.estado_track} userEmail={userEmail}
-                            bpm={d && d.bpm} clase="h-full"
+                            bpm={d && d.bpm} bpmFiable={d && d.tempo_refinado ? d.bpm : null} clase="h-full"
                             genero={contexto && (contexto.genero === 'otro' ? (contexto.genero_custom || '') : contexto.genero)} />
             ) : null;
             // La columna derecha de la cabecera: Relesit si el track está para
@@ -4091,8 +4095,11 @@
                                     filas quedaban descompensadas. */}
                                 <div className="min-w-0" style={{ marginTop: 20 }}>
                                     <div className="flex gap-2 flex-wrap">
+                                        {/* Sin el chip de BPM: el detector solo es fiable en
+                                            el 15 % de los tracks de usuario y una cifra mal
+                                            puesta ahí arriba tira por tierra la credibilidad
+                                            del resto. Ver docs/bpm-por-que-no-se-ensena.md */}
                                         <V2Dato etiqueta="Duración" valor={d.duracion} />
-                                        <V2Dato etiqueta="BPM" valor={d.bpm == null ? '—' : d.bpm} />
                                         <V2Dato etiqueta="LUFS" valor={loV2.lufs_integrado == null ? '—' : loV2.lufs_integrado} />
                                     </div>
                                     <div className="flex gap-2 flex-wrap" style={{ marginTop: 8 }}>
@@ -4777,7 +4784,7 @@
                         diagnóstico es bueno (track fino → busca sello); si no, el
                         Máster con el texto adaptado a la categoría dominante. */}
                     {(diagId === 'sin_diagnostico' || r.estado_track === 'avanzado') && r.estado_track !== 'verde' ? (
-                        <RelesitCTA diagId={diagId} estado={r.estado_track} userEmail={userEmail} bpm={r.datos_audio && r.datos_audio.bpm} genero={contexto && (contexto.genero === 'otro' ? (contexto.genero_custom || '') : contexto.genero)} />
+                        <RelesitCTA diagId={diagId} estado={r.estado_track} userEmail={userEmail} bpm={r.datos_audio && r.datos_audio.bpm} bpmFiable={r.datos_audio && r.datos_audio.tempo_refinado ? r.datos_audio.bpm : null} genero={contexto && (contexto.genero === 'otro' ? (contexto.genero_custom || '') : contexto.genero)} />
                     ) : (
                         <MasterCTA diagId={diagId} variante={masterCta.variante} categoria={masterCta.categoria} userEmail={userEmail} />
                     )}
