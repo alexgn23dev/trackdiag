@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "version": "0.5.99",
+      "date": "2026-08-14",
+      "title": "El BPM sale del informe",
+      "changes": [
+        "Dejamos de enseñar el BPM. Ayer mejoramos el detector, pero al medirlo sobre tracks reales solo acierta con seguridad en el 15 % de los casos: en el resto daba un valor de una rejilla fija (129 era el más repetido, y nadie produce a 129). Un dato que falla no aporta al diagnóstico y le quita credibilidad a lo demás, así que preferimos no darlo.",
+        "También desaparecen las frases derivadas del BPM (el «a X BPM, 8 compases duran ~Ys»): heredaban el mismo error y encima lo disimulaban.",
+        "Si compartes tu track en la comunidad, el BPM sigue estando — pero lo escribes tú, que es quien lo sabe."
+      ]
+    },
+    {
       "version": "0.5.98",
       "date": "2026-08-14",
       "title": "El BPM, por fin exacto",

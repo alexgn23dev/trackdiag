@@ -108,11 +108,16 @@ def generar_diagnostico(senales: dict, contexto: dict) -> dict:
         "estado_track": estado,
         "estado_texto": estado_texto,
         "datos_audio": {
-            # None si no hay pulso detectable. La interfaz debe mostrar
-            # "no detectado", nunca un valor por defecto.
+            # El BPM ya NO se enseña en el informe (solo es fiable en el 15 %
+            # de los tracks de usuario; ver docs/bpm-por-que-no-se-ensena.md).
+            # Se sigue publicando porque lo consumen el reparto en bloques y
+            # el formulario de la comunidad, donde el usuario puede corregirlo.
             "bpm": senales.get("bpm"),
             "tempo_detectado": senales.get("tempo_detectado", True),
             "tempo_fuente": senales.get("tempo_fuente", ""),
+            # True solo cuando el tempo pasó el filtro de confianza: es la
+            # única condición bajo la que el número se puede usar sin avisos.
+            "tempo_refinado": senales.get("tempo_refinado", False),
             "duracion": senales["duracion_fmt"],
             "contraste": senales["contraste_energetico"],
             "balance_grave": senales["balance_grave"],
