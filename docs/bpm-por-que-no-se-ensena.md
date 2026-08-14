@@ -53,13 +53,75 @@ confiar. Los otros 28 se quedan con el valor del bin: 13 de ellos mostraban
 Y el filtro no es opcional: en el 58 % de la música real donde el ajuste NO
 pasa, el refinado acierta 4 de 58 — es decir, forzarlo empeoraría el dato.
 
-## 3. Y además hay fallos gruesos
+## 3. Y además hay fallos gruesos: el caso 140 → 112, resuelto
 
-Un usuario reportó un track a 140 que Mentotrack dio como **112**. Eso no es
-cuantización (28 BPM de error, ni mitad ni doble), sino que el detector se
-engancha a otra periodicidad. No se pudo reproducir con audio sintético y
-queda sin diagnosticar a falta del archivo. **El refinado no arregla este
-caso**: mejora la precisión, no el enganche al pulso equivocado.
+Un usuario reportó un track a 140 que Mentotrack dio como **112**. Con su
+archivo delante (ago-2026) el mecanismo quedó claro, y merece escribirse
+porque es contraintuitivo.
+
+### Por qué 140 es el peor caso posible
+
+El detector mide el pulso en frames. A 22 050 Hz con hop 512 hay 43,07
+frames/s, así que **el periodo del beat solo se puede representar en frames
+enteros**:
+
+| BPM | frames por beat | distancia al entero |
+|---|---:|---:|
+| 112 | 23,07 | **0,07** ← casi clavado |
+| 128 | 20,19 | 0,19 |
+| 130 | 19,88 | 0,12 |
+| **140** | **18,46** | **0,46** ← justo entre dos lags |
+| 145 | 17,82 | 0,18 |
+
+140 cae en el punto más ambiguo que existe, y 112 en uno de los más limpios.
+El detector no puede engancharse a 140 y se va al candidato "fácil". La
+relación 140 → 112 **no es musical** (no es mitad, ni doble, ni tresillo): es
+aritmética de la rejilla, y por eso el ratio sale en 5/4.
+
+Que el track *sí* es 140 se confirma en la autocorrelación del envelope de
+onsets: el pico más fuerte está en **70 BPM = 140/2** (el pulso de compás),
+con 140/145 justo detrás. El 112 aparece como pico espurio de la rejilla.
+
+Por eso tampoco se reprodujo con audio sintético: los loops de prueba caían
+en tempos representables.
+
+### Subir la resolución NO es la solución
+
+Con hop 256 ese track sale **140,01** — perfecto. Pero validado sobre 94
+tracks reales (34 de usuario + 60 previews):
+
+| | hop 512 | hop 256 |
+|---|---:|---:|
+| pasan el filtro de confianza (usuario) | 15 % | 15 % |
+| pasan el filtro (publicados) | 45 % | **42 %** |
+| coste por track (usuario) | 0,58 s | 1,70 s |
+
+Y **rompe casos que estaban bien**: tracks que a 512 pasaban el filtro con
+121 y 122 pasan a 120 y 123. Cambia unos errores por otros, cuesta el triple
+y no mejora la confianza. **No se toca.** (Si alguien lo vuelve a proponer:
+el problema es que ningún hop es bueno para todos los tempos — a 256, 128 BPM
+empeora a 0,37 frames de distancia.)
+
+### Lo importante: no afectó al diagnóstico
+
+Su track pasado por el motor con 112 y con 140:
+
+| | 112 (lo que se usó) | 140 (el real) |
+|---|---|---|
+| diagnóstico | enmascaramiento_bajo | enmascaramiento_bajo |
+| estado | avanzado | avanzado |
+| contraste | medio | medio |
+| cambios significativos | 5 | 5 |
+| desarrollo | sí | sí |
+| bloques | 23 | 29 |
+
+**El usuario recibió exactamente el diagnóstico correcto.** Y no es casualidad
+de un track: forzando errores de ±25 % en 9 tracks distintos, 8 dan el mismo
+diagnóstico y estado; en el noveno solo se mueve el contraste (medio → alto).
+
+Esa tolerancia es hoy una propiedad medida, no una garantía — y como el BPM ya
+no se enseña, si un día se perdiera nadie lo vería. Por eso la fija
+`backend/tests/test_estructura_tolera_bpm_malo.py`.
 
 ## 4. Qué se retiró (v0.5.99)
 
