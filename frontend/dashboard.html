@@ -2320,30 +2320,76 @@
     }
 
 
-    // Tarjeta del CTA de curso. Mientras dura la campaña de Headroom y Gain
-    // Staging (ago-2026) enseña sus números; el CTA del Máster nunca tuvo
-    // tarjeta y sus eventos siguen guardándose igual, así que si se vuelve al
-    // Máster basta cambiar EVENTOS_CURSO para verlo aquí.
-    const EVENTOS_CURSO = { visto: 'headroom_visto', clic: 'headroom_clicked',
-                            titulo: 'Headroom y Gain Staging — curso nuevo' };
+    // Panel de la campaña de curso. Mientras dura la de Headroom y Gain
+    // Staging (ago-2026) enseña sus números; para volver al Máster basta
+    // cambiar EVENTOS_CURSO.
+    //
+    // No son solo tres cifras: la pregunta que hay que poder contestar dentro
+    // de unas semanas es "¿la renuevo?", y para eso hace falta comparar
+    // contra el CTA que sustituyó y ver la evolución por días.
+    const EVENTOS_CURSO = {
+        visto: 'headroom_visto', clic: 'headroom_clicked',
+        titulo: 'Headroom y Gain Staging',
+        // El CTA al que sustituye, para tener contra qué comparar.
+        base_visto: 'master_visto', base_clic: 'master_clicked', base_nombre: 'Máster',
+    };
 
     function CursoResumenCard() {
         const [d, setD] = React.useState(null);
+        const [dias, setDias] = React.useState(30);
         React.useEffect(() => {
-            fetch(`${API_URL}/api/admin/embudo?dias=30`, { credentials: 'same-origin' })
+            setD(null);
+            fetch(`${API_URL}/api/admin/embudo?dias=${dias}`, { credentials: 'same-origin' })
                 .then(r => r.ok ? r.json() : null).then(setD).catch(() => {});
-        }, []);
-        const rv = d?.totales_recientes?.[EVENTOS_CURSO.visto] || {};
-        const rc = d?.totales_recientes?.[EVENTOS_CURSO.clic] || {};
-        const imp = rv.sesiones || 0, clk = rc.sesiones || 0;
-        const ctr = imp > 0 ? (clk / imp * 100) : 0;
+        }, [dias]);
+
+        const rec = d?.totales_recientes || {};
+        const glob = d?.totales_global || {};
+        const imp = rec[EVENTOS_CURSO.visto]?.sesiones || 0;
+        const clk = rec[EVENTOS_CURSO.clic]?.sesiones || 0;
+        const ctr = imp > 0 ? (clk / imp * 100) : null;
+
+        // Referencia: el CTA anterior, en TODO su histórico. Es lo único
+        // contra lo que se puede decir "mejor" o "peor" con sentido.
+        const bImp = glob[EVENTOS_CURSO.base_visto]?.sesiones || 0;
+        const bClk = glob[EVENTOS_CURSO.base_clic]?.sesiones || 0;
+        const bCtr = bImp > 0 ? (bClk / bImp * 100) : null;
+        const delta = (ctr !== null && bCtr !== null && bCtr > 0) ? (ctr - bCtr) : null;
+
+        // Evolución diaria de impresiones y clics.
+        const serie = React.useMemo(() => {
+            if (!d?.serie) return [];
+            const porDia = {};
+            d.serie.forEach(x => {
+                if (x.evento !== EVENTOS_CURSO.visto && x.evento !== EVENTOS_CURSO.clic) return;
+                porDia[x.date] = porDia[x.date] || { date: x.date, imp: 0, clk: 0 };
+                if (x.evento === EVENTOS_CURSO.visto) porDia[x.date].imp = x.n;
+                else porDia[x.date].clk = x.n;
+            });
+            return Object.values(porDia).sort((a, b) => a.date < b.date ? -1 : 1);
+        }, [d]);
+        const maxImp = Math.max(1, ...serie.map(x => x.imp));
+
         return (
             <div className="card p-5 mb-8">
-                <h3 className="text-sm font-medium text-gray-300 mb-4">
-                    🎚️ {EVENTOS_CURSO.titulo}
-                    <span className="text-gray-500 text-xs font-normal"> (últimos 30 días)</span>
-                </h3>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
+                    <h3 className="text-sm font-medium text-gray-300">
+                        🎚️ Campaña: {EVENTOS_CURSO.titulo}
+                        <span className="text-gray-500 text-xs font-normal"> — CTA del informe</span>
+                    </h3>
+                    <div className="flex gap-1">
+                        {[7, 30, 90].map(n => (
+                            <button key={n} onClick={() => setDias(n)}
+                                className="px-2 py-1 rounded text-xs transition-colors"
+                                style={{ background: dias === n ? '#3a3a3a' : 'transparent',
+                                         color: dias === n ? '#e5e5e5' : '#777' }}>
+                                {n}d
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4 mb-5">
                     <div className="text-center">
                         <p className="text-2xl font-bold text-gray-200">{imp}</p>
                         <p className="text-gray-500 text-xs mt-1">CTA mostrado</p>
@@ -2353,14 +2399,63 @@
                         <p className="text-gray-500 text-xs mt-1">Fueron al curso</p>
                     </div>
                     <div className="text-center">
-                        <p className="text-2xl font-bold" style={{ color: '#22d3ee' }}>{imp > 0 ? ctr.toFixed(1) + '%' : '—'}</p>
+                        <p className="text-2xl font-bold" style={{ color: '#22d3ee' }}>
+                            {ctr === null ? '—' : ctr.toFixed(1) + '%'}
+                        </p>
                         <p className="text-gray-500 text-xs mt-1">CTR (clic / mostrado)</p>
                     </div>
                 </div>
-                {imp === 0 && (
-                    <p className="text-gray-600 text-xs mt-3">
-                        Sin impresiones todavía: los números aparecen cuando alguien complete
-                        un análisis con el CTA nuevo desplegado.
+
+                {/* La comparación es la que decide si la campaña se renueva. */}
+                <div className="rounded-lg p-3 mb-4" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                    {bCtr === null ? (
+                        <p className="text-gray-500 text-xs">
+                            Sin histórico del CTA del {EVENTOS_CURSO.base_nombre} con el que comparar.
+                        </p>
+                    ) : ctr === null ? (
+                        <p className="text-gray-500 text-xs">
+                            El CTA del {EVENTOS_CURSO.base_nombre} venía haciendo un{' '}
+                            <span className="text-gray-300">{bCtr.toFixed(1)}%</span> de CTR
+                            ({bClk} de {bImp}). Es la referencia a batir.
+                        </p>
+                    ) : (
+                        <p className="text-gray-400 text-xs leading-relaxed">
+                            Frente al CTA del {EVENTOS_CURSO.base_nombre}, que hacía un{' '}
+                            <span className="text-gray-300">{bCtr.toFixed(1)}%</span> ({bClk} de {bImp} en todo su histórico):{' '}
+                            <span style={{ color: delta >= 0 ? '#4ade80' : '#f87171', fontWeight: 600 }}>
+                                {delta >= 0 ? '+' : ''}{delta.toFixed(1)} puntos
+                            </span>
+                            {imp < 30 && (
+                                <span className="text-gray-600"> — con {imp} impresiones esto todavía
+                                    es ruido; espera a tener unas cuantas decenas.</span>
+                            )}
+                        </p>
+                    )}
+                </div>
+
+                {serie.length > 0 ? (
+                    <div>
+                        <p className="text-xs text-gray-500 mb-2">Por día — barra clara: mostrado · barra morada: clics.
+                            <span className="text-gray-600"> Aquí cuentan eventos; las cifras de arriba cuentan sesiones únicas, así que no suman igual.</span></p>
+                        <div className="flex items-end gap-1" style={{ height: '90px' }}>
+                            {serie.map(x => {
+                                const hI = Math.max((x.imp / maxImp) * 70, x.imp > 0 ? 3 : 0);
+                                const hC = Math.max((x.clk / maxImp) * 70, x.clk > 0 ? 3 : 0);
+                                return (
+                                    <div key={x.date} className="flex-1 flex flex-col items-center justify-end"
+                                         title={`${x.date}: ${x.imp} mostrado, ${x.clk} clics`}
+                                         style={{ minWidth: 0 }}>
+                                        <div className="w-full rounded-t-sm" style={{ height: `${hI}px`, background: '#3f3f46' }} />
+                                        <div className="w-full rounded-b-sm" style={{ height: `${hC}px`, background: '#a78bfa' }} />
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                ) : (
+                    <p className="text-gray-600 text-xs">
+                        Sin impresiones todavía. Los números aparecen cuando alguien complete un
+                        análisis que no salga limpio — los que salen limpios ven el CTA de Relesit.
                     </p>
                 )}
             </div>
