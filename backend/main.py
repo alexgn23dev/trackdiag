@@ -3486,7 +3486,11 @@ def serve_dashboard(request: Request, key: str = ""):
         dashboard_path = FRONTEND_DIR / "dashboard.html"
         if not dashboard_path.is_file():
             return JSONResponse(status_code=404, content={"error": "Dashboard no encontrado"})
-        return FileResponse(dashboard_path)
+        # no-cache como /calibrar y como index.html en el catch-all. Sin esta
+        # cabecera el navegador aplica caché heurística y se queda con la
+        # copia anterior: Alex dejó de ver una tarjeta nueva durante horas
+        # después de desplegarla, y no había forma de saberlo desde aquí.
+        return FileResponse(dashboard_path, headers={"Cache-Control": "no-cache"})
 
     # Primer login con key: setear cookie y REDIRIGIR para quitar key de la URL
     if key and key == ADMIN_KEY:
