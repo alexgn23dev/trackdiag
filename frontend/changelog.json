@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "version": "0.5.100",
+      "date": "2026-08-14",
+      "title": "Nuevo curso: Headroom y Gain Staging",
+      "changes": [
+        "Durante las próximas semanas, el informe termina con el curso recién publicado de Headroom y Gain Staging en lugar de la recomendación del Máster. El texto se adapta a lo que haya detectado tu análisis.",
+        "Si tu track sale limpio sigues viendo la sugerencia de buscar sello en Relesit — nunca verás las dos cosas a la vez."
+      ]
+    },
+    {
       "version": "0.5.99",
       "date": "2026-08-14",
       "title": "El BPM sale del informe",

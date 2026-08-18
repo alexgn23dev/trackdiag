@@ -2320,6 +2320,53 @@
     }
 
 
+    // Tarjeta del CTA de curso. Mientras dura la campaña de Headroom y Gain
+    // Staging (ago-2026) enseña sus números; el CTA del Máster nunca tuvo
+    // tarjeta y sus eventos siguen guardándose igual, así que si se vuelve al
+    // Máster basta cambiar EVENTOS_CURSO para verlo aquí.
+    const EVENTOS_CURSO = { visto: 'headroom_visto', clic: 'headroom_clicked',
+                            titulo: 'Headroom y Gain Staging — curso nuevo' };
+
+    function CursoResumenCard() {
+        const [d, setD] = React.useState(null);
+        React.useEffect(() => {
+            fetch(`${API_URL}/api/admin/embudo?dias=30`, { credentials: 'same-origin' })
+                .then(r => r.ok ? r.json() : null).then(setD).catch(() => {});
+        }, []);
+        const rv = d?.totales_recientes?.[EVENTOS_CURSO.visto] || {};
+        const rc = d?.totales_recientes?.[EVENTOS_CURSO.clic] || {};
+        const imp = rv.sesiones || 0, clk = rc.sesiones || 0;
+        const ctr = imp > 0 ? (clk / imp * 100) : 0;
+        return (
+            <div className="card p-5 mb-8">
+                <h3 className="text-sm font-medium text-gray-300 mb-4">
+                    🎚️ {EVENTOS_CURSO.titulo}
+                    <span className="text-gray-500 text-xs font-normal"> (últimos 30 días)</span>
+                </h3>
+                <div className="grid grid-cols-3 gap-4">
+                    <div className="text-center">
+                        <p className="text-2xl font-bold text-gray-200">{imp}</p>
+                        <p className="text-gray-500 text-xs mt-1">CTA mostrado</p>
+                    </div>
+                    <div className="text-center">
+                        <p className="text-2xl font-bold" style={{ color: '#a78bfa' }}>{clk}</p>
+                        <p className="text-gray-500 text-xs mt-1">Fueron al curso</p>
+                    </div>
+                    <div className="text-center">
+                        <p className="text-2xl font-bold" style={{ color: '#22d3ee' }}>{imp > 0 ? ctr.toFixed(1) + '%' : '—'}</p>
+                        <p className="text-gray-500 text-xs mt-1">CTR (clic / mostrado)</p>
+                    </div>
+                </div>
+                {imp === 0 && (
+                    <p className="text-gray-600 text-xs mt-3">
+                        Sin impresiones todavía: los números aparecen cuando alguien complete
+                        un análisis con el CTA nuevo desplegado.
+                    </p>
+                )}
+            </div>
+        );
+    }
+
     // Tarjeta resumen de Relesit (para la pestaña principal) — carga el embudo
     // por su cuenta (últimos 30 días) y muestra impresiones / clics / CTR.
     function RelesitResumenCard() {
@@ -2717,6 +2764,7 @@
                         </div>
 
                         {/* Relesit — conversión del CTA "busca sello" */}
+                        <CursoResumenCard />
                         <RelesitResumenCard />
 
                         {/* Engagement Card */}
