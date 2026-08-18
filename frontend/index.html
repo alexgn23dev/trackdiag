@@ -306,7 +306,7 @@
     // /api/health. Si no coincide, este fichero viene de la caché del
     // navegador y puede estar dejando de enviar campos que el backend ya
     // espera — se recarga una sola vez y, si aun así no cuadra, se avisa.
-    const APP_VERSION = '0.5.99';
+    const APP_VERSION = '0.5.100';
 
     function comprobarVersionFrontend(onDesfase, onEntorno) {
         fetch(`${API_URL}/api/health`, { cache: 'no-store' })
@@ -1473,6 +1473,76 @@
         if (loud.aviso_true_peak) return { variante: 'mastering', categoria: 'true_peak' };
         if (loud.aviso_saturacion || loud.nivel === 'muy_alto') return { variante: 'mastering', categoria: 'loudness' };
         return { variante: 'general', categoria: 'general' };
+    }
+
+    // =====================================================================
+    // Campaña temporal (ago-2026): el CTA de curso apunta al lanzamiento de
+    // "Headroom y Gain Staging" en vez de al Máster, durante unas semanas.
+    //
+    // Para volver al Máster: poner CTA_CURSO = 'master'. Nada más. MasterCTA
+    // sigue intacto y con su tracking, así que la vuelta no es una migración,
+    // es cambiar una palabra.
+    // =====================================================================
+    const CTA_CURSO = 'headroom';   // 'headroom' | 'master'
+
+    // Enlace ya preparado por Alex: la landing es específica de Mentotrack
+    // (de ahí el sufijo), así que no se le cuelgan UTMs encima. Saber QUÉ
+    // diagnóstico originó el clic no se pierde: va en nuestro propio evento.
+    const HEADROOM_URL = 'https://producciononline.com/headroom-mentotrack';
+
+    // El curso va de repartir ganancia por la cadena y llegar al máster con
+    // sitio. Se conecta con lo que el análisis haya detectado, sin prometer
+    // que el gain staging arregla cosas que no arregla.
+    const HEADROOM_VARIANTES = {
+        mastering: 'Tu análisis ha marcado algo en picos o nivel. Casi siempre eso no se arregla en el máster: viene de una cadena que llegó sin sitio. El curso enseña a dejar ese margen desde el primer fader.',
+        mezcla: 'Antes de tocar un EQ conviene tener los niveles en su sitio: es lo que hace que la mezcla responda como esperas en vez de pelearte con ella. De eso va el curso.',
+        estructura: 'Cuando el arreglo esté cerrado vas a necesitar que la mezcla no se te desmonte al subir el volumen. El curso enseña a repartir la ganancia para que eso no pase.',
+        general: 'Cómo repartir la ganancia por toda la cadena y llegar al máster con margen de sobra. Corto, práctico y al grano.',
+    };
+
+    function HeadroomCTA({ diagId, variante, categoria, userEmail }) {
+        useEffect(() => {
+            try { trackEvent('cta_headroom_visto', { diagnostico: diagId, variante, categoria }); } catch (e) {}
+            try { window.mtCtaEvent && window.mtCtaEvent('headroom_visto', { diagnostico_id: categoria || '', email: userEmail || '' }); } catch (e) {}
+        }, [diagId]);
+        return (
+            <a
+                href={HEADROOM_URL}
+                target="_blank"
+                rel="noopener"
+                onClick={() => {
+                    try { trackEvent('cta_headroom_clicked', { diagnostico: diagId, variante, categoria }); } catch (e) {}
+                    try { window.mtCtaEvent && window.mtCtaEvent('headroom_clicked', { diagnostico_id: categoria || '', email: userEmail || '' }); } catch (e) {}
+                }}
+                className="block card p-5 mb-6 transition-all"
+                style={{
+                    background: 'linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(99,102,241,0.05) 100%)',
+                    border: '1px solid rgba(139,92,246,0.25)',
+                    textDecoration: 'none',
+                    cursor: 'pointer',
+                }}
+            >
+                <p className="text-xs font-medium uppercase tracking-wider mb-2"
+                   style={{ color: '#a78bfa' }}>
+                    Nuevo curso
+                </p>
+                <p className="text-white text-sm font-semibold mb-1">
+                    Headroom y Gain Staging
+                </p>
+                <p className="text-gray-400 text-xs leading-relaxed mb-3">
+                    {HEADROOM_VARIANTES[variante] || HEADROOM_VARIANTES.general}
+                </p>
+                <span className="inline-flex items-center gap-1.5 text-white text-sm font-medium">
+                    Ver el curso →
+                </span>
+            </a>
+        );
+    }
+
+    /** El CTA de curso que toca hoy. Un solo punto de entrada para las dos
+     *  vistas, y un solo sitio donde decidir cuál se enseña. */
+    function CursoCTA(props) {
+        return CTA_CURSO === 'headroom' ? <HeadroomCTA {...props} /> : <MasterCTA {...props} />;
     }
 
     function MasterCTA({ diagId, variante, categoria, userEmail }) {
@@ -4003,7 +4073,7 @@
             const listaTutorialesV2 = tutorialDestacadoV2
                 ? allTutoriales.slice(1, 4) : allTutoriales.slice(0, 3);
             const derivacionV2 = esRelesit ? null : (
-                <MasterCTA diagId={diagId} variante={masterCta.variante}
+                <CursoCTA diagId={diagId} variante={masterCta.variante}
                            categoria={masterCta.categoria} userEmail={userEmail} />
             );
 
@@ -4786,7 +4856,7 @@
                     {(diagId === 'sin_diagnostico' || r.estado_track === 'avanzado') && r.estado_track !== 'verde' ? (
                         <RelesitCTA diagId={diagId} estado={r.estado_track} userEmail={userEmail} bpm={r.datos_audio && r.datos_audio.bpm} bpmFiable={r.datos_audio && r.datos_audio.tempo_refinado ? r.datos_audio.bpm : null} genero={contexto && (contexto.genero === 'otro' ? (contexto.genero_custom || '') : contexto.genero)} />
                     ) : (
-                        <MasterCTA diagId={diagId} variante={masterCta.variante} categoria={masterCta.categoria} userEmail={userEmail} />
+                        <CursoCTA diagId={diagId} variante={masterCta.variante} categoria={masterCta.categoria} userEmail={userEmail} />
                     )}
 
                     {/* CTA de la encuesta de comunidad (tras el análisis) */}

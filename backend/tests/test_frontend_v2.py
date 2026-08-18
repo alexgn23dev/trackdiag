@@ -181,8 +181,16 @@ class TestNoDuplicaLoQueYaFunciona(unittest.TestCase):
         self.assertIn("Mentotrack no almacena el archivo de tu canción", self.v2)
 
     def test_las_tarjetas_de_derivacion_son_los_componentes_reales(self):
+        """La v2 no reimplementa las tarjetas: usa las mismas que la clásica.
+
+        Desde ago-2026 la del curso pasa por `CursoCTA`, que decide entre el
+        Máster y la campaña temporal de Headroom — una indirección, no una
+        tarjeta nueva: las dos vistas siguen enseñando lo mismo."""
         self.assertIn("<RelesitCTA", self.v2)
-        self.assertIn("<MasterCTA", self.v2)
+        self.assertIn("<CursoCTA", self.v2)
+        self.assertIn("function CursoCTA(", self.html)
+        # Y la clásica usa exactamente la misma, no una copia.
+        self.assertEqual(self.html.count("<CursoCTA"), 2)
 
     def test_la_regla_de_derivacion_no_cambia(self):
         """Una tarjeta y solo una, con el mismo criterio que la clásica."""
@@ -233,3 +241,42 @@ class TestSinEmojisEnLaV2(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestLaCampanaDeCurso(unittest.TestCase):
+    """El CTA de curso es un enlace comercial: si se rompe, se pierde tráfico
+    en silencio — nadie recibe un error, simplemente nadie llega.
+
+    Campaña temporal (ago-2026): durante unas semanas apunta al curso de
+    Headroom y Gain Staging en vez de al Máster.
+    """
+
+    def setUp(self):
+        self.html = fuente()
+
+    def test_el_enlace_es_exactamente_el_que_dio_alex(self):
+        """Sin UTMs colgados: la landing ya es específica de Mentotrack."""
+        self.assertIn(
+            "const HEADROOM_URL = 'https://producciononline.com/headroom-mentotrack';",
+            self.html)
+
+    def test_volver_al_master_es_cambiar_una_palabra(self):
+        """La campaña se acaba en unas semanas. MasterCTA tiene que seguir
+        entero para que la vuelta no sea una migración."""
+        self.assertIn("const CTA_CURSO = 'headroom';", self.html)
+        self.assertIn("function MasterCTA(", self.html)
+        self.assertIn("CTA_CURSO === 'headroom' ? <HeadroomCTA", self.html)
+
+    def test_el_clic_y_la_impresion_se_registran(self):
+        """Sin esto la campaña no se puede evaluar, que es justo para lo que
+        se pone un CTA temporal."""
+        for evento in ("cta_headroom_visto", "cta_headroom_clicked",
+                       "headroom_visto", "headroom_clicked"):
+            self.assertIn(evento, self.html, evento)
+
+    def test_el_dashboard_puede_verlo(self):
+        raiz = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        dash = open(os.path.join(raiz, "frontend", "dashboard.html"), encoding="utf-8").read()
+        self.assertIn("headroom_visto", dash)
+        self.assertIn("headroom_clicked", dash)
+        self.assertIn("<CursoResumenCard />", dash)
