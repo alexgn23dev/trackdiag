@@ -1500,7 +1500,7 @@
         general: 'Cómo repartir la ganancia por toda la cadena y llegar al máster con margen de sobra. Corto, práctico y al grano.',
     };
 
-    function HeadroomCTA({ diagId, variante, categoria, userEmail }) {
+    function HeadroomCTA({ diagId, variante, categoria, userEmail, clase }) {
         useEffect(() => {
             try { trackEvent('cta_headroom_visto', { diagnostico: diagId, variante, categoria }); } catch (e) {}
             try { window.mtCtaEvent && window.mtCtaEvent('headroom_visto', { diagnostico_id: categoria || '', email: userEmail || '' }); } catch (e) {}
@@ -1514,7 +1514,7 @@
                     try { trackEvent('cta_headroom_clicked', { diagnostico: diagId, variante, categoria }); } catch (e) {}
                     try { window.mtCtaEvent && window.mtCtaEvent('headroom_clicked', { diagnostico_id: categoria || '', email: userEmail || '' }); } catch (e) {}
                 }}
-                className="block card p-5 mb-6 transition-all"
+                className={`block card p-5 transition-all ${clase || 'mb-6'}`}
                 style={{
                     background: 'linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(99,102,241,0.05) 100%)',
                     border: '1px solid rgba(139,92,246,0.25)',
@@ -1545,7 +1545,7 @@
         return CTA_CURSO === 'headroom' ? <HeadroomCTA {...props} /> : <MasterCTA {...props} />;
     }
 
-    function MasterCTA({ diagId, variante, categoria, userEmail }) {
+    function MasterCTA({ diagId, variante, categoria, userEmail, clase }) {
         useEffect(() => {
             try { trackEvent('cta_master_visto', { diagnostico: diagId, variante, categoria }); } catch (e) {}
             try { window.mtCtaEvent && window.mtCtaEvent('master_visto', { diagnostico_id: categoria || '', email: userEmail || '' }); } catch (e) {}
@@ -1560,7 +1560,7 @@
                     try { trackEvent('cta_master_clicked', { diagnostico: diagId, variante, categoria }); } catch (e) {}
                     try { window.mtCtaEvent && window.mtCtaEvent('master_clicked', { diagnostico_id: categoria || '', email: userEmail || '' }); } catch (e) {}
                 }}
-                className="block card p-5 mb-6 transition-all"
+                className={`block card p-5 transition-all ${clase || 'mb-6'}`}
                 style={{
                     background: 'linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(99,102,241,0.05) 100%)',
                     border: '1px solid rgba(139,92,246,0.25)',
@@ -2933,72 +2933,6 @@
         );
     }
 
-    /** Tutorial destacado de la cabecera v2. Ocupa el hueco del CTA de
-     *  Relesit cuando el track todavía no está para buscar sello: si hay
-     *  trabajo que hacer, lo útil no es una derivación sino el tutorial de
-     *  Producción Online que enseña a hacerlo — el primero del mapa del
-     *  diagnóstico principal, que es el que mejor se ajusta.
-     *
-     *  El player de YouTube no se incrusta hasta que el usuario pulsa: la
-     *  página no carga scripts de terceros en cada informe, y el clic pasa
-     *  por el MISMO tracking que los tutoriales de la lista (la métrica del
-     *  dashboard sigue midiendo lo mismo). Tras el clic, reproduce aquí.
-     */
-    function V2TutorialDestacado({ tut, diagId, userEmail }) {
-        const [reproduciendo, setReproduciendo] = useState(false);
-        const vid = (tut.url.match(/[?&]v=([\w-]{11})/) || [])[1];
-        const registrar = () => {
-            try { trackEvent('tutorial_clicked', { diagnostico: diagId, tutorial: tut.titulo }); } catch (e) {}
-            try {
-                fetch(`${API_URL}/api/sheets/tutorial-click`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: userEmail || '', tutorial_clickado: tut.titulo }),
-                }).catch(() => {});
-            } catch (e) {}
-        };
-        return (
-            <div className="card p-5 h-full flex flex-col">
-                <div className="rotulo-v2 mb-3">Tutorial recomendado</div>
-                <div className="relative rounded-lg overflow-hidden"
-                     style={{ background: '#101015', aspectRatio: '16 / 9' }}>
-                    {reproduciendo && vid ? (
-                        <iframe src={`https://www.youtube-nocookie.com/embed/${vid}?autoplay=1&rel=0`}
-                                title={tut.titulo} className="absolute inset-0 w-full h-full"
-                                style={{ border: 0 }}
-                                allow="autoplay; encrypted-media; picture-in-picture"
-                                allowFullScreen />
-                    ) : (
-                        <button type="button" className="absolute inset-0 w-full h-full group"
-                                style={{ padding: 0, border: 0, background: 'transparent', cursor: 'pointer' }}
-                                onClick={() => {
-                                    registrar();
-                                    if (vid) setReproduciendo(true);
-                                    else window.open(tut.url, '_blank', 'noopener');
-                                }}
-                                aria-label={`Ver tutorial: ${tut.titulo}`}>
-                            {vid && (
-                                <img src={`https://i.ytimg.com/vi/${vid}/hqdefault.jpg`} alt="" loading="lazy"
-                                     className="absolute inset-0 w-full h-full object-cover opacity-85 group-hover:opacity-100 transition" />
-                            )}
-                            <span className="absolute inset-0 flex items-center justify-center">
-                                <span className="w-12 h-12 rounded-full flex items-center justify-center transition"
-                                      style={{ background: 'rgba(0,0,0,0.62)' }}>
-                                    <span style={{ width: 0, height: 0, marginLeft: '3px',
-                                                   borderTop: '8px solid transparent',
-                                                   borderBottom: '8px solid transparent',
-                                                   borderLeft: '14px solid #fff' }} />
-                                </span>
-                            </span>
-                        </button>
-                    )}
-                </div>
-                <p className="text-white text-sm font-medium leading-snug mt-3">{tut.titulo}</p>
-                <p className="text-gray-500 text-xs mt-1 leading-snug">{tut.descripcion}</p>
-            </div>
-        );
-    }
-
     /** Barra de navegación de la v2.
      *
      * La vista clásica solo tiene un botón flotante "Mi panel" en una esquina,
@@ -4062,20 +3996,21 @@
                             genero={contexto && (contexto.genero === 'otro' ? (contexto.genero_custom || '') : contexto.genero)} />
             ) : null;
             // La columna derecha de la cabecera: Relesit si el track está para
-            // sello; si no, el tutorial que mejor encaja (el primero del mapa
-            // del diagnóstico principal). Gracias al fallback 'sin_diagnostico'
-            // del mapa, este hueco no queda vacío nunca.
-            const tutorialDestacadoV2 = !esRelesit && allTutoriales.length > 0 ? allTutoriales[0] : null;
-            const bloqueDerechoV2 = tarjetaRelesit || (tutorialDestacadoV2
-                ? <V2TutorialDestacado tut={tutorialDestacadoV2} diagId={diagId} userEmail={userEmail} />
-                : null);
-            // Si el destacado es un tutorial, la lista de abajo no lo repite.
-            const listaTutorialesV2 = tutorialDestacadoV2
-                ? allTutoriales.slice(1, 4) : allTutoriales.slice(0, 3);
-            const derivacionV2 = esRelesit ? null : (
+            // sello; si no, el CTA del curso. Antes ahí iba un tutorial
+            // destacado y el CTA quedaba al final del Resumen — decisión de
+            // Alex (ago-2026): la derivación sube a la cabecera, que es lo
+            // primero que se ve, y los tutoriales se quedan abajo enteros.
+            // Este hueco no queda vacío nunca: siempre hay una de las dos.
+            const bloqueDerechoV2 = tarjetaRelesit || (
                 <CursoCTA diagId={diagId} variante={masterCta.variante}
-                           categoria={masterCta.categoria} userEmail={userEmail} />
+                          categoria={masterCta.categoria} userEmail={userEmail}
+                          clase="h-full" />
             );
+            // La lista de abajo ya no tiene que saltarse ningún destacado.
+            const listaTutorialesV2 = allTutoriales.slice(0, 3);
+            // Y el pie del Resumen se queda sin tarjeta de derivación: la que
+            // había es la que acaba de subir.
+            const derivacionV2 = null;
 
             // Tutoriales: en la vista clásica están tras un botón al final del
             // informe. Aquí se enseñan directamente — que estuvieran escondidos

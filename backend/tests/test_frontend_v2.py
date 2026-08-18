@@ -156,8 +156,22 @@ class TestNoDuplicaLoQueYaFunciona(unittest.TestCase):
         j = self.v2.find("V2_TABS.map")
         self.assertGreater(i, 0, "no se pinta la columna derecha de la cabecera")
         self.assertLess(i, j, "la cabecera tiene que ir ANTES de las pestañas")
-        # Y el tutorial destacado no se repite en la lista de abajo.
-        self.assertIn("allTutoriales.slice(1, 4)", self.v2)
+
+    def test_ese_hueco_nunca_queda_vacio(self):
+        """Si el track no está para sello, la columna derecha la ocupa el CTA
+        del curso (decisión de Alex, ago-2026: la derivación sube a la
+        cabecera y los tutoriales se quedan abajo). Antes ahí iba un tutorial
+        destacado, que dependía de que hubiera tutoriales para ese
+        diagnóstico; el CTA no depende de datos, así que el hueco está
+        siempre lleno y la cabecera no se descuadra."""
+        i = self.v2.find("const bloqueDerechoV2 = tarjetaRelesit ||")
+        bloque = self.v2[i:i + 400]
+        self.assertIn("<CursoCTA", bloque)
+        self.assertIn('clase="h-full"', bloque)
+        # Y la lista de abajo ya no se salta ningún destacado.
+        self.assertIn("const listaTutorialesV2 = allTutoriales.slice(0, 3);", self.v2)
+        self.assertNotIn("V2TutorialDestacado", self.html,
+                         "quedó el componente huérfano del vídeo destacado")
 
     def test_hay_barra_de_navegacion_propia(self):
         """El botón flotante "Mi panel" se encimaba al contenido en cuanto la
