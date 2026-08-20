@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "version": "0.5.101",
+      "date": "2026-08-21",
+      "title": "Vuelve la pregunta de si el diagnóstico te ha servido",
+      "changes": [
+        "El recuadro para decirnos si el diagnóstico coincide con lo que percibías vuelve al final del informe. Se había quedado solo la barra flotante de abajo, y mucha gente no llegaba a verla.",
+        "Tu respuesta se guarda en cuanto pulsas Sí, Más o menos o No. Antes solo contaba si además rellenabas el paso siguiente: quien respondía y cerraba la pestaña se perdía por el camino.",
+        "Los tres botones pesan lo mismo: el «No» era el único que se veía bien. Y la barra de abajo aparece a los 8 segundos en vez de a los 20."
+      ]
+    },
+    {
       "version": "0.5.100",
       "date": "2026-08-14",
       "title": "Nuevo curso: Headroom y Gain Staging",

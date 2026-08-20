@@ -127,20 +127,27 @@ class TestNoDuplicaLoQueYaFunciona(unittest.TestCase):
         self.v2 = self.html[i:j if j > i else i + 20000]
 
     def test_el_widget_de_calibracion_es_el_mismo(self):
-        """Ambos se extrajeron a variables para que los usen las dos vistas.
+        """Ambos se extrajeron a variables para que los usen las dos vistas, y
+        las DOS los pintan: widget en el informe + barra flotante.
 
-        La v2 NO lo pinta en tarjeta: Alex lo prefiere como en la clásica, en
-        la barra flotante de abajo. Pero la barra es el mismo componente."""
+        Antes este test fijaba lo contrario (`feedback: null` en la v2). Esa
+        decisión se tomó creyendo que la clásica solo tenía la barra, y no era
+        cierto: tenía las dos cosas. Con la v2 por defecto desde el 13-ago, las
+        respuestas cayeron del 2,95 % al 0,31 % de los análisis. Ver
+        docs/feedback-como-se-pide.md."""
         self.assertIn("const bloqueFeedback = (", self.html)
         self.assertIn("const barraFeedback = (", self.html)
         self.assertIn("{barraFeedback}", self.v2)
-        # La clásica pinta los dos; la v2 solo la barra.
-        self.assertEqual(self.html.count("{bloqueFeedback}"), 1)
+        self.assertIn("{bloqueFeedback}", self.v2)
+        # Las dos vistas pintan las dos cosas.
+        self.assertEqual(self.html.count("{bloqueFeedback}"), 2)
         self.assertEqual(self.html.count("{barraFeedback}"), 2)
 
-    def test_el_feedback_no_va_en_tarjeta_en_la_v2(self):
-        """Decisión de Alex tras probarlo: la tarjeta estorbaba."""
-        self.assertIn("feedback: null", self.v2)
+    def test_el_feedback_va_en_tarjeta_en_la_v2(self):
+        """La condición del guard de verdad vive en
+        test_feedback_se_pide_y_se_guarda.py; aquí solo se comprueba que la
+        rama v2 no vuelve a anularlo."""
+        self.assertNotIn("feedback: null", self.v2)
 
     def test_relesit_va_arriba_cuando_el_track_esta_fino(self):
         """Si no hay nada urgente que arreglar, lo principal es "búscale
