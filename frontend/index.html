@@ -306,7 +306,7 @@
     // /api/health. Si no coincide, este fichero viene de la caché del
     // navegador y puede estar dejando de enviar campos que el backend ya
     // espera — se recarga una sola vez y, si aun así no cuadra, se avisa.
-    const APP_VERSION = '0.5.100';
+    const APP_VERSION = '0.5.101';
 
     function comprobarVersionFrontend(onDesfase, onEntorno) {
         fetch(`${API_URL}/api/health`, { cache: 'no-store' })
@@ -3659,7 +3659,7 @@
 
         useEffect(() => {
             if (feedbackStep !== 0 || stickyFeedbackDismissed) return;
-            const t = setTimeout(() => setStickyFeedbackVisible(true), 20000);
+            const t = setTimeout(() => setStickyFeedbackVisible(true), 8000);
             return () => clearTimeout(t);
         }, [feedbackStep, stickyFeedbackDismissed]);
 
@@ -3669,9 +3669,31 @@
             if (feedbackStep > 0) setStickyFeedbackVisible(false);
         }, [feedbackStep]);
 
-        const responderDesdeSticky = (valor) => {
+        // El veredicto se guarda EN EL PRIMER CLIC, no al enviar el detalle.
+        // Antes, pulsar Sí/Parcial/No solo abría el formulario: quien cerraba
+        // la pestaña —o pulsaba «Saltar»— contaba como que no había respondido.
+        // Medido en agosto-2026: 1 respuesta guardada en 319 análisis.
+        // El backend hace COALESCE, así que el envío posterior del detalle
+        // completa la misma fila sin pisar nada.
+        const guardarVeredicto = (valor) => {
+            const etiqueta = valor === 'si' ? 'Sí' : valor === 'masomenos' ? 'Parcial' : 'No';
+            fetch(`${API_URL}/api/sheets/feedback`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ email: userEmail, fue_util: etiqueta }),
+                keepalive: true,
+            }).catch(() => {});
+            try { trackEvent('funnel_feedback_veredicto', { coincide: valor }); } catch (e) {}
+        };
+
+        const elegirVeredicto = (valor) => {
             setFeedbackCoincide(valor);
             setFeedbackStep(1);
+            guardarVeredicto(valor);
+        };
+
+        const responderDesdeSticky = (valor) => {
+            elegirVeredicto(valor);
             setStickyFeedbackVisible(false);
             // Pequeño delay para que React renderice el step 1 antes de scrollear
             setTimeout(() => {
@@ -3733,19 +3755,25 @@
                                 <div className="flex gap-1.5 flex-shrink-0">
                                     <button
                                         onClick={() => responderDesdeSticky('si')}
-                                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-green-900/40 hover:bg-green-900/60 accent-green transition-colors"
+                                        className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                                        style={{ background: 'rgba(37,244,100,0.14)', color: '#25F464',
+                                                 border: '1px solid rgba(37,244,100,0.35)' }}
                                     >
                                         Sí
                                     </button>
                                     <button
                                         onClick={() => responderDesdeSticky('masomenos')}
-                                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-yellow-900/30 hover:bg-yellow-900/50 text-yellow-400 transition-colors"
+                                        className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                                        style={{ background: 'rgba(250,204,21,0.14)', color: '#facc15',
+                                                 border: '1px solid rgba(250,204,21,0.35)' }}
                                     >
                                         Parcial
                                     </button>
                                     <button
                                         onClick={() => responderDesdeSticky('no')}
-                                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors"
+                                        className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                                        style={{ background: 'rgba(160,160,160,0.14)', color: '#c9c9c9',
+                                                 border: '1px solid rgba(160,160,160,0.35)' }}
                                     >
                                         No
                                     </button>
@@ -3773,20 +3801,23 @@
                                 <p className="text-gray-500 text-xs mb-4">Tu respuesta nos ayuda a mejorar el motor de análisis</p>
                                 <div className="flex flex-col sm:flex-row gap-3 justify-center">
                                     <button
-                                        onClick={() => { setFeedbackCoincide('si'); setFeedbackStep(1); }}
-                                        className="px-5 py-2.5 bg-green-900/40 hover:bg-green-900/60 accent-green rounded-lg transition-colors text-sm"
+                                        onClick={() => elegirVeredicto('si')}
+                                        className="px-5 py-2.5 rounded-lg transition-colors text-sm"
+                                        style={{ background: 'rgba(37,244,100,0.14)', color: '#25F464', border: '1px solid rgba(37,244,100,0.35)' }}
                                     >
                                         Sí, dio en el clavo
                                     </button>
                                     <button
-                                        onClick={() => { setFeedbackCoincide('masomenos'); setFeedbackStep(1); }}
-                                        className="px-5 py-2.5 bg-yellow-900/30 hover:bg-yellow-900/50 text-yellow-400 rounded-lg transition-colors text-sm"
+                                        onClick={() => elegirVeredicto('masomenos')}
+                                        className="px-5 py-2.5 rounded-lg transition-colors text-sm"
+                                        style={{ background: 'rgba(250,204,21,0.14)', color: '#facc15', border: '1px solid rgba(250,204,21,0.35)' }}
                                     >
                                         Más o menos
                                     </button>
                                     <button
-                                        onClick={() => { setFeedbackCoincide('no'); setFeedbackStep(1); }}
-                                        className="px-5 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-400 rounded-lg transition-colors text-sm"
+                                        onClick={() => elegirVeredicto('no')}
+                                        className="px-5 py-2.5 rounded-lg transition-colors text-sm"
+                                        style={{ background: 'rgba(160,160,160,0.14)', color: '#c9c9c9', border: '1px solid rgba(160,160,160,0.35)' }}
                                     >
                                         No, mi problema es otro
                                     </button>
@@ -4139,10 +4170,14 @@
                                 <V2TabResumen r={r} extras={{
                                     derivacion: derivacionV2,
                                     tutoriales: tutorialesV2,
-                                    // El widget en tarjeta se quitó: Alex lo prefiere
-                                    // como en la vista clásica, en la barra flotante
-                                    // de abajo. Aquí solo estorbaba una tarjeta más.
-                                    feedback: null,
+                                    // Vuelve al cuerpo del informe (ago-2026). Se
+                                    // quitó pensando que la barra flotante bastaba,
+                                    // pero la vista clásica tenía LAS DOS cosas: al
+                                    // quedarse solo la barra, las respuestas cayeron
+                                    // del 2,95 % al 0,31 % de los análisis.
+                                    // La clase .v2-feedback apila los botones, que
+                                    // aquí viven en media columna.
+                                    feedback: <div className="v2-feedback">{bloqueFeedback}</div>,
                                 }} />
                             )}
                             {v2Tab === 'plan' && <V2TabPlan r={r} />}
