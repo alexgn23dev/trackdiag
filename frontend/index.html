@@ -1546,8 +1546,10 @@
     }
 
     // Matrícula de otoño (sep-2026): etiqueta y línea de los 4 directos en la
-    // tarjeta del Máster. Cuando cierre la matrícula, poner a false.
-    const MATRICULA_OTONO = true;
+    // tarjeta del Máster. Se apaga sola al acabar el 30 de septiembre (hora
+    // de Madrid) y la tarjeta vuelve a ser la de siempre, sin redesplegar.
+    const MATRICULA_OTONO_FIN = new Date('2026-10-01T00:00:00+02:00');
+    const matriculaOtonoAbierta = () => Date.now() < MATRICULA_OTONO_FIN.getTime();
 
     function MasterCTA({ diagId, variante, categoria, userEmail, clase }) {
         useEffect(() => {
@@ -1572,10 +1574,10 @@
                     cursor: 'pointer',
                 }}
             >
-                {MATRICULA_OTONO && (
+                {matriculaOtonoAbierta() && (
                     <p className="text-xs font-medium uppercase tracking-wider mb-2"
                        style={{ color: '#a78bfa' }}>
-                        Matrícula de otoño
+                        Matrícula de otoño · hasta el 30 de septiembre
                     </p>
                 )}
                 <p className="text-white text-sm font-semibold mb-1">
@@ -1584,7 +1586,7 @@
                 <p className="text-gray-400 text-xs leading-relaxed mb-3">
                     {MASTER_CTA_VARIANTES[variante] || MASTER_CTA_VARIANTES.general}
                 </p>
-                {MATRICULA_OTONO && (
+                {matriculaOtonoAbierta() && (
                     <p className="text-white text-xs leading-relaxed mb-3">
                         Esta matrícula incluye 4 directos para ayudarte a empezar.
                     </p>
