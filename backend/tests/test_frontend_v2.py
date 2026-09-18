@@ -284,7 +284,7 @@ class TestLaCampanaDeCurso(unittest.TestCase):
     def test_volver_al_master_es_cambiar_una_palabra(self):
         """La campaña se acaba en unas semanas. MasterCTA tiene que seguir
         entero para que la vuelta no sea una migración."""
-        self.assertIn("const CTA_CURSO = 'headroom';", self.html)
+        self.assertIn("const CTA_CURSO = 'master';", self.html)
         self.assertIn("function MasterCTA(", self.html)
         self.assertIn("CTA_CURSO === 'headroom' ? <HeadroomCTA", self.html)
 

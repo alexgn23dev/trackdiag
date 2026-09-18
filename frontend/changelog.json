@@ -1,6 +1,14 @@
 {
   "entries": [
     {
+      "version": "0.5.102",
+      "date": "2026-09-18",
+      "title": "Vuelve la recomendación del Máster",
+      "changes": [
+        "Termina la campaña del curso de Headroom y Gain Staging: el informe vuelve a recomendar el Máster, con el texto adaptado a lo que haya detectado tu análisis."
+      ]
+    },
+    {
       "version": "0.5.101",
       "date": "2026-08-21",
       "title": "Vuelve la pregunta de si el diagnóstico te ha servido",
