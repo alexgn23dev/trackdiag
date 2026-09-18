@@ -1545,6 +1545,10 @@
         return CTA_CURSO === 'headroom' ? <HeadroomCTA {...props} /> : <MasterCTA {...props} />;
     }
 
+    // Matrícula de otoño (sep-2026): etiqueta y línea de los 4 directos en la
+    // tarjeta del Máster. Cuando cierre la matrícula, poner a false.
+    const MATRICULA_OTONO = true;
+
     function MasterCTA({ diagId, variante, categoria, userEmail, clase }) {
         useEffect(() => {
             try { trackEvent('cta_master_visto', { diagnostico: diagId, variante, categoria }); } catch (e) {}
@@ -1568,12 +1572,23 @@
                     cursor: 'pointer',
                 }}
             >
+                {MATRICULA_OTONO && (
+                    <p className="text-xs font-medium uppercase tracking-wider mb-2"
+                       style={{ color: '#a78bfa' }}>
+                        Matrícula de otoño
+                    </p>
+                )}
                 <p className="text-white text-sm font-semibold mb-1">
                     Este análisis te dice qué falla. El Máster te enseña a arreglarlo.
                 </p>
                 <p className="text-gray-400 text-xs leading-relaxed mb-3">
                     {MASTER_CTA_VARIANTES[variante] || MASTER_CTA_VARIANTES.general}
                 </p>
+                {MATRICULA_OTONO && (
+                    <p className="text-white text-xs leading-relaxed mb-3">
+                        Esta matrícula incluye 4 directos para ayudarte a empezar.
+                    </p>
+                )}
                 <span className="inline-flex items-center gap-1.5 text-white text-sm font-medium">
                     Ver el Máster →
                 </span>
