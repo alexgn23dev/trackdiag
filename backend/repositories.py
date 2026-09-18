@@ -393,6 +393,8 @@ _CTA_EVENTOS_VALIDOS = (
     "relesit_clicked",              # clic en "Buscar sellos en Relesit" → relesit.com
     "master_visto",                 # CTA al Máster al cierre del informe (impresión)
     "master_clicked",               # clic en "Ver el Máster" → producciononline.com
+    "headroom_visto",               # CTA al curso Headroom y Gain Staging (campaña ago-2026)
+    "headroom_clicked",             # clic en "Ver el curso" → producciononline.com/headroom-mentotrack
     "promesa_v2_visto",             # promesa de la comparativa entre versiones (impresión)
     "promesa_v2_clicked",           # clic en "ver qué ha cambiado" (solo con v2+)
     "reenganche_click",             # clic en el CTA del email de re-enganche (día 3)
