@@ -11,6 +11,9 @@ import pyloudnorm as pyln
 import soundfile as sf
 
 from .versiones import PEAK_ALGORITHM_VERSION
+# Definida en excepciones.py (sin dependencias) para que el servidor la
+# reconozca sin importar este módulo; se reexporta aquí.
+from .excepciones import AudioSinSenalAnalizable  # noqa: F401
 
 # ===========================================================================
 # Estado de validación del medidor de true peak
@@ -147,22 +150,6 @@ _UMBRAL_RMS_SIN_SENAL_DBFS = -90.0
 # 128 BPM, el mismo orden que el camino con tempo, para que los umbrales
 # calibrados de contraste y estructura sigan siendo comparables.
 _BLOQUE_SIN_TEMPO_SEG = 15.0
-
-
-class AudioSinSenalAnalizable(Exception):
-    """El archivo se decodifica pero no contiene señal que se pueda analizar.
-
-    Silencio digital, un archivo de puros ceros o muestras no finitas. NO se
-    lanza por tener nivel bajo: para eso está el nivel "muy_bajo" del
-    diagnóstico normal.
-    """
-
-    codigo = "AUDIO_WITHOUT_ANALYZABLE_SIGNAL"
-
-    def __init__(self, motivo: str, detalle: dict | None = None):
-        super().__init__(motivo)
-        self.motivo = motivo
-        self.detalle = detalle or {}
 
 
 def _comprobar_senal_analizable(y: np.ndarray) -> None:

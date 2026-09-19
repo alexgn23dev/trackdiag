@@ -33,33 +33,31 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-# Engine imports diferidos (lazy) — librosa/numpy/scipy solo se cargan
-# cuando llega un diagnóstico, no al arrancar el servidor.
-# Esto reduce el cold-start de ~8-12s a ~2-3s.
-_extraer_senales = None
+import analisis_proceso
+from engine.excepciones import AudioSinSenalAnalizable
+
+# El servidor no carga librosa, numba ni scipy (~200 MB que no devolvería):
+# la extracción de señales (engine.extractor) corre en un proceso hijo vía
+# analisis_proceso.ejecutar(), y la duración de los uploads se mide con
+# _duracion_audio(). numpy sí entra, al recibir el resultado del hijo (sus
+# números vienen como tipos numpy). Aquí solo se cargan, en diferido, el
+# diagnóstico y el comparador, que son Python puro.
 _generar_diagnostico = None
 _comparar_senales = None
-# Excepción de "audio sin señal analizable". Vive en engine.extractor, que se
-# carga en diferido; se cachea aquí para poder capturarla en el endpoint.
-AudioSinSenalAnalizable = None
 
 
 def _load_engine():
-    """Carga los módulos pesados de análisis de audio bajo demanda."""
-    global _extraer_senales, _generar_diagnostico, _comparar_senales
-    global AudioSinSenalAnalizable
-    if _extraer_senales is None:
-        from engine.extractor import extraer_senales, AudioSinSenalAnalizable as _AudioSinSenal
+    """Carga bajo demanda el diagnóstico y el comparador (sin librosa)."""
+    global _generar_diagnostico, _comparar_senales
+    if _generar_diagnostico is None:
         from engine.diagnostico import generar_diagnostico
         from engine.comparador import comparar_senales
-        _extraer_senales = extraer_senales
         _generar_diagnostico = generar_diagnostico
         _comparar_senales = comparar_senales
-        AudioSinSenalAnalizable = _AudioSinSenal
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-APP_VERSION = "0.5.102"
+APP_VERSION = "0.5.103"
 
 app = FastAPI(title="Mentotrack API", version=APP_VERSION)
 app.state.limiter = limiter
@@ -363,21 +361,13 @@ def tecnico_versiones(request: Request):
         return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
     from engine.versiones import algoritmos, dependencias, ffmpeg_version
     from entorno import resumen as resumen_entorno
-    from engine.extractor import (
-        TRUE_PEAK_EXTERNAL_VALIDATION_PASSED,
-        TRUE_PEAK_GROUND_TRUTH_VALIDATION_PASSED,
-        TRUE_PEAK_INTERNAL_VALIDATION_PASSED,
-        _TRUE_PEAK_VALIDATED,
-    )
+    # Los estados de validación son constantes de engine.extractor, que
+    # importa librosa: se leen en un proceso hijo para no cargarlo aquí.
+    validacion = analisis_proceso.ejecutar_sync(analisis_proceso.VALIDACION_TRUE_PEAK, timeout=60)
     return {
         "backend_version": APP_VERSION,
         **algoritmos(),
-        "validacion_true_peak": {
-            "true_peak_ground_truth_validation_passed": TRUE_PEAK_GROUND_TRUTH_VALIDATION_PASSED,
-            "true_peak_internal_validation_passed": TRUE_PEAK_INTERNAL_VALIDATION_PASSED,
-            "true_peak_external_validation_passed": TRUE_PEAK_EXTERNAL_VALIDATION_PASSED,
-            "true_peak_validated": _TRUE_PEAK_VALIDATED,
-        },
+        "validacion_true_peak": validacion,
         "dependencias": dependencias(),
         "ffmpeg": ffmpeg_version(),
         "entorno": resumen_entorno(),
@@ -422,6 +412,19 @@ def _validar_audio_upload(filename: str, content: bytes, etiqueta: str = ""):
             content={"error": f"{pref}El archivo no parece ser audio válido. Asegúrate de subir un MP3, WAV, FLAC o AIFF real."}
         )
     return extension, None
+
+
+def _duracion_audio(path: str) -> float:
+    """Duración en segundos sin cargar librosa en el servidor. Es lo mismo que
+    hace librosa.get_duration(path=...) por dentro: soundfile y, si no puede
+    con el archivo, audioread (que tira de ffmpeg)."""
+    import soundfile as sf
+    try:
+        return sf.info(path).duration
+    except sf.SoundFileRuntimeError:
+        import audioread
+        with audioread.audio_open(path) as f:
+            return f.duration
 
 
 @app.post("/api/diagnostico")
@@ -528,9 +531,8 @@ async def diagnosticar(
 
         # Validar duración mínima (8 seg) — audios más cortos dan diagnósticos sin sentido
         _load_engine()
-        import librosa as _lr
         try:
-            duracion_check = _lr.get_duration(path=tmp_path)
+            duracion_check = _duracion_audio(tmp_path)
         except Exception:
             duracion_check = 0
         if duracion_check < 8:
@@ -540,7 +542,7 @@ async def diagnosticar(
             )
         if tiene_ref:
             try:
-                duracion_ref = _lr.get_duration(path=tmp_ref_path)
+                duracion_ref = _duracion_audio(tmp_ref_path)
             except Exception:
                 duracion_ref = 0
             if duracion_ref < 8:
@@ -557,12 +559,11 @@ async def diagnosticar(
             except ValueError:
                 pass
 
-        loop = asyncio.get_event_loop()
         try:
-            senales = await asyncio.wait_for(
-                loop.run_in_executor(None, lambda: _extraer_senales(tmp_path, bpm_manual=bpm_int)),
-                timeout=90
-            )
+            # En un proceso hijo: la memoria del análisis vuelve al sistema al
+            # terminar y el timeout mata el proceso de verdad (ver analisis_proceso).
+            senales = await analisis_proceso.ejecutar(
+                analisis_proceso.EXTRAER_SENALES, tmp_path, bpm_manual=bpm_int, timeout=90)
         except asyncio.TimeoutError:
             print(f"[ERROR] diagnosticar: Timeout procesando audio ({session_id})")
             return JSONResponse(
@@ -593,10 +594,8 @@ async def diagnosticar(
         # diagnóstico del usuario sale igual, solo se pierde la comparación.
         if tiene_ref:
             try:
-                senales_ref = await asyncio.wait_for(
-                    loop.run_in_executor(None, lambda: _extraer_senales(tmp_ref_path, omitir_armonia=True)),
-                    timeout=60
-                )
+                senales_ref = await analisis_proceso.ejecutar(
+                    analisis_proceso.EXTRAER_SENALES, tmp_ref_path, omitir_armonia=True, timeout=60)
             except asyncio.TimeoutError:
                 print(f"[ERROR] diagnosticar: Timeout en referencia ({session_id})")
                 comparacion_error = "No se pudo analizar el track de referencia (tardó demasiado). Tu diagnóstico se generó igualmente, sin la comparación."
@@ -927,8 +926,19 @@ async def solicitud_consultoria(request: Request, data: dict):
 
 # Caché en memoria de IP → código de país ISO-2. Persiste hasta que el
 # contenedor reinicia. Soporta valores None para no martillear ipapi.co
-# ante IPs que ya fallaron una vez.
+# ante IPs que ya fallaron una vez. Con tope: cada IP nueva era una entrada
+# más y crecía con el tráfico hasta el siguiente redespliegue.
 _IP_COUNTRY_CACHE: dict[str, str | None] = {}
+_IP_COUNTRY_CACHE_MAX = 5000
+
+
+def _cache_guardar(cache: dict, clave, valor, maximo: int) -> None:
+    """Guarda en una caché de proceso con tope: al llenarse descarta la mitad
+    más antigua (los dict conservan el orden de inserción)."""
+    if clave not in cache and len(cache) >= maximo:
+        for k in list(cache)[: maximo // 2]:
+            del cache[k]
+    cache[clave] = valor
 
 
 def _client_ip(request: Request) -> str | None:
@@ -979,13 +989,13 @@ async def _country_from_request(request: Request) -> str | None:
             resp = await client.get(f"https://ipapi.co/{ip}/country/")
             country = (resp.text or "").strip().upper()
             if len(country) == 2 and country.isalpha():
-                _IP_COUNTRY_CACHE[ip] = country
+                _cache_guardar(_IP_COUNTRY_CACHE, ip, country, _IP_COUNTRY_CACHE_MAX)
                 return country
     except Exception as e:
         print(f"[GEO] ipapi.co falló para {ip}: {e}")
 
     # Negative cache para no reintentar en cada request del mismo usuario.
-    _IP_COUNTRY_CACHE[ip] = None
+    _cache_guardar(_IP_COUNTRY_CACHE, ip, None, _IP_COUNTRY_CACHE_MAX)
     return None
 
 
@@ -1582,11 +1592,8 @@ async def internal_features(request: Request):
         with open(tmp_path, "wb") as f:
             f.write(content)
         content = None
-        _load_engine()
-        loop = asyncio.get_event_loop()
-        senales = await asyncio.wait_for(
-            loop.run_in_executor(None, lambda: _extraer_senales(tmp_path, omitir_armonia=False)),
-            timeout=90)
+        senales = await analisis_proceso.ejecutar(
+            analisis_proceso.EXTRAER_SENALES, tmp_path, omitir_armonia=False, timeout=90)
         return JSONResponse(content=_json_safe(senales))
     except asyncio.TimeoutError:
         return JSONResponse(status_code=504, content={"error": "análisis excedió el tiempo"})
@@ -2486,7 +2493,9 @@ def _admin_email_from_cookie(request: Request):
 
 # Cache en memoria de URLs cortas → canónicas. Se llena al primer acceso al
 # endpoint /api/calibrar/tracks y persiste hasta que el contenedor reinicia.
+# Con tope, como _IP_COUNTRY_CACHE.
 _SC_RESOLVED_CACHE: dict[str, str] = {}
+_SC_RESOLVED_CACHE_MAX = 2000
 
 
 async def _resolver_url_audio(url: str) -> str:
@@ -2514,7 +2523,7 @@ async def _resolver_url_audio(url: str) -> str:
         print(f"[CALIBRAR] resolución de URL falló para {url}: {e}")
         resolved = url
 
-    _SC_RESOLVED_CACHE[url] = resolved
+    _cache_guardar(_SC_RESOLVED_CACHE, url, resolved, _SC_RESOLVED_CACHE_MAX)
     return resolved
 
 
@@ -5068,28 +5077,8 @@ def _procesar_avatar(content: bytes) -> bytes | None:
         return None
 
 
-def _calcular_waveform(path: str, n_picos: int = 400):
-    """Picos RMS normalizados 0-1 (para pintar la forma de onda en cliente)
-    + duración en segundos. Carga a 11 kHz mono — rápido y suficiente.
-    Resolución 400: en electrónica el RMS (no el peak, que el kick 4/4 deja
-    plano) refleja la dinámica del arreglo; más puntos = más detalle del muro."""
-    import librosa as _lr
-    import numpy as _np
-    y, sr = _lr.load(path, sr=11025, mono=True)
-    if len(y) == 0:
-        return [], 0.0
-    dur = float(len(y)) / sr
-    bloque = max(1, len(y) // n_picos)
-    picos = []
-    for i in range(0, min(len(y), bloque * n_picos), bloque):
-        seg = y[i:i + bloque]
-        if len(seg) == 0:
-            break
-        picos.append(float(_np.sqrt(_np.mean(seg ** 2))))
-    mx = max(picos) if picos else 1.0
-    if mx <= 0:
-        mx = 1.0
-    return [round(p / mx, 3) for p in picos], dur
+# La forma de onda (picos RMS + duración) se calcula en un proceso hijo:
+# analisis_proceso.calcular_waveform.
 
 
 # Formatos de subida SIN PÉRDIDA. La calidad final depende del tier:
@@ -5270,8 +5259,7 @@ async def comunidad_compartir(
         # Duración razonable (8 s – 20 min): acota el coste de transcode/waveform
         # y evita que un MP3/OGG de horas (cabe en 80 MB) cuelgue el worker
         try:
-            import librosa as _lr
-            dur_chk = _lr.get_duration(path=tmp_orig)
+            dur_chk = _duracion_audio(tmp_orig)
         except Exception:
             dur_chk = 0
         if dur_chk < 8 or dur_chk > 20 * 60:
@@ -5343,11 +5331,8 @@ async def comunidad_compartir(
     # Forma de onda sobre el archivo final (si falla, el post sale sin onda)
     waveform, dur = [], None
     try:
-        loop = asyncio.get_event_loop()
-        waveform, dur = await asyncio.wait_for(
-            loop.run_in_executor(None, lambda: _calcular_waveform(str(fpath))),
-            timeout=60,
-        )
+        waveform, dur = await analisis_proceso.ejecutar(
+            analisis_proceso.CALCULAR_WAVEFORM, str(fpath), timeout=60)
     except Exception as e:
         print(f"[COMUNIDAD] waveform falló ({fname}): {type(e).__name__}: {e}")
 
