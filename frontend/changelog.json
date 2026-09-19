@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "version": "0.5.103",
+      "date": "2026-09-19",
+      "title": "El servidor ya no acumula memoria entre análisis",
+      "changes": [
+        "Cada análisis de audio se ejecuta ahora en un proceso aparte que se cierra al terminar. Antes, la memoria que usaba se quedaba retenida en el servidor y crecía semana a semana hasta el siguiente despliegue.",
+        "Si un archivo se atasca, al agotarse el tiempo el análisis se detiene de verdad, en vez de seguir consumiendo recursos en segundo plano."
+      ]
+    },
+    {
       "version": "0.5.102",
       "date": "2026-09-18",
       "title": "Vuelve el Máster, con la matrícula de otoño",

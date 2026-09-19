@@ -56,6 +56,7 @@ trackdiag/
 │   └── apps-script-tutorial-click.js
 ├── backend/
 │   ├── main.py                # FastAPI app (endpoints + routing)
+│   ├── analisis_proceso.py    # Corre el análisis de audio en un proceso hijo (memoria)
 │   ├── repositories.py        # Capa SQL (asyncpg + decorador @with_retry)
 │   ├── db.py                  # Pool asyncpg, init/close, setup ping
 │   ├── requirements.txt
@@ -99,6 +100,7 @@ DATABASE_URL      # postgresql://...  (Railway inyecta la interna: postgres.rail
 SHEETS_WEBHOOK    # URL del Apps Script deployado (espejo durante cutover B)
 JWT_SECRET        # 64 hex chars
 ADMIN_KEY         # cualquier string razonable
+ANALISIS_PROCESOS # opcional: análisis de audio simultáneos (por defecto 2); el resto espera su hueco
 ```
 
 ### Desarrollo local con DB real
@@ -148,6 +150,7 @@ Mira `git log --oneline` para calibrar tono. Patrones que se usan:
 - El componente `SelectField` compara `value === opt.value` para marcar la opción en morado. Si rellenas valores programáticamente (p.ej. prefill desde otro proyecto), pasa el `value` (`tech_house`), no el label (`Tech House`). El `formulario` en Postgres guarda labels — mapea label → value antes de meterlo en `contexto`.
 
 ### Backend
+- **El análisis de audio corre en un proceso hijo** (`analisis_proceso.ejecutar(analisis_proceso.EXTRAER_SENALES, ruta, ...)`, también la forma de onda de comunidad). Nunca llamar a `engine.extractor.extraer_senales` ni cargar audio con librosa dentro del proceso del servidor: esa memoria no vuelve al sistema y en Railway crecía hasta el siguiente despliegue (sep-2026, factura al 96 % de RAM). El timeout mata el proceso hijo de verdad. Contrato en `tests/test_analisis_proceso.py`.
 - Todos los endpoints de cara al exterior pasan por slowapi rate limit.
 - Endpoints sensibles (`/api/feedback*`, `/api/auth/historial`, `/api/proyectos*`) requieren JWT en header `Authorization: Bearer`.
 - Endpoints `/api/sheets/*` son legacy en el nombre (frontend desplegado los usa), pero internamente solo escriben a Postgres tras el cierre del cutover B. No mantienen espejo a Sheets.

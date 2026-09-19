@@ -33,10 +33,14 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
+import analisis_proceso
+
 # Engine imports diferidos (lazy) — librosa/numpy/scipy solo se cargan
 # cuando llega un diagnóstico, no al arrancar el servidor.
 # Esto reduce el cold-start de ~8-12s a ~2-3s.
-_extraer_senales = None
+# La extracción de señales (engine.extractor.extraer_senales) no se importa
+# aquí: corre en un proceso hijo vía analisis_proceso.ejecutar(), y así la
+# memoria de librosa/numpy vuelve al sistema al acabar cada análisis.
 _generar_diagnostico = None
 _comparar_senales = None
 # Excepción de "audio sin señal analizable". Vive en engine.extractor, que se
@@ -46,20 +50,19 @@ AudioSinSenalAnalizable = None
 
 def _load_engine():
     """Carga los módulos pesados de análisis de audio bajo demanda."""
-    global _extraer_senales, _generar_diagnostico, _comparar_senales
+    global _generar_diagnostico, _comparar_senales
     global AudioSinSenalAnalizable
-    if _extraer_senales is None:
-        from engine.extractor import extraer_senales, AudioSinSenalAnalizable as _AudioSinSenal
+    if _generar_diagnostico is None:
+        from engine.extractor import AudioSinSenalAnalizable as _AudioSinSenal
         from engine.diagnostico import generar_diagnostico
         from engine.comparador import comparar_senales
-        _extraer_senales = extraer_senales
         _generar_diagnostico = generar_diagnostico
         _comparar_senales = comparar_senales
         AudioSinSenalAnalizable = _AudioSinSenal
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-APP_VERSION = "0.5.102"
+APP_VERSION = "0.5.103"
 
 app = FastAPI(title="Mentotrack API", version=APP_VERSION)
 app.state.limiter = limiter
@@ -557,12 +560,11 @@ async def diagnosticar(
             except ValueError:
                 pass
 
-        loop = asyncio.get_event_loop()
         try:
-            senales = await asyncio.wait_for(
-                loop.run_in_executor(None, lambda: _extraer_senales(tmp_path, bpm_manual=bpm_int)),
-                timeout=90
-            )
+            # En un proceso hijo: la memoria del análisis vuelve al sistema al
+            # terminar y el timeout mata el proceso de verdad (ver analisis_proceso).
+            senales = await analisis_proceso.ejecutar(
+                analisis_proceso.EXTRAER_SENALES, tmp_path, bpm_manual=bpm_int, timeout=90)
         except asyncio.TimeoutError:
             print(f"[ERROR] diagnosticar: Timeout procesando audio ({session_id})")
             return JSONResponse(
@@ -593,10 +595,8 @@ async def diagnosticar(
         # diagnóstico del usuario sale igual, solo se pierde la comparación.
         if tiene_ref:
             try:
-                senales_ref = await asyncio.wait_for(
-                    loop.run_in_executor(None, lambda: _extraer_senales(tmp_ref_path, omitir_armonia=True)),
-                    timeout=60
-                )
+                senales_ref = await analisis_proceso.ejecutar(
+                    analisis_proceso.EXTRAER_SENALES, tmp_ref_path, omitir_armonia=True, timeout=60)
             except asyncio.TimeoutError:
                 print(f"[ERROR] diagnosticar: Timeout en referencia ({session_id})")
                 comparacion_error = "No se pudo analizar el track de referencia (tardó demasiado). Tu diagnóstico se generó igualmente, sin la comparación."
@@ -1583,10 +1583,8 @@ async def internal_features(request: Request):
             f.write(content)
         content = None
         _load_engine()
-        loop = asyncio.get_event_loop()
-        senales = await asyncio.wait_for(
-            loop.run_in_executor(None, lambda: _extraer_senales(tmp_path, omitir_armonia=False)),
-            timeout=90)
+        senales = await analisis_proceso.ejecutar(
+            analisis_proceso.EXTRAER_SENALES, tmp_path, omitir_armonia=False, timeout=90)
         return JSONResponse(content=_json_safe(senales))
     except asyncio.TimeoutError:
         return JSONResponse(status_code=504, content={"error": "análisis excedió el tiempo"})
@@ -5068,28 +5066,8 @@ def _procesar_avatar(content: bytes) -> bytes | None:
         return None
 
 
-def _calcular_waveform(path: str, n_picos: int = 400):
-    """Picos RMS normalizados 0-1 (para pintar la forma de onda en cliente)
-    + duración en segundos. Carga a 11 kHz mono — rápido y suficiente.
-    Resolución 400: en electrónica el RMS (no el peak, que el kick 4/4 deja
-    plano) refleja la dinámica del arreglo; más puntos = más detalle del muro."""
-    import librosa as _lr
-    import numpy as _np
-    y, sr = _lr.load(path, sr=11025, mono=True)
-    if len(y) == 0:
-        return [], 0.0
-    dur = float(len(y)) / sr
-    bloque = max(1, len(y) // n_picos)
-    picos = []
-    for i in range(0, min(len(y), bloque * n_picos), bloque):
-        seg = y[i:i + bloque]
-        if len(seg) == 0:
-            break
-        picos.append(float(_np.sqrt(_np.mean(seg ** 2))))
-    mx = max(picos) if picos else 1.0
-    if mx <= 0:
-        mx = 1.0
-    return [round(p / mx, 3) for p in picos], dur
+# La forma de onda (picos RMS + duración) se calcula en un proceso hijo:
+# analisis_proceso.calcular_waveform.
 
 
 # Formatos de subida SIN PÉRDIDA. La calidad final depende del tier:
@@ -5343,11 +5321,8 @@ async def comunidad_compartir(
     # Forma de onda sobre el archivo final (si falla, el post sale sin onda)
     waveform, dur = [], None
     try:
-        loop = asyncio.get_event_loop()
-        waveform, dur = await asyncio.wait_for(
-            loop.run_in_executor(None, lambda: _calcular_waveform(str(fpath))),
-            timeout=60,
-        )
+        waveform, dur = await analisis_proceso.ejecutar(
+            analisis_proceso.CALCULAR_WAVEFORM, str(fpath), timeout=60)
     except Exception as e:
         print(f"[COMUNIDAD] waveform falló ({fname}): {type(e).__name__}: {e}")
 
