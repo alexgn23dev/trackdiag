@@ -927,8 +927,19 @@ async def solicitud_consultoria(request: Request, data: dict):
 
 # Caché en memoria de IP → código de país ISO-2. Persiste hasta que el
 # contenedor reinicia. Soporta valores None para no martillear ipapi.co
-# ante IPs que ya fallaron una vez.
+# ante IPs que ya fallaron una vez. Con tope: cada IP nueva era una entrada
+# más y crecía con el tráfico hasta el siguiente redespliegue.
 _IP_COUNTRY_CACHE: dict[str, str | None] = {}
+_IP_COUNTRY_CACHE_MAX = 5000
+
+
+def _cache_guardar(cache: dict, clave, valor, maximo: int) -> None:
+    """Guarda en una caché de proceso con tope: al llenarse descarta la mitad
+    más antigua (los dict conservan el orden de inserción)."""
+    if clave not in cache and len(cache) >= maximo:
+        for k in list(cache)[: maximo // 2]:
+            del cache[k]
+    cache[clave] = valor
 
 
 def _client_ip(request: Request) -> str | None:
@@ -979,13 +990,13 @@ async def _country_from_request(request: Request) -> str | None:
             resp = await client.get(f"https://ipapi.co/{ip}/country/")
             country = (resp.text or "").strip().upper()
             if len(country) == 2 and country.isalpha():
-                _IP_COUNTRY_CACHE[ip] = country
+                _cache_guardar(_IP_COUNTRY_CACHE, ip, country, _IP_COUNTRY_CACHE_MAX)
                 return country
     except Exception as e:
         print(f"[GEO] ipapi.co falló para {ip}: {e}")
 
     # Negative cache para no reintentar en cada request del mismo usuario.
-    _IP_COUNTRY_CACHE[ip] = None
+    _cache_guardar(_IP_COUNTRY_CACHE, ip, None, _IP_COUNTRY_CACHE_MAX)
     return None
 
 
@@ -2484,7 +2495,9 @@ def _admin_email_from_cookie(request: Request):
 
 # Cache en memoria de URLs cortas → canónicas. Se llena al primer acceso al
 # endpoint /api/calibrar/tracks y persiste hasta que el contenedor reinicia.
+# Con tope, como _IP_COUNTRY_CACHE.
 _SC_RESOLVED_CACHE: dict[str, str] = {}
+_SC_RESOLVED_CACHE_MAX = 2000
 
 
 async def _resolver_url_audio(url: str) -> str:
@@ -2512,7 +2525,7 @@ async def _resolver_url_audio(url: str) -> str:
         print(f"[CALIBRAR] resolución de URL falló para {url}: {e}")
         resolved = url
 
-    _SC_RESOLVED_CACHE[url] = resolved
+    _cache_guardar(_SC_RESOLVED_CACHE, url, resolved, _SC_RESOLVED_CACHE_MAX)
     return resolved
 
 
