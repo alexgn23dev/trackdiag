@@ -68,6 +68,7 @@ trackdiag/
 │   │   └── migrate_sheets_to_postgres.py   # One-shot: copia Sheets → Postgres
 │   └── engine/
 │       ├── extractor.py       # ~50 señales de audio (incluye true_peak_dbtp 4x oversampling)
+│       ├── excepciones.py     # Excepciones del motor, sin dependencias (el servidor las importa)
 │       ├── reglas.py          # 9 hipótesis diagnósticas ponderadas
 │       ├── diagnostico.py     # Orquestador
 │       ├── contextualizador.py
@@ -151,6 +152,7 @@ Mira `git log --oneline` para calibrar tono. Patrones que se usan:
 
 ### Backend
 - **El análisis de audio corre en un proceso hijo** (`analisis_proceso.ejecutar(analisis_proceso.EXTRAER_SENALES, ruta, ...)`, también la forma de onda de comunidad). Nunca llamar a `engine.extractor.extraer_senales` ni cargar audio con librosa dentro del proceso del servidor: esa memoria no vuelve al sistema y en Railway crecía hasta el siguiente despliegue (sep-2026, factura al 96 % de RAM). El timeout mata el proceso hijo de verdad. Contrato en `tests/test_analisis_proceso.py`.
+- **El proceso del servidor no importa librosa ni `engine.extractor`** (arrastran numba, llvmlite y scipy: ~200 MB que no se devuelven). La duración de un upload se mide con `_duracion_audio()` (soundfile + audioread, lo mismo que librosa por dentro); las excepciones que el servidor captura viven en `engine/excepciones.py`, sin dependencias; lo demás que necesite el extractor va por `analisis_proceso` (ver `validacion_true_peak`). Contrato en `tests/test_servidor_sin_librosa.py`.
 - Todos los endpoints de cara al exterior pasan por slowapi rate limit.
 - Endpoints sensibles (`/api/feedback*`, `/api/auth/historial`, `/api/proyectos*`) requieren JWT en header `Authorization: Bearer`.
 - Endpoints `/api/sheets/*` son legacy en el nombre (frontend desplegado los usa), pero internamente solo escriben a Postgres tras el cierre del cutover B. No mantienen espejo a Sheets.

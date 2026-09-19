@@ -17,8 +17,12 @@ Uso desde un endpoint:
 El hijo es `python -m analisis_proceso`, importa solo la función pedida (nunca
 main.py) y deja el resultado en un archivo pickle; las excepciones del motor
 vuelven al padre con su clase, así que `AudioSinSenalAnalizable` se sigue
-capturando igual en los endpoints. Los `print` del hijo salen por los mismos
-stdout/stderr del servidor (logs de Railway).
+capturando igual en los endpoints (vive en engine/excepciones.py para que el
+padre la reconstruya sin importar librosa). Los `print` del hijo salen por los
+mismos stdout/stderr del servidor (logs de Railway).
+
+Regla: el proceso del servidor nunca importa librosa. Todo lo que la necesite
+va por aquí; tests/test_servidor_sin_librosa.py lo comprueba.
 
 Variables de entorno:
     ANALISIS_PROCESOS   análisis simultáneos como máximo (por defecto 2); el
@@ -43,6 +47,7 @@ BACKEND_DIR = Path(__file__).resolve().parent
 # Tareas que los endpoints ejecutan en el hijo, como "modulo:funcion".
 EXTRAER_SENALES = "engine.extractor:extraer_senales"
 CALCULAR_WAVEFORM = "analisis_proceso:calcular_waveform"
+VALIDACION_TRUE_PEAK = "analisis_proceso:validacion_true_peak"
 
 _MAX_SIMULTANEOS = max(1, int(os.environ.get("ANALISIS_PROCESOS", "2") or 2))
 _hueco = threading.BoundedSemaphore(_MAX_SIMULTANEOS)
@@ -172,6 +177,19 @@ def calcular_waveform(path: str, n_picos: int = 400):
     if mx <= 0:
         mx = 1.0
     return [round(p / mx, 3) for p in picos], dur
+
+
+def validacion_true_peak() -> dict:
+    """Estados de validación del medidor de true peak, para
+    /api/tecnico/versiones. Son constantes de engine.extractor: se leen aquí,
+    en el hijo, para que el servidor no importe librosa por consultarlas."""
+    from engine import extractor as e
+    return {
+        "true_peak_ground_truth_validation_passed": e.TRUE_PEAK_GROUND_TRUTH_VALIDATION_PASSED,
+        "true_peak_internal_validation_passed": e.TRUE_PEAK_INTERNAL_VALIDATION_PASSED,
+        "true_peak_external_validation_passed": e.TRUE_PEAK_EXTERNAL_VALIDATION_PASSED,
+        "true_peak_validated": e._TRUE_PEAK_VALIDATED,
+    }
 
 
 if __name__ == "__main__":

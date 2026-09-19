@@ -34,31 +34,26 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
 import analisis_proceso
+from engine.excepciones import AudioSinSenalAnalizable
 
-# Engine imports diferidos (lazy) — librosa/numpy/scipy solo se cargan
-# cuando llega un diagnóstico, no al arrancar el servidor.
-# Esto reduce el cold-start de ~8-12s a ~2-3s.
-# La extracción de señales (engine.extractor.extraer_senales) no se importa
-# aquí: corre en un proceso hijo vía analisis_proceso.ejecutar(), y así la
-# memoria de librosa/numpy vuelve al sistema al acabar cada análisis.
+# El servidor no carga librosa, numba ni scipy (~200 MB que no devolvería):
+# la extracción de señales (engine.extractor) corre en un proceso hijo vía
+# analisis_proceso.ejecutar(), y la duración de los uploads se mide con
+# _duracion_audio(). numpy sí entra, al recibir el resultado del hijo (sus
+# números vienen como tipos numpy). Aquí solo se cargan, en diferido, el
+# diagnóstico y el comparador, que son Python puro.
 _generar_diagnostico = None
 _comparar_senales = None
-# Excepción de "audio sin señal analizable". Vive en engine.extractor, que se
-# carga en diferido; se cachea aquí para poder capturarla en el endpoint.
-AudioSinSenalAnalizable = None
 
 
 def _load_engine():
-    """Carga los módulos pesados de análisis de audio bajo demanda."""
+    """Carga bajo demanda el diagnóstico y el comparador (sin librosa)."""
     global _generar_diagnostico, _comparar_senales
-    global AudioSinSenalAnalizable
     if _generar_diagnostico is None:
-        from engine.extractor import AudioSinSenalAnalizable as _AudioSinSenal
         from engine.diagnostico import generar_diagnostico
         from engine.comparador import comparar_senales
         _generar_diagnostico = generar_diagnostico
         _comparar_senales = comparar_senales
-        AudioSinSenalAnalizable = _AudioSinSenal
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
@@ -366,21 +361,13 @@ def tecnico_versiones(request: Request):
         return JSONResponse(status_code=403, content={"error": "Acceso denegado"})
     from engine.versiones import algoritmos, dependencias, ffmpeg_version
     from entorno import resumen as resumen_entorno
-    from engine.extractor import (
-        TRUE_PEAK_EXTERNAL_VALIDATION_PASSED,
-        TRUE_PEAK_GROUND_TRUTH_VALIDATION_PASSED,
-        TRUE_PEAK_INTERNAL_VALIDATION_PASSED,
-        _TRUE_PEAK_VALIDATED,
-    )
+    # Los estados de validación son constantes de engine.extractor, que
+    # importa librosa: se leen en un proceso hijo para no cargarlo aquí.
+    validacion = analisis_proceso.ejecutar_sync(analisis_proceso.VALIDACION_TRUE_PEAK, timeout=60)
     return {
         "backend_version": APP_VERSION,
         **algoritmos(),
-        "validacion_true_peak": {
-            "true_peak_ground_truth_validation_passed": TRUE_PEAK_GROUND_TRUTH_VALIDATION_PASSED,
-            "true_peak_internal_validation_passed": TRUE_PEAK_INTERNAL_VALIDATION_PASSED,
-            "true_peak_external_validation_passed": TRUE_PEAK_EXTERNAL_VALIDATION_PASSED,
-            "true_peak_validated": _TRUE_PEAK_VALIDATED,
-        },
+        "validacion_true_peak": validacion,
         "dependencias": dependencias(),
         "ffmpeg": ffmpeg_version(),
         "entorno": resumen_entorno(),
@@ -425,6 +412,19 @@ def _validar_audio_upload(filename: str, content: bytes, etiqueta: str = ""):
             content={"error": f"{pref}El archivo no parece ser audio válido. Asegúrate de subir un MP3, WAV, FLAC o AIFF real."}
         )
     return extension, None
+
+
+def _duracion_audio(path: str) -> float:
+    """Duración en segundos sin cargar librosa en el servidor. Es lo mismo que
+    hace librosa.get_duration(path=...) por dentro: soundfile y, si no puede
+    con el archivo, audioread (que tira de ffmpeg)."""
+    import soundfile as sf
+    try:
+        return sf.info(path).duration
+    except sf.SoundFileRuntimeError:
+        import audioread
+        with audioread.audio_open(path) as f:
+            return f.duration
 
 
 @app.post("/api/diagnostico")
@@ -531,9 +531,8 @@ async def diagnosticar(
 
         # Validar duración mínima (8 seg) — audios más cortos dan diagnósticos sin sentido
         _load_engine()
-        import librosa as _lr
         try:
-            duracion_check = _lr.get_duration(path=tmp_path)
+            duracion_check = _duracion_audio(tmp_path)
         except Exception:
             duracion_check = 0
         if duracion_check < 8:
@@ -543,7 +542,7 @@ async def diagnosticar(
             )
         if tiene_ref:
             try:
-                duracion_ref = _lr.get_duration(path=tmp_ref_path)
+                duracion_ref = _duracion_audio(tmp_ref_path)
             except Exception:
                 duracion_ref = 0
             if duracion_ref < 8:
@@ -1593,7 +1592,6 @@ async def internal_features(request: Request):
         with open(tmp_path, "wb") as f:
             f.write(content)
         content = None
-        _load_engine()
         senales = await analisis_proceso.ejecutar(
             analisis_proceso.EXTRAER_SENALES, tmp_path, omitir_armonia=False, timeout=90)
         return JSONResponse(content=_json_safe(senales))
@@ -5261,8 +5259,7 @@ async def comunidad_compartir(
         # Duración razonable (8 s – 20 min): acota el coste de transcode/waveform
         # y evita que un MP3/OGG de horas (cabe en 80 MB) cuelgue el worker
         try:
-            import librosa as _lr
-            dur_chk = _lr.get_duration(path=tmp_orig)
+            dur_chk = _duracion_audio(tmp_orig)
         except Exception:
             dur_chk = 0
         if dur_chk < 8 or dur_chk > 20 * 60:
