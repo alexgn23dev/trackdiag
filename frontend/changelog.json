@@ -1,6 +1,15 @@
 {
   "entries": [
     {
+      "version": "0.5.102",
+      "date": "2026-09-18",
+      "title": "Vuelve el Máster, con la matrícula de otoño",
+      "changes": [
+        "Termina la campaña del curso de Headroom y Gain Staging: el informe vuelve a recomendar el Máster, con el texto adaptado a lo que haya detectado tu análisis.",
+        "Matrícula de otoño del Máster abierta hasta el 30 de septiembre: incluye 4 directos para ayudarte a empezar."
+      ]
+    },
+    {
       "version": "0.5.101",
       "date": "2026-08-21",
       "title": "Vuelve la pregunta de si el diagnóstico te ha servido",

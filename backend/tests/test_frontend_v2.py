@@ -284,7 +284,7 @@ class TestLaCampanaDeCurso(unittest.TestCase):
     def test_volver_al_master_es_cambiar_una_palabra(self):
         """La campaña se acaba en unas semanas. MasterCTA tiene que seguir
         entero para que la vuelta no sea una migración."""
-        self.assertIn("const CTA_CURSO = 'headroom';", self.html)
+        self.assertIn("const CTA_CURSO = 'master';", self.html)
         self.assertIn("function MasterCTA(", self.html)
         self.assertIn("CTA_CURSO === 'headroom' ? <HeadroomCTA", self.html)
 
@@ -301,3 +301,15 @@ class TestLaCampanaDeCurso(unittest.TestCase):
         self.assertIn("headroom_visto", dash)
         self.assertIn("headroom_clicked", dash)
         self.assertIn("<CursoResumenCard />", dash)
+
+    def test_el_backend_acepta_todo_evento_que_manda_el_frontend(self):
+        """/api/cta-event descarta en silencio lo que no está en la lista
+        blanca (responde 200 con stored=false). Así se perdió toda la campaña
+        de Headroom: el frontend mandaba headroom_visto y nadie lo guardaba."""
+        raiz = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        repo = open(os.path.join(raiz, "backend", "repositories.py"), encoding="utf-8").read()
+        bloque = repo.split("_CTA_EVENTOS_VALIDOS = (", 1)[1].split("\n)", 1)[0]
+        validos = set(re.findall(r'"([a-z0-9_]+)"', bloque))
+        enviados = set(re.findall(r"mtCtaEvent\('([a-z0-9_]+)'", self.html))
+        self.assertTrue(enviados)
+        self.assertEqual(enviados - validos, set())

@@ -2327,11 +2327,13 @@
     // No son solo tres cifras: la pregunta que hay que poder contestar dentro
     // de unas semanas es "¿la renuevo?", y para eso hace falta comparar
     // contra el CTA que sustituyó y ver la evolución por días.
+    // Campaña de Headroom cerrada (sep-2026): el panel vuelve a seguir el
+    // Máster, y Headroom queda como base de comparación.
     const EVENTOS_CURSO = {
-        visto: 'headroom_visto', clic: 'headroom_clicked',
-        titulo: 'Headroom y Gain Staging',
-        // El CTA al que sustituye, para tener contra qué comparar.
-        base_visto: 'master_visto', base_clic: 'master_clicked', base_nombre: 'Máster',
+        visto: 'master_visto', clic: 'master_clicked',
+        titulo: 'Máster',
+        // El CTA anterior, para tener contra qué comparar.
+        base_visto: 'headroom_visto', base_clic: 'headroom_clicked', base_nombre: 'curso de Headroom',
     };
 
     function CursoResumenCard() {
