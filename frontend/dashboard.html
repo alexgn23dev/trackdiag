@@ -2329,11 +2329,14 @@
     // contra el CTA que sustituyó y ver la evolución por días.
     // Campaña de Headroom cerrada (sep-2026): el panel vuelve a seguir el
     // Máster, y Headroom queda como base de comparación.
+    // Black Friday (nov-2026): el panel sigue el banner de la oferta, contra
+    // la tarjeta del Máster de siempre. El informe vuelve solo al Máster el
+    // 1 de diciembre; el panel se queda aquí para poder leer el resultado.
     const EVENTOS_CURSO = {
-        visto: 'master_visto', clic: 'master_clicked',
-        titulo: 'Máster',
+        visto: 'blackfriday_visto', clic: 'blackfriday_clicked',
+        titulo: 'Black Friday',
         // El CTA anterior, para tener contra qué comparar.
-        base_visto: 'headroom_visto', base_clic: 'headroom_clicked', base_nombre: 'curso de Headroom',
+        base_visto: 'master_visto', base_clic: 'master_clicked', base_nombre: 'Máster',
     };
 
     function CursoResumenCard() {
