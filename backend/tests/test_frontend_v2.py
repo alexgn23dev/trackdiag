@@ -296,10 +296,12 @@ class TestLaCampanaDeCurso(unittest.TestCase):
             self.assertIn(evento, self.html, evento)
 
     def test_el_dashboard_puede_verlo(self):
+        """El panel sigue la campaña en curso (Black Friday, nov-2026) contra
+        la tarjeta del Máster."""
         raiz = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         dash = open(os.path.join(raiz, "frontend", "dashboard.html"), encoding="utf-8").read()
-        self.assertIn("headroom_visto", dash)
-        self.assertIn("headroom_clicked", dash)
+        self.assertIn("visto: 'blackfriday_visto', clic: 'blackfriday_clicked'", dash)
+        self.assertIn("base_visto: 'master_visto', base_clic: 'master_clicked'", dash)
         self.assertIn("<CursoResumenCard />", dash)
 
     def test_el_backend_acepta_todo_evento_que_manda_el_frontend(self):
@@ -313,3 +315,78 @@ class TestLaCampanaDeCurso(unittest.TestCase):
         enviados = set(re.findall(r"mtCtaEvent\('([a-z0-9_]+)'", self.html))
         self.assertTrue(enviados)
         self.assertEqual(enviados - validos, set())
+
+
+class TestBlackFriday(unittest.TestCase):
+    """Banner de la oferta de Black Friday del Máster (nov-2026) en el hueco
+    del CTA de curso. Sin precios: dice cuándo sube, y las fechas tienen que
+    ser las de la landing (producciononline.com/black-friday-2026)."""
+
+    DIAS = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
+
+    def setUp(self):
+        self.html = fuente()
+        self.bloque = self.html.split("function BlackFridayCTA(", 1)[1].split("\n    }\n", 1)[0]
+
+    def test_las_subidas_son_las_de_la_landing(self):
+        subidas = re.findall(
+            r"\{ cuando: new Date\('([^']+)'\), texto: '([^']+)' \}", self.html)
+        self.assertEqual([c for c, _ in subidas], [
+            "2026-11-16T00:00:00+01:00",
+            "2026-11-23T00:00:00+01:00",
+            "2026-11-27T00:00:00+01:00",
+        ])
+        # Si alguien cambia una fecha, el texto tiene que cambiar con ella.
+        from datetime import datetime
+        for cuando, texto in subidas:
+            f = datetime.fromisoformat(cuando)
+            self.assertIn(f"el {self.DIAS[f.weekday()]} {f.day} de noviembre", texto)
+
+    def test_se_apaga_sola_al_acabar_el_30(self):
+        self.assertIn("const BLACK_FRIDAY_FIN = new Date('2026-12-01T00:00:00+01:00');", self.html)
+        self.assertIn("if (blackFridayAbierto()) return <BlackFridayCTA {...props} />;", self.html)
+        # Y la vuelta es a la tarjeta del Máster, que sigue entera.
+        self.assertIn("function MasterCTA(", self.html)
+
+    def test_no_enseña_precios(self):
+        """El precio cambia cada semana: la cifra buena es la de la landing."""
+        for cifra in ("€", "495", "795", "300"):
+            self.assertNotIn(cifra, self.bloque, cifra)
+        aviso = self.html.split("function blackFridayAviso(", 1)[1].split("\n    }\n", 1)[0]
+        self.assertNotIn("€", aviso)
+
+    def test_el_enlace_va_a_la_landing_con_utm(self):
+        self.assertIn("const BLACK_FRIDAY_URL = 'https://producciononline.com/black-friday-2026/';", self.html)
+        self.assertIn("utm_source=mentotrack&utm_medium=app&utm_campaign=black_friday_2026", self.bloque)
+
+    def test_el_clic_y_la_impresion_se_registran(self):
+        for evento in ("cta_blackfriday_visto", "cta_blackfriday_clicked",
+                       "'blackfriday_visto'", "'blackfriday_clicked'"):
+            self.assertIn(evento, self.bloque, evento)
+
+    def test_nunca_queda_al_final_de_la_pagina(self):
+        """Alex (nov-2026): el banner tiene que verse sin bajar hasta el final.
+        En la v2 va en la cabecera, junto al veredicto. En la clásica la
+        derivación vive al final, así que durante la campaña sube justo bajo
+        el veredicto y abajo no se repite."""
+        self.assertIn("const bloqueDerechoV2 = tarjetaRelesit || (\n                <CursoCTA", self.html)
+        clasica = self.html.split("const esRelesitClasica", 1)[1]
+        self.assertLess(clasica.index("{bfArribaClasica && ("),
+                        clasica.index("Aviso de género fuera de scope"))
+        self.assertIn(") : !bfArribaClasica && (", clasica)
+
+    def test_durante_la_oferta_relesit_se_aparta(self):
+        """Alex (nov-2026): "full foco a Black Friday". Hasta que acabe, el
+        banner sale en todos los informes, también en los que irían a Relesit;
+        Relesit vuelve solo con BLACK_FRIDAY_FIN."""
+        self.assertIn("const esRelesit = !blackFridayAbierto()\n", self.html)
+        self.assertIn("const esRelesitClasica = !bfArribaClasica\n", self.html)
+        self.assertIn("const bfArribaClasica = blackFridayAbierto();", self.html)
+
+    def test_sin_bloqueos_no_insinua_que_haya_que_arreglar_nada(self):
+        """El banner también sale en los informes que iban a Relesit. Si el
+        análisis no ha encontrado nada, la interfaz no puede sugerir un
+        problema que no ha detectado."""
+        self.assertIn("const apoyo = diagId === 'sin_diagnostico'\n"
+                      "            ? 'Para que cada track que termines suene a nivel de sello.'",
+                      self.bloque)

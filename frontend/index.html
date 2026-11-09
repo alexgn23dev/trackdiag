@@ -129,6 +129,25 @@
         input[type="range"] { -webkit-appearance: none; background: var(--po-medium); height: 4px; border-radius: 2px; }
         input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; background: var(--po-purple); border-radius: 50%; cursor: pointer; }
         .card { background: var(--po-card); border: 1px solid var(--po-border); border-radius: 12px; }
+        /* Banner de Black Friday (nov-2026). Colores, píldora y botón son los de
+           producciononline.com/black-friday-2026: el salto a la landing no tiene
+           que parecer un cambio de marca. Flex para centrarse en vertical cuando
+           ocupa la columna derecha de la cabecera (h-full). */
+        .card.bf-cta { display: flex; flex-direction: column; justify-content: center; text-decoration: none; cursor: pointer;
+                       background: linear-gradient(160deg, rgba(220,31,46,0.12) 0%, rgba(20,20,20,0) 60%), #141414;
+                       border-color: rgba(220,31,46,0.42); transition: border-color .2s ease; }
+        .card.bf-cta:hover { border-color: rgba(220,31,46,0.7); }
+        .card.bf-cta:focus-visible { outline: 2px solid #FF4D5A; outline-offset: 2px; }
+        .bf-cta-tag { display: inline-flex; align-items: center; gap: 10px; margin-bottom: 14px; font-size: 0.875rem; }
+        .bf-cta-tag i { width: 8px; height: 8px; border-radius: 50%; background: #FF4D5A; box-shadow: 0 0 0 4px rgba(255,77,90,0.22); }
+        .bf-cta-tag strong { font-weight: 700; color: #FF4D5A; }
+        .bf-cta-tag strong span { color: #FFFFFF; }
+        .bf-cta-sube { color: #FF4D5A; font-size: 0.875rem; margin-bottom: 14px; }
+        .bf-cta-btn { display: inline-flex; align-items: center; gap: 10px; padding: 12px 22px; border-radius: 12px;
+                      background: #DC1F2E; color: #FFFFFF; font-size: 0.875rem; letter-spacing: 0.02em;
+                      transition: transform .15s ease, box-shadow .2s ease; }
+        .bf-cta:hover .bf-cta-btn { transform: translateY(-1px); box-shadow: 0 8px 30px rgba(220,31,46,0.35); }
+        @media (prefers-reduced-motion: reduce) { .bf-cta:hover .bf-cta-btn { transform: none; } }
         .badge-verde { background: rgba(248,113,113,0.1); color: #f87171; }
         .badge-desarrollo { background: rgba(250,204,21,0.1); color: #facc15; }
         .badge-avanzado { background: rgba(96,165,250,0.1); color: #60a5fa; }
@@ -306,7 +325,7 @@
     // /api/health. Si no coincide, este fichero viene de la caché del
     // navegador y puede estar dejando de enviar campos que el backend ya
     // espera — se recarga una sola vez y, si aun así no cuadra, se avisa.
-    const APP_VERSION = '0.5.102';
+    const APP_VERSION = '0.5.103';
 
     function comprobarVersionFrontend(onDesfase, onEntorno) {
         fetch(`${API_URL}/api/health`, { cache: 'no-store' })
@@ -1542,6 +1561,7 @@
     /** El CTA de curso que toca hoy. Un solo punto de entrada para las dos
      *  vistas, y un solo sitio donde decidir cuál se enseña. */
     function CursoCTA(props) {
+        if (blackFridayAbierto()) return <BlackFridayCTA {...props} />;
         return CTA_CURSO === 'headroom' ? <HeadroomCTA {...props} /> : <MasterCTA {...props} />;
     }
 
@@ -1594,6 +1614,82 @@
                 <span className="inline-flex items-center gap-1.5 text-white text-sm font-medium">
                     Ver el Máster →
                 </span>
+            </a>
+        );
+    }
+
+    // =====================================================================
+    // Black Friday 2026 (nov-2026): mientras dura la oferta, el CTA de curso
+    // es un banner con el diseño de la landing en vez de la tarjeta del Máster.
+    // Y sale en TODOS los informes: Relesit se aparta hasta que acabe (Alex:
+    // "full foco a Black Friday"). Ver esRelesit / esRelesitClasica.
+    //
+    // Sin precios, a propósito: el precio cambia cada semana y la cifra buena
+    // es la de la landing. Lo que sí se dice es cuándo sube, que es lo que
+    // empuja a entrar ya. Las fechas son las de la landing (hora fija de
+    // Madrid, igual para todos): si allí cambian, se cambian aquí.
+    //
+    // Al acabar el 30 de noviembre vuelve sola la tarjeta del Máster, sin
+    // redesplegar — la landing, a esa hora, también redirige a /master/.
+    // =====================================================================
+    const BLACK_FRIDAY_URL = 'https://producciononline.com/black-friday-2026/';
+    const BLACK_FRIDAY_SUBIDAS = [
+        { cuando: new Date('2026-11-16T00:00:00+01:00'), texto: 'El precio sube el lunes 16 de noviembre' },
+        { cuando: new Date('2026-11-23T00:00:00+01:00'), texto: 'El precio sube el lunes 23 de noviembre' },
+        { cuando: new Date('2026-11-27T00:00:00+01:00'), texto: 'El precio sube el viernes 27 de noviembre' },
+    ];
+    const BLACK_FRIDAY_FIN = new Date('2026-12-01T00:00:00+01:00');
+    const blackFridayAbierto = (ahora = Date.now()) => ahora < BLACK_FRIDAY_FIN.getTime();
+
+    // La línea de urgencia: la próxima subida y, pasada la última, el cierre.
+    function blackFridayAviso(ahora = Date.now()) {
+        const siguiente = BLACK_FRIDAY_SUBIDAS.find(s => ahora < s.cuando.getTime());
+        return siguiente ? siguiente.texto : 'Últimos días: la oferta acaba el domingo 30 de noviembre';
+    }
+
+    function BlackFridayCTA({ diagId, variante, categoria, userEmail, clase }) {
+        useEffect(() => {
+            try { trackEvent('cta_blackfriday_visto', { diagnostico: diagId, variante, categoria }); } catch (e) {}
+            try { window.mtCtaEvent && window.mtCtaEvent('blackfriday_visto', { diagnostico_id: categoria || '', email: userEmail || '' }); } catch (e) {}
+        }, [diagId]);
+        // La landing pasa los utm de la visita a sus botones de pago: así la
+        // venta queda atribuida a Mentotrack y al diagnóstico que la originó.
+        const url = BLACK_FRIDAY_URL + '?utm_source=mentotrack&utm_medium=app&utm_campaign=black_friday_2026&utm_content=' + encodeURIComponent(categoria || 'general');
+        // Ahora también sale en los informes sin bloqueos (los que iban a
+        // Relesit): ahí no se puede insinuar que haya algo que arreglar.
+        const apoyo = diagId === 'sin_diagnostico'
+            ? 'Para que cada track que termines suene a nivel de sello.'
+            : 'Lo que este análisis detecta, el Máster te enseña a arreglarlo.';
+        return (
+            <a
+                href={url}
+                target="_blank"
+                rel="noopener"
+                onClick={() => {
+                    try { trackEvent('cta_blackfriday_clicked', { diagnostico: diagId, variante, categoria }); } catch (e) {}
+                    try { window.mtCtaEvent && window.mtCtaEvent('blackfriday_clicked', { diagnostico_id: categoria || '', email: userEmail || '' }); } catch (e) {}
+                }}
+                className={`bf-cta card p-5 ${clase || 'mb-6'}`}
+            >
+                <div>
+                    <p className="bf-cta-tag">
+                        <i aria-hidden="true"></i>
+                        <strong>Black Friday <span>2026</span></strong>
+                    </p>
+                    <p className="font-heading text-white text-lg leading-snug mb-2">
+                        El Máster completo, con la mejor oferta del año.
+                    </p>
+                    <p className="text-gray-400 text-sm leading-relaxed mb-4">
+                        {apoyo}
+                    </p>
+                    <p className="bf-cta-sube">{blackFridayAviso()}</p>
+                    <span className="bf-cta-btn font-heading">
+                        Ver la oferta
+                        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                            <path d="M3 8h9.5M8.5 4l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                    </span>
+                </div>
             </a>
         );
     }
@@ -4036,7 +4132,11 @@
             // "búscale sello", no el plan de arreglos: ya no hay nada urgente
             // que arreglar. Por eso Relesit sube por encima de las pestañas y
             // el Máster se queda abajo, con el resto de derivaciones.
-            const esRelesit = (diagId === 'sin_diagnostico' || r.estado_track === 'avanzado')
+            // Black Friday (nov-2026, decisión de Alex: todo el foco en la
+            // oferta): hasta que acabe, el banner sale en todos los informes y
+            // Relesit no se enseña. Vuelve solo el 1 de diciembre.
+            const esRelesit = !blackFridayAbierto()
+                              && (diagId === 'sin_diagnostico' || r.estado_track === 'avanzado')
                               && r.estado_track !== 'verde';
             const tarjetaRelesit = esRelesit ? (
                 <RelesitCTA diagId={diagId} estado={r.estado_track} userEmail={userEmail}
@@ -4243,6 +4343,13 @@
             );
         }
 
+        // Black Friday: el banner sale en todos los informes (también los que
+        // irían a Relesit) y no puede quedarse al final de una página de varias
+        // pantallas: en la clásica sube justo bajo el veredicto.
+        const bfArribaClasica = blackFridayAbierto();
+        const esRelesitClasica = !bfArribaClasica
+            && (diagId === 'sin_diagnostico' || r.estado_track === 'avanzado') && r.estado_track !== 'verde';
+
         return (
             <div className="min-h-screen py-12 px-6 fade-in">
                 <div className="max-w-2xl mx-auto">
@@ -4267,6 +4374,10 @@
                             ))}
                         </div>
                     </div>
+
+                    {bfArribaClasica && (
+                        <BlackFridayCTA diagId={diagId} variante={masterCta.variante} categoria={masterCta.categoria} userEmail={userEmail} />
+                    )}
 
                     {/* Aviso de género fuera de scope (vallenato, pop, rock…) */}
                     {r.aviso_genero && (
@@ -4839,10 +4950,12 @@
 
                     {/* Tarjeta de derivación (siempre una y solo una): Relesit si el
                         diagnóstico es bueno (track fino → busca sello); si no, el
-                        Máster con el texto adaptado a la categoría dominante. */}
-                    {(diagId === 'sin_diagnostico' || r.estado_track === 'avanzado') && r.estado_track !== 'verde' ? (
+                        Máster con el texto adaptado a la categoría dominante.
+                        Durante el Black Friday el banner va arriba, bajo el
+                        veredicto, y aquí no se repite. */}
+                    {esRelesitClasica ? (
                         <RelesitCTA diagId={diagId} estado={r.estado_track} userEmail={userEmail} bpm={r.datos_audio && r.datos_audio.bpm} bpmFiable={r.datos_audio && r.datos_audio.tempo_refinado ? r.datos_audio.bpm : null} genero={contexto && (contexto.genero === 'otro' ? (contexto.genero_custom || '') : contexto.genero)} />
-                    ) : (
+                    ) : !bfArribaClasica && (
                         <CursoCTA diagId={diagId} variante={masterCta.variante} categoria={masterCta.categoria} userEmail={userEmail} />
                     )}
 

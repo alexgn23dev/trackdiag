@@ -395,6 +395,8 @@ _CTA_EVENTOS_VALIDOS = (
     "master_clicked",               # clic en "Ver el Máster" → producciononline.com
     "headroom_visto",               # CTA al curso Headroom y Gain Staging (campaña ago-2026)
     "headroom_clicked",             # clic en "Ver el curso" → producciononline.com/headroom-mentotrack
+    "blackfriday_visto",            # banner de la oferta de Black Friday del Máster (nov-2026)
+    "blackfriday_clicked",          # clic en "Ver la oferta" → producciononline.com/black-friday-2026
     "promesa_v2_visto",             # promesa de la comparativa entre versiones (impresión)
     "promesa_v2_clicked",           # clic en "ver qué ha cambiado" (solo con v2+)
     "reenganche_click",             # clic en el CTA del email de re-enganche (día 3)

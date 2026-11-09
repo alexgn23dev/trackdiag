@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "version": "0.5.103",
+      "date": "2026-11-09",
+      "title": "Black Friday del Máster",
+      "changes": [
+        "Hasta el 30 de noviembre, todos los informes abren con la oferta de Black Friday del Máster, junto al veredicto, y te dicen cuándo es la próxima subida de precio.",
+        "Mientras dura la oferta, la sugerencia de buscar sello en Relesit descansa, aunque tu track salga listo para sello.",
+        "El 1 de diciembre todo vuelve solo a como estaba: la recomendación del Máster de siempre y Relesit para los tracks listos para sello."
+      ]
+    },
+    {
       "version": "0.5.102",
       "date": "2026-09-18",
       "title": "Vuelve el Máster, con la matrícula de otoño",
